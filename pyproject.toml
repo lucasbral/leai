@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "leai"
+version = "0.1.0"
+description = "Oracle-focused database documentation CLI for RAG workflows"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "oracledb>=2.2.0",
+  "typer>=0.12.3",
+  "rich>=13.7.1",
+  "PyYAML>=6.0.1",
+  "pydantic>=2.7.0"
+]
+
+[project.scripts]
+leai = "leai.cli:app"
+
+[tool.setuptools]
+packages = ["leai"]
