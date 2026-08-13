@@ -1,0 +1,16 @@
+README.md
+pyproject.toml
+leai/__init__.py
+leai/__main__.py
+leai/cli.py
+leai/config.py
+leai/docs.py
+leai/models.py
+leai/oracle.py
+leai.egg-info/PKG-INFO
+leai.egg-info/SOURCES.txt
+leai.egg-info/dependency_links.txt
+leai.egg-info/entry_points.txt
+leai.egg-info/requires.txt
+leai.egg-info/top_level.txt
+tests/test_config_and_docs.py

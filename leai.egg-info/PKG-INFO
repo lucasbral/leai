@@ -1,0 +1,46 @@
+Metadata-Version: 2.4
+Name: leai
+Version: 0.1.0
+Summary: Oracle-focused database documentation CLI for RAG workflows
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: oracledb>=2.2.0
+Requires-Dist: typer>=0.12.3
+Requires-Dist: rich>=13.7.1
+Requires-Dist: PyYAML>=6.0.1
+Requires-Dist: pydantic>=2.7.0
+
+# leai
+
+CLI em Python para documentar Oracle Database em Markdown, com foco em consumo por RAG/IA.
+
+## Instalação
+
+```bash
+pip install -e .
+```
+
+## Configuração (`leai.yml`)
+
+```yaml
+dsn: "localhost:1521/ORCLPDB1"
+schema: "SEU_SCHEMA"
+docPath: "./docs"
+
+include:
+  - EVENTO_FUNC
+  - FUNCIONARIOS
+exclude:
+  - BIN$%
+```
+
+
+## Uso
+
+```bash
+leai
+# ou
+leai generate --config leai.yml
+```
+
+A geração preserva a seção manual entre os marcadores `<!-- LEAI:MANUAL:START -->` e `<!-- LEAI:MANUAL:END -->` em arquivos já existentes.

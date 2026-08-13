@@ -1,0 +1,2 @@
+[console_scripts]
+leai = leai.cli:app
