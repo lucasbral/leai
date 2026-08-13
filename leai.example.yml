@@ -1,0 +1,67 @@
+# ==============================================================================
+# Arquivo de Exemplo de Configuração - LEAI (Oracle Database Documentation CLI)
+# Copie este arquivo para leai.yml e ajuste conforme o seu ambiente.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. CONEXÃO COM O BANCO DE DADOS ORACLE (DSN)
+# ------------------------------------------------------------------------------
+# Aceita a sintaxe URL oracle:// ou a string de conexão nativa do cx_Oracle/oracledb.
+# Suporta variáveis de ambiente no formato ${NOME_DA_VARIAVEL}.
+dsn: "oracle://${DB_USER}:${DB_PASS}@${DB_HOST}:1521/${DB_SERVICE}"
+
+# Exemplo estático:
+# dsn: "oracle://meu_usuario:minha_senha@localhost:1521/ORCLPDB1"
+
+# ------------------------------------------------------------------------------
+# 2. DEFINIÇÃO DOS SCHEMAS A EXTRAIR E DOCUMENTAR
+# ------------------------------------------------------------------------------
+# Opção A: Schema único (Modo tradicional)
+schemas:
+  - C_ERGON
+
+# Opção B: Lista de múltiplos schemas específicos
+# schemas:
+#   - HR
+#   - SALES
+#   - FINANCEIRO
+
+# Opção C: TODOS os schemas do banco (Ignora schemas internos do Oracle/SYS)
+# Requer usuário com privilégio SELECT ANY DICTIONARY ou role DBA.
+# schemas: "ALL"
+
+# ------------------------------------------------------------------------------
+# 3. DIRETORES DO PIPELINE
+# ------------------------------------------------------------------------------
+rawPath: "./raw"                  # Snapshot técnico puro em formato JSON
+annotationsPath: "./annotations"  # Camada editável de anotações de negócio em YAML
+docPath: "./docs"                  # Documentação final compilada em Markdown para RAG
+
+# ------------------------------------------------------------------------------
+# 4. FILTROS DE OBJETOS (Inclusão e Exclusão)
+# ------------------------------------------------------------------------------
+# Suporta caracteres curinga do padrão LIKE do Oracle (ex: VENDAS_%, BIN$%)
+include:
+  - FUNCIONARIOS
+  - VENDAS_%
+
+exclude:
+  - BIN$%
+  - SYS_%
+
+# ------------------------------------------------------------------------------
+# 5. TIPOS DE OBJETOS A SEREM PROCESSADOS
+# ------------------------------------------------------------------------------
+# Descomente apenas as categorias de objetos que deseja incluir na extração:
+object_types:
+  - tables
+  - views
+  - mviews
+  - procedures
+  - functions
+  - packages
+  - types
+  - triggers
+  - sequences
+  - indexes
+  - synonyms

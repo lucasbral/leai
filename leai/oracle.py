@@ -97,12 +97,21 @@ def _fetch_in_table_chunks(cursor: oracledb.Cursor, sql_template: str, owner: st
     return results
 
 
-def _fetch_tables(cursor: oracledb.Cursor, config: LeaiConfig) -> list[TableMeta]:
+def _detect_catalog_prefix(cursor: oracledb.Cursor) -> str:
+    try:
+        cursor.execute("SELECT 1 FROM dba_tables WHERE ROWNUM = 1")
+        cursor.fetchone()
+        return "dba"
+    except Exception:
+        return "all"
+
+
+def _fetch_tables(cursor: oracledb.Cursor, config: LeaiConfig, prefix: str = "all") -> list[TableMeta]:
     cursor.execute(
-        """
+        f"""
         SELECT t.table_name, tc.comments
-        FROM all_tables t
-        LEFT JOIN all_tab_comments tc
+        FROM {prefix}_tables t
+        LEFT JOIN {prefix}_tab_comments tc
           ON tc.owner = t.owner AND tc.table_name = t.table_name
         WHERE t.owner = :owner
         ORDER BY t.table_name
@@ -119,7 +128,7 @@ def _fetch_tables(cursor: oracledb.Cursor, config: LeaiConfig) -> list[TableMeta
 
     table_names = tuple(tables.keys())
 
-    columns_sql = """
+    columns_sql = f"""
         SELECT c.table_name,
                c.column_name,
                c.data_type,
@@ -130,13 +139,13 @@ def _fetch_tables(cursor: oracledb.Cursor, config: LeaiConfig) -> list[TableMeta
                c.data_default,
                cc.comments,
                c.char_length
-        FROM all_tab_columns c
-        LEFT JOIN all_col_comments cc
+        FROM {prefix}_tab_columns c
+        LEFT JOIN {prefix}_col_comments cc
           ON cc.owner = c.owner
          AND cc.table_name = c.table_name
          AND cc.column_name = c.column_name
         WHERE c.owner = :owner
-          AND c.table_name IN ({table_placeholders})
+          AND c.table_name IN ({{table_placeholders}})
         ORDER BY c.table_name, c.column_id
     """
     for row in _fetch_in_table_chunks(cursor, columns_sql, config.schema_name, table_names):
@@ -152,41 +161,41 @@ def _fetch_tables(cursor: oracledb.Cursor, config: LeaiConfig) -> list[TableMeta
         )
         tables[table_name].columns.append(column)
 
-    pks_sql = """
+    pks_sql = f"""
         SELECT acc.table_name, acc.column_name
-        FROM all_constraints ac
-        JOIN all_cons_columns acc
+        FROM {prefix}_constraints ac
+        JOIN {prefix}_cons_columns acc
           ON acc.owner = ac.owner
          AND acc.constraint_name = ac.constraint_name
         WHERE ac.owner = :owner
           AND ac.constraint_type = 'P'
-          AND acc.table_name IN ({table_placeholders})
+          AND acc.table_name IN ({{table_placeholders}})
         ORDER BY acc.table_name, acc.position
     """
     for table_name, column_name in _fetch_in_table_chunks(cursor, pks_sql, config.schema_name, table_names):
         if table_name in tables:
             tables[table_name].primary_keys.append(column_name)
 
-    fks_sql = """
+    fks_sql = f"""
         SELECT ac.constraint_name,
                src.table_name,
                src.column_name,
                tgt.table_name,
                tgt.column_name
-        FROM all_constraints ac
-        JOIN all_cons_columns src
+        FROM {prefix}_constraints ac
+        JOIN {prefix}_cons_columns src
           ON src.owner = ac.owner
          AND src.constraint_name = ac.constraint_name
-        JOIN all_constraints ref
+        JOIN {prefix}_constraints ref
           ON ref.owner = ac.r_owner
          AND ref.constraint_name = ac.r_constraint_name
-        JOIN all_cons_columns tgt
+        JOIN {prefix}_cons_columns tgt
           ON tgt.owner = ref.owner
          AND tgt.constraint_name = ref.constraint_name
          AND tgt.position = src.position
         WHERE ac.owner = :owner
           AND ac.constraint_type = 'R'
-          AND src.table_name IN ({table_placeholders})
+          AND src.table_name IN ({{table_placeholders}})
         ORDER BY src.table_name, ac.constraint_name, src.position
     """
     grouped_fks: dict[tuple[str, str], list[ForeignKeyMeta]] = defaultdict(list)
@@ -209,12 +218,12 @@ def _fetch_tables(cursor: oracledb.Cursor, config: LeaiConfig) -> list[TableMeta
     return [tables[name] for name in sorted(table_names)]
 
 
-def _fetch_views(cursor: oracledb.Cursor, config: LeaiConfig) -> list[ViewMeta]:
+def _fetch_views(cursor: oracledb.Cursor, config: LeaiConfig, prefix: str = "all") -> list[ViewMeta]:
     cursor.execute(
-        """
+        f"""
         SELECT v.view_name, v.text, tc.comments
-        FROM all_views v
-        LEFT JOIN all_tab_comments tc
+        FROM {prefix}_views v
+        LEFT JOIN {prefix}_tab_comments tc
           ON tc.owner = v.owner AND tc.table_name = v.view_name
         WHERE v.owner = :owner
         ORDER BY v.view_name
@@ -230,7 +239,7 @@ def _fetch_views(cursor: oracledb.Cursor, config: LeaiConfig) -> list[ViewMeta]:
         return []
 
     view_names = tuple(views.keys())
-    columns_sql = """
+    columns_sql = f"""
         SELECT c.table_name,
                c.column_name,
                c.data_type,
@@ -241,13 +250,13 @@ def _fetch_views(cursor: oracledb.Cursor, config: LeaiConfig) -> list[ViewMeta]:
                c.data_default,
                cc.comments,
                c.char_length
-        FROM all_tab_columns c
-        LEFT JOIN all_col_comments cc
+        FROM {prefix}_tab_columns c
+        LEFT JOIN {prefix}_col_comments cc
           ON cc.owner = c.owner
          AND cc.table_name = c.table_name
          AND cc.column_name = c.column_name
         WHERE c.owner = :owner
-          AND c.table_name IN ({table_placeholders})
+          AND c.table_name IN ({{table_placeholders}})
         ORDER BY c.table_name, c.column_id
     """
     for row in _fetch_in_table_chunks(cursor, columns_sql, config.schema_name, view_names):
@@ -266,12 +275,12 @@ def _fetch_views(cursor: oracledb.Cursor, config: LeaiConfig) -> list[ViewMeta]:
     return [views[name] for name in sorted(view_names)]
 
 
-def _fetch_mviews(cursor: oracledb.Cursor, config: LeaiConfig) -> list[MaterializedViewMeta]:
+def _fetch_mviews(cursor: oracledb.Cursor, config: LeaiConfig, prefix: str = "all") -> list[MaterializedViewMeta]:
     cursor.execute(
-        """
-        SELECT mv.mview_name, mv.query, mv.refresh_mode, mv.refresh_type, mv.updatable, tc.comments
-        FROM all_mviews mv
-        LEFT JOIN all_tab_comments tc
+        f"""
+        SELECT mv.mview_name, mv.query, mv.refresh_mode, mv.updatable, tc.comments
+        FROM {prefix}_mviews mv
+        LEFT JOIN {prefix}_tab_comments tc
           ON tc.owner = mv.owner AND tc.table_name = mv.mview_name
         WHERE mv.owner = :owner
         ORDER BY mv.mview_name
@@ -279,13 +288,13 @@ def _fetch_mviews(cursor: oracledb.Cursor, config: LeaiConfig) -> list[Materiali
         owner=config.schema_name,
     )
     mviews: dict[str, MaterializedViewMeta] = {}
-    for mv_name, query, refresh_mode, refresh_type, updatable, comment in cursor.fetchall():
+    for mv_name, query, refresh_mode, updatable, comment in cursor.fetchall():
         if _should_include(mv_name, config):
             mviews[mv_name] = MaterializedViewMeta(
                 name=mv_name,
                 query=str(query) if query else None,
                 refresh_mode=refresh_mode,
-                refresh_type=refresh_type,
+                refresh_type=None,
                 updatable=updatable == "Y",
                 comment=comment,
             )
@@ -294,7 +303,7 @@ def _fetch_mviews(cursor: oracledb.Cursor, config: LeaiConfig) -> list[Materiali
         return []
 
     mv_names = tuple(mviews.keys())
-    columns_sql = """
+    columns_sql = f"""
         SELECT c.table_name,
                c.column_name,
                c.data_type,
@@ -305,13 +314,13 @@ def _fetch_mviews(cursor: oracledb.Cursor, config: LeaiConfig) -> list[Materiali
                c.data_default,
                cc.comments,
                c.char_length
-        FROM all_tab_columns c
-        LEFT JOIN all_col_comments cc
+        FROM {prefix}_tab_columns c
+        LEFT JOIN {prefix}_col_comments cc
           ON cc.owner = c.owner
          AND cc.table_name = c.table_name
          AND cc.column_name = c.column_name
         WHERE c.owner = :owner
-          AND c.table_name IN ({table_placeholders})
+          AND c.table_name IN ({{table_placeholders}})
         ORDER BY c.table_name, c.column_id
     """
     for row in _fetch_in_table_chunks(cursor, columns_sql, config.schema_name, mv_names):
@@ -360,20 +369,30 @@ def _split_package_source(package_name: str, source: str | None) -> list[Subprog
     return subprograms
 
 
-def _fetch_code_objects(cursor: oracledb.Cursor, config: LeaiConfig, target_types: set[str]) -> list[CodeObjectMeta]:
+def _fetch_code_objects(cursor: oracledb.Cursor, config: LeaiConfig, target_types: set[str], prefix: str = "all") -> list[CodeObjectMeta]:
     cursor.execute(
-        """
-        SELECT DISTINCT object_name, object_type
-        FROM all_procedures
+        f"""
+        SELECT object_name, object_type
+        FROM {prefix}_objects
         WHERE owner = :owner
+          AND object_type IN ('PROCEDURE', 'FUNCTION', 'PACKAGE', 'PACKAGE BODY', 'TYPE', 'TYPE BODY')
         ORDER BY object_type, object_name
         """,
         owner=config.schema_name,
     )
+    raw_objs = cursor.fetchall()
+
+    pkg_bodies = {name for name, otype in raw_objs if otype in ("PACKAGE BODY", "TYPE BODY")}
+
     code_objs: list[CodeObjectMeta] = []
     seen = set()
-    for obj_name, obj_type in cursor.fetchall():
+    for obj_name, obj_type in raw_objs:
         if obj_type not in target_types:
+            continue
+        # Se existe PACKAGE BODY ou TYPE BODY, priorizar o BODY para obter a implementação completa
+        if obj_type == "PACKAGE" and obj_name in pkg_bodies and "PACKAGE BODY" in target_types:
+            continue
+        if obj_type == "TYPE" and obj_name in pkg_bodies and "TYPE BODY" in target_types:
             continue
         if (obj_name, obj_type) in seen:
             continue
@@ -382,9 +401,9 @@ def _fetch_code_objects(cursor: oracledb.Cursor, config: LeaiConfig, target_type
         seen.add((obj_name, obj_type))
 
         cursor.execute(
-            """
+            f"""
             SELECT text
-            FROM all_source
+            FROM {prefix}_source
             WHERE owner = :owner
               AND name = :name
               AND type = :type
@@ -406,11 +425,11 @@ def _fetch_code_objects(cursor: oracledb.Cursor, config: LeaiConfig, target_type
     return code_objs
 
 
-def _fetch_triggers(cursor: oracledb.Cursor, config: LeaiConfig) -> list[TriggerMeta]:
+def _fetch_triggers(cursor: oracledb.Cursor, config: LeaiConfig, prefix: str = "all") -> list[TriggerMeta]:
     cursor.execute(
-        """
+        f"""
         SELECT trigger_name, table_name, trigger_type, triggering_event, status, trigger_body
-        FROM all_triggers
+        FROM {prefix}_triggers
         WHERE owner = :owner
         ORDER BY trigger_name
         """,
@@ -432,12 +451,13 @@ def _fetch_triggers(cursor: oracledb.Cursor, config: LeaiConfig) -> list[Trigger
     return triggers
 
 
-def _fetch_sequences(cursor: oracledb.Cursor, config: LeaiConfig) -> list[SequenceMeta]:
+def _fetch_sequences(cursor: oracledb.Cursor, config: LeaiConfig, prefix: str = "all") -> list[SequenceMeta]:
+    owner_col = "sequence_owner"
     cursor.execute(
-        """
+        f"""
         SELECT sequence_name, min_value, max_value, increment_by, last_number
-        FROM all_sequences
-        WHERE sequence_owner = :owner
+        FROM {prefix}_sequences
+        WHERE {owner_col} = :owner
         ORDER BY sequence_name
         """,
         owner=config.schema_name,
@@ -457,11 +477,11 @@ def _fetch_sequences(cursor: oracledb.Cursor, config: LeaiConfig) -> list[Sequen
     return sequences
 
 
-def _fetch_indexes(cursor: oracledb.Cursor, config: LeaiConfig) -> list[IndexMeta]:
+def _fetch_indexes(cursor: oracledb.Cursor, config: LeaiConfig, prefix: str = "all") -> list[IndexMeta]:
     cursor.execute(
-        """
+        f"""
         SELECT index_name, table_name, uniqueness
-        FROM all_indexes
+        FROM {prefix}_indexes
         WHERE owner = :owner
           AND index_type != 'LOB'
         ORDER BY index_name
@@ -477,11 +497,11 @@ def _fetch_indexes(cursor: oracledb.Cursor, config: LeaiConfig) -> list[IndexMet
         return []
 
     idx_names = tuple(indexes.keys())
-    cols_sql = """
+    cols_sql = f"""
         SELECT index_name, column_name
-        FROM all_ind_columns
+        FROM {prefix}_ind_columns
         WHERE index_owner = :owner
-          AND index_name IN ({table_placeholders})
+          AND index_name IN ({{table_placeholders}})
         ORDER BY index_name, column_position
     """
     for idx_name, col_name in _fetch_in_table_chunks(cursor, cols_sql, config.schema_name, idx_names):
@@ -491,11 +511,11 @@ def _fetch_indexes(cursor: oracledb.Cursor, config: LeaiConfig) -> list[IndexMet
     return [indexes[name] for name in sorted(idx_names)]
 
 
-def _fetch_synonyms(cursor: oracledb.Cursor, config: LeaiConfig) -> list[SynonymMeta]:
+def _fetch_synonyms(cursor: oracledb.Cursor, config: LeaiConfig, prefix: str = "all") -> list[SynonymMeta]:
     cursor.execute(
-        """
+        f"""
         SELECT synonym_name, table_owner, table_name, db_link
-        FROM all_synonyms
+        FROM {prefix}_synonyms
         WHERE owner = :owner
         ORDER BY synonym_name
         """,
@@ -515,19 +535,70 @@ def _fetch_synonyms(cursor: oracledb.Cursor, config: LeaiConfig) -> list[Synonym
     return synonyms
 
 
-def fetch_schema_metadata(config: LeaiConfig) -> SchemaMetadata:
+ORACLE_SYSTEM_SCHEMAS = {
+    "ANONYMOUS", "APEX_040000", "APEX_040200", "APEX_050000", "APEX_180000",
+    "APEX_190000", "APEX_200000", "APEX_210000", "APEX_220000", "APEX_230000",
+    "APEX_PUBLIC_USER", "APPQOSSYS", "AUDSYS", "AUTODDL", "CTXSYS", "DBSNMP",
+    "DIP", "DVF", "DVSYS", "EXFSYS", "GSMADMIN_INTERNAL", "GSMCATUSER",
+    "GSMUSER", "LBACSYS", "MDSYS", "OASYS", "ORACLE_OCM", "ORDDATA",
+    "ORDPLUGINS", "ORDSYS", "OUTLN", "PDBADMIN", "REMOTE_SCHEDULER_AGENT",
+    "SI_INFORMTN_SCHEMA", "SYS", "SYS$UMF", "SYSBACKUP", "SYSDG", "SYSKM",
+    "SYSRAC", "SYSTEM", "WMSYS", "XDB", "XS$NULL"
+}
+
+
+def fetch_available_schemas(connection: oracledb.Connection, config: LeaiConfig) -> list[str]:
+    if config.is_all_schemas or "ALL" in config.schemas:
+        cursor = connection.cursor()
+        prefix = _detect_catalog_prefix(cursor)
+        cursor.execute(f"SELECT username FROM {prefix}_users ORDER BY username")
+        all_users = [row[0].upper() for row in cursor.fetchall()]
+        return [u for u in all_users if u not in ORACLE_SYSTEM_SCHEMAS]
+    return config.schemas
+
+
+from typing import Callable
+
+
+def _fetch_object_timestamps(cursor: oracledb.Cursor, owner: str, prefix: str = "all") -> dict[tuple[str, str], tuple[str, str, str]]:
+    cursor.execute(
+        f"""
+        SELECT object_name,
+               object_type,
+               TO_CHAR(created, 'YYYY-MM-DD HH24:MI:SS') AS created_at,
+               TO_CHAR(last_ddl_time, 'YYYY-MM-DD HH24:MI:SS') AS last_ddl_time,
+               owner AS last_modified_by
+        FROM {prefix}_objects
+        WHERE owner = :owner
+        """,
+        owner=owner,
+    )
+    timestamps: dict[tuple[str, str], tuple[str, str, str]] = {}
+    for obj_name, obj_type, created_at, last_ddl, owner_name in cursor.fetchall():
+        timestamps[(str(obj_name).upper(), str(obj_type).upper())] = (
+            str(created_at) if created_at else "",
+            str(last_ddl) if last_ddl else "",
+            str(owner_name) if owner_name else "",
+        )
+    return timestamps
+
+
+def fetch_schema_metadata(
+    config: LeaiConfig,
+    schema_name: str | None = None,
+    callback: Callable[[str, int, int, int], None] | None = None,
+) -> SchemaMetadata:
+    target_schema = (schema_name or config.schema_name).upper()
     connection = oracledb.connect(**_build_connect_kwargs(config.dsn))
     try:
         cursor = connection.cursor()
-        schema_meta = SchemaMetadata()
+        prefix = _detect_catalog_prefix(cursor)
+        schema_meta = SchemaMetadata(schema_name=target_schema)
         types = set(config.object_types)
 
-        if "tables" in types:
-            schema_meta.tables = _fetch_tables(cursor, config)
-        if "views" in types:
-            schema_meta.views = _fetch_views(cursor, config)
-        if "mviews" in types:
-            schema_meta.mviews = _fetch_mviews(cursor, config)
+        # Criar uma config temporária apontando para target_schema para reutilizar os fetchers internos
+        temp_config = config.model_copy()
+        temp_config.schemas = [target_schema]
 
         code_target_types = set()
         if "procedures" in types:
@@ -535,19 +606,107 @@ def fetch_schema_metadata(config: LeaiConfig) -> SchemaMetadata:
         if "functions" in types:
             code_target_types.add("FUNCTION")
         if "packages" in types:
-            code_target_types.union_update({"PACKAGE", "PACKAGE BODY"}) if hasattr(set, "union_update") else code_target_types.update({"PACKAGE", "PACKAGE BODY"})
+            code_target_types.update({"PACKAGE", "PACKAGE BODY"})
+        if "types" in types:
+            code_target_types.update({"TYPE", "TYPE BODY"})
+
+        # Calcular número total de etapas ativas para percentual intra-schema
+        active_steps = []
+        if "tables" in types:
+            active_steps.append("tables")
+        if "views" in types:
+            active_steps.append("views")
+        if "mviews" in types:
+            active_steps.append("mviews")
+        if code_target_types:
+            active_steps.append("code_objects")
+        if "triggers" in types:
+            active_steps.append("triggers")
+        if "sequences" in types:
+            active_steps.append("sequences")
+        if "indexes" in types:
+            active_steps.append("indexes")
+        if "synonyms" in types:
+            active_steps.append("synonyms")
+
+        total_steps = len(active_steps)
+        current_step = 0
+
+        if "tables" in types:
+            schema_meta.tables = _fetch_tables(cursor, temp_config, prefix=prefix)
+            current_step += 1
+            if callback:
+                callback("Tabelas", len(schema_meta.tables), current_step, total_steps)
+
+        if "views" in types:
+            schema_meta.views = _fetch_views(cursor, temp_config, prefix=prefix)
+            current_step += 1
+            if callback:
+                callback("Views", len(schema_meta.views), current_step, total_steps)
+
+        if "mviews" in types:
+            schema_meta.mviews = _fetch_mviews(cursor, temp_config, prefix=prefix)
+            current_step += 1
+            if callback:
+                callback("Materialized Views", len(schema_meta.mviews), current_step, total_steps)
 
         if code_target_types:
-            schema_meta.code_objects = _fetch_code_objects(cursor, config, code_target_types)
+            schema_meta.code_objects = _fetch_code_objects(cursor, temp_config, code_target_types, prefix=prefix)
+            current_step += 1
+            if callback:
+                callback("Code Objects", len(schema_meta.code_objects), current_step, total_steps)
 
         if "triggers" in types:
-            schema_meta.triggers = _fetch_triggers(cursor, config)
+            schema_meta.triggers = _fetch_triggers(cursor, temp_config, prefix=prefix)
+            current_step += 1
+            if callback:
+                callback("Triggers", len(schema_meta.triggers), current_step, total_steps)
+
         if "sequences" in types:
-            schema_meta.sequences = _fetch_sequences(cursor, config)
+            schema_meta.sequences = _fetch_sequences(cursor, temp_config, prefix=prefix)
+            current_step += 1
+            if callback:
+                callback("Sequences", len(schema_meta.sequences), current_step, total_steps)
+
         if "indexes" in types:
-            schema_meta.indexes = _fetch_indexes(cursor, config)
+            schema_meta.indexes = _fetch_indexes(cursor, temp_config, prefix=prefix)
+            current_step += 1
+            if callback:
+                callback("Índices", len(schema_meta.indexes), current_step, total_steps)
+
         if "synonyms" in types:
-            schema_meta.synonyms = _fetch_synonyms(cursor, config)
+            schema_meta.synonyms = _fetch_synonyms(cursor, temp_config, prefix=prefix)
+            current_step += 1
+            if callback:
+                callback("Sinônimos", len(schema_meta.synonyms), current_step, total_steps)
+
+        # Enriquecer os objetos com os metadados de auditoria (CREATED, LAST_DDL_TIME, OWNER)
+        try:
+            timestamps = _fetch_object_timestamps(cursor, target_schema, prefix=prefix)
+            for category_list in [
+                schema_meta.tables,
+                schema_meta.views,
+                schema_meta.mviews,
+                schema_meta.code_objects,
+                schema_meta.triggers,
+                schema_meta.sequences,
+                schema_meta.indexes,
+                schema_meta.synonyms,
+            ]:
+                for item in category_list:
+                    otype = getattr(item, "object_type", "").upper() or "TABLE"
+                    key = (item.name.upper(), otype)
+                    if key in timestamps:
+                        item.created_at, item.last_ddl_time, item.last_modified_by = timestamps[key]
+                    else:
+                        for (o_name, _), (c_at, l_ddl, l_by) in timestamps.items():
+                            if o_name == item.name.upper():
+                                item.created_at = c_at
+                                item.last_ddl_time = l_ddl
+                                item.last_modified_by = l_by
+                                break
+        except Exception:
+            pass
 
         return schema_meta
     finally:
