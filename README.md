@@ -25,19 +25,40 @@ O **LEAI** é uma ferramenta de linha de comando (CLI) em Python desenhada para 
 
 ---
 
-## 📦 Instalação e Execução com `uv`
+## 📦 Instalação e Execução
 
-Recomendamos o uso do **`uv`** para gerenciamento ultrarrápido de ambientes virtuais e dependências Python:
+### Opção 1: Usando `uv` (Recomendado)
+O **`uv`** oferece gerenciamento de dependências e execução ultrarrápida:
 
 ```bash
 # Clone o repositório ou navegue até a pasta
 cd leai
 
-# Sincronize as dependências e o ambiente virtual
+# Sincronize o ambiente virtual e dependências
 uv sync
 
 # Execute o CLI via uv
 uv run leai
+```
+
+### Opção 2: Usando `pip`
+
+#### A. Instalação Local (Modo Editável)
+Na raiz do projeto clonado:
+```bash
+pip install -e .
+
+# Executar o CLI diretamente
+leai
+```
+
+#### B. Instalação Direta via Git / GitHub
+Instale diretamente a partir do repositório remoto sem precisar clonar manualmente:
+```bash
+pip install git+https://github.com/lucasbral/leai.git
+
+# Executar o CLI diretamente
+leai
 ```
 
 ---
