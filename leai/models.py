@@ -24,6 +24,9 @@ class TableMeta(BaseModel):
     columns: list[ColumnMeta] = Field(default_factory=list)
     primary_keys: list[str] = Field(default_factory=list)
     foreign_keys: list[ForeignKeyMeta] = Field(default_factory=list)
+    created_at: str | None = None
+    last_ddl_time: str | None = None
+    last_modified_by: str | None = None
 
 
 class ViewMeta(BaseModel):
@@ -31,6 +34,9 @@ class ViewMeta(BaseModel):
     text: str | None = None
     comment: str | None = None
     columns: list[ColumnMeta] = Field(default_factory=list)
+    created_at: str | None = None
+    last_ddl_time: str | None = None
+    last_modified_by: str | None = None
 
 
 class MaterializedViewMeta(BaseModel):
@@ -41,6 +47,9 @@ class MaterializedViewMeta(BaseModel):
     updatable: bool = False
     comment: str | None = None
     columns: list[ColumnMeta] = Field(default_factory=list)
+    created_at: str | None = None
+    last_ddl_time: str | None = None
+    last_modified_by: str | None = None
 
 
 class SubprogramMeta(BaseModel):
@@ -49,6 +58,9 @@ class SubprogramMeta(BaseModel):
     subprogram_type: str  # PROCEDURE or FUNCTION
     source: str | None = None
     comment: str | None = None
+    created_at: str | None = None
+    last_ddl_time: str | None = None
+    last_modified_by: str | None = None
 
 
 class CodeObjectMeta(BaseModel):
@@ -57,6 +69,9 @@ class CodeObjectMeta(BaseModel):
     source: str | None = None
     comment: str | None = None
     subprograms: list[SubprogramMeta] = Field(default_factory=list)
+    created_at: str | None = None
+    last_ddl_time: str | None = None
+    last_modified_by: str | None = None
 
 
 class TriggerMeta(BaseModel):
@@ -66,6 +81,9 @@ class TriggerMeta(BaseModel):
     triggering_event: str | None = None
     status: str | None = None
     trigger_body: str | None = None
+    created_at: str | None = None
+    last_ddl_time: str | None = None
+    last_modified_by: str | None = None
 
 
 class SequenceMeta(BaseModel):
@@ -74,6 +92,9 @@ class SequenceMeta(BaseModel):
     max_value: int | float | str | None = None
     increment_by: int | None = None
     last_number: int | float | None = None
+    created_at: str | None = None
+    last_ddl_time: str | None = None
+    last_modified_by: str | None = None
 
 
 class IndexMeta(BaseModel):
@@ -81,6 +102,9 @@ class IndexMeta(BaseModel):
     table_name: str
     uniqueness: str = "NONUNIQUE"
     columns: list[str] = Field(default_factory=list)
+    created_at: str | None = None
+    last_ddl_time: str | None = None
+    last_modified_by: str | None = None
 
 
 class SynonymMeta(BaseModel):
@@ -88,15 +112,22 @@ class SynonymMeta(BaseModel):
     table_owner: str | None = None
     table_name: str | None = None
     db_link: str | None = None
+    created_at: str | None = None
+    last_ddl_time: str | None = None
+    last_modified_by: str | None = None
 
 
 class ObjectAnnotation(BaseModel):
     description: str | None = None
+    tags: list[str] = Field(default_factory=list)
     business_rules: list[str] = Field(default_factory=list)
+    related_objects: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
     columns: dict[str, str] = Field(default_factory=dict)
 
 
 class SchemaMetadata(BaseModel):
+    schema_name: str = ""
     tables: list[TableMeta] = Field(default_factory=list)
     views: list[ViewMeta] = Field(default_factory=list)
     mviews: list[MaterializedViewMeta] = Field(default_factory=list)

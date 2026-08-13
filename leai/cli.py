@@ -1,21 +1,35 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
+import oracledb
 import typer
-from rich.console import Console
+from rich.console import Console, Group
+from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
+from rich.table import Table
 
 from leai.config import ConfigError, load_config
-from leai.docs import write_schema_docs
-from leai.oracle import fetch_schema_metadata
-from leai.raw import load_raw_schema, save_raw_schema
+from leai.docs import sync_schema_annotations, write_schema_docs
+from leai.oracle import _build_connect_kwargs, fetch_available_schemas, fetch_schema_metadata
+from leai.raw import load_raw_schemas, save_raw_schema
 
-app = typer.Typer(help="Oracle-native database documentation CLI.")
+app = typer.Typer(help="CLI para Documentação de Bancos de Dados Oracle.")
 console = Console()
 
 
-def _print_summary(schema_meta) -> None:
-    console.print("[green]Objetos processados:[/green]")
+def _print_summary(schema_meta, schema_name: str = "") -> None:
+    header = f" [{schema_name}]" if schema_name else ""
+    console.print(f"[green]Objetos processados{header}:[/green]")
     console.print(f"  - Tabelas: [bold]{len(schema_meta.tables)}[/bold]")
     console.print(f"  - Views: [bold]{len(schema_meta.views)}[/bold]")
     console.print(f"  - Materialized Views: [bold]{len(schema_meta.mviews)}[/bold]")
@@ -26,12 +40,59 @@ def _print_summary(schema_meta) -> None:
     console.print(f"  - Sinônimos: [bold]{len(schema_meta.synonyms)}[/bold]")
 
 
+def _print_final_summary_panel(
+    title: str,
+    total_schemas: int,
+    totals: dict[str, int],
+    elapsed_seconds: float,
+    output_paths: dict[str, Path],
+) -> None:
+    table = Table(show_header=True, header_style="bold cyan", box=None)
+    table.add_column("Categoria de Objeto", style="dim")
+    table.add_column("Total Processado", justify="right", style="bold green")
+
+    categories = [
+        ("Tabelas", totals.get("tables", 0)),
+        ("Views", totals.get("views", 0)),
+        ("Materialized Views", totals.get("mviews", 0)),
+        ("Code Objects (Proc/Func/Pkg)", totals.get("code_objects", 0)),
+        ("Triggers", totals.get("triggers", 0)),
+        ("Sequences", totals.get("sequences", 0)),
+        ("Índices", totals.get("indexes", 0)),
+        ("Sinônimos", totals.get("synonyms", 0)),
+    ]
+
+    for cat_name, count in categories:
+        if count > 0 or total_schemas == 1:
+            table.add_row(cat_name, f"{count:,}")
+
+    formatted_time = (
+        f"{elapsed_seconds:.2f}s"
+        if elapsed_seconds < 60
+        else f"{int(elapsed_seconds // 60)}m {elapsed_seconds % 60:.1f}s"
+    )
+
+    paths_str = "\n".join([f"[bold yellow]{label}:[/bold yellow] {path}" for label, path in output_paths.items()])
+
+    summary_info = (
+        f"\n[bold blue]Schemas Processados:[/bold blue] [bold]{total_schemas}[/bold]\n"
+        f"[bold magenta]Tempo Total de Execução:[/bold magenta] [bold yellow]{formatted_time}[/bold yellow]\n\n"
+        f"{paths_str}"
+    )
+
+    unified_content = Group(table, summary_info)
+
+    console.print()
+    console.print(Panel(unified_content, title=f"[bold green]{title}[/bold green]", border_style="green"))
+
+
 @app.command()
 def extract(
-    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Caminho para o leai.yml"),
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Tipos de objeto a extrair (ex: tables, views, procedures)"),
 ) -> None:
-    """Estágio 1: Extrai o snapshot técnico puro do banco Oracle em rawPath."""
+    """Extrai o snapshot técnico puro do banco Oracle em rawPath."""
+    start_time = time.perf_counter()
     try:
         cfg = load_config(config)
         if object_types:
@@ -41,22 +102,79 @@ def extract(
         raise typer.Exit(code=1)
 
     try:
-        console.print(f"[cyan]Extraindo snapshot técnico do schema[/cyan] [bold]{cfg.schema_name}[/bold]...")
-        schema_meta = fetch_schema_metadata(cfg)
-        _print_summary(schema_meta)
-        saved_raw = save_raw_schema(schema_meta, cfg.rawPath)
-        console.print(f"[bold yellow]Estágio 1 Concluído:[/bold yellow] {len(saved_raw)} arquivos salvos em {cfg.rawPath}")
+        connection = oracledb.connect(**_build_connect_kwargs(cfg.dsn))
+        try:
+            target_schemas = fetch_available_schemas(connection, cfg)
+        finally:
+            connection.close()
+
+        is_multi = len(target_schemas) > 1 or cfg.is_all_schemas
+        console.print(
+            f"[cyan]Schemas a extrair:[/cyan] [bold]{', '.join(target_schemas[:10])}{'...' if len(target_schemas) > 10 else ''}[/bold] (Total: {len(target_schemas)})\n"
+        )
+
+        totals = {
+            "tables": 0, "views": 0, "mviews": 0, "code_objects": 0,
+            "triggers": 0, "sequences": 0, "indexes": 0, "synonyms": 0,
+        }
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold cyan]{task.description}[/bold cyan]"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task_id = progress.add_task("Extraindo Schemas...", total=len(target_schemas))
+
+            for schema_name in target_schemas:
+                schema_obj_count = [0]
+
+                def _cb(cat: str, count: int, step_idx: int, total_steps: int, s_name=schema_name) -> None:
+                    schema_obj_count[0] += count
+                    pct = int((step_idx / total_steps) * 100) if total_steps else 100
+                    progress.update(
+                        task_id,
+                        description=f"Extraindo [bold yellow]{s_name}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ([bold green]{schema_obj_count[0]:,} objetos[/bold green])",
+                    )
+
+                progress.update(task_id, description=f"Extraindo [bold yellow]{schema_name}[/bold yellow]")
+                schema_meta = fetch_schema_metadata(cfg, schema_name=schema_name, callback=_cb)
+
+                totals["tables"] += len(schema_meta.tables)
+                totals["views"] += len(schema_meta.views)
+                totals["mviews"] += len(schema_meta.mviews)
+                totals["code_objects"] += len(schema_meta.code_objects)
+                totals["triggers"] += len(schema_meta.triggers)
+                totals["sequences"] += len(schema_meta.sequences)
+                totals["indexes"] += len(schema_meta.indexes)
+                totals["synonyms"] += len(schema_meta.synonyms)
+
+                save_raw_schema(schema_meta, cfg.rawPath, multi_schema=is_multi)
+                progress.advance(task_id)
+
+        elapsed = time.perf_counter() - start_time
+        _print_final_summary_panel(
+            title="Extração RAW Concluída",
+            total_schemas=len(target_schemas),
+            totals=totals,
+            elapsed_seconds=elapsed,
+            output_paths={"Snapshot RAW": cfg.rawPath},
+        )
     except Exception as exc:
         console.print(f"[red]Erro durante a extração RAW:[/red] {exc}")
         raise typer.Exit(code=1)
 
 
 @app.command()
-def compile(
-    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
-    object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Tipos de objeto a compilar (ex: tables, views, procedures)"),
+def annotate(
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Caminho para o leai.yml"),
+    object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Tipos de objeto a sincronizar (ex: tables, views, procedures)"),
 ) -> None:
-    """Estágio 3: Compila os Markdowns em docPath mesclando rawPath + annotationsPath (Offline)."""
+    """Gera/sincroniza apenas os esqueletos de anotações YAML em annotationsPath a partir do rawPath (Offline)."""
+    start_time = time.perf_counter()
     try:
         cfg = load_config(config)
         if object_types:
@@ -66,18 +184,136 @@ def compile(
         raise typer.Exit(code=1)
 
     try:
-        console.print(f"[cyan]Carregando snapshot técnico de[/cyan] [bold]{cfg.rawPath}[/bold]...")
-        schema_meta = load_raw_schema(cfg.rawPath)
-        _print_summary(schema_meta)
+        console.print(f"[cyan]Carregando snapshots de[/cyan] [bold]{cfg.rawPath}[/bold]...\n")
+        schemas_meta = load_raw_schemas(cfg.rawPath)
+        is_multi = len(schemas_meta) > 1
 
-        generated_md, generated_ann = write_schema_docs(
-            schema_meta,
-            doc_path=cfg.docPath,
-            annotations_path=cfg.annotationsPath,
-            docs_overrides=cfg.docs,
+        totals = {
+            "tables": 0, "views": 0, "mviews": 0, "code_objects": 0,
+            "triggers": 0, "sequences": 0, "indexes": 0, "synonyms": 0,
+        }
+        total_ann = 0
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold cyan]{task.description}[/bold cyan]"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task_id = progress.add_task("Sincronizando Anotações...", total=len(schemas_meta))
+
+            for schema_meta in schemas_meta:
+                s_name = schema_meta.schema_name or cfg.schema_name
+                progress.update(task_id, description=f"Sincronizando [bold yellow]{s_name}[/bold yellow]")
+
+                totals["tables"] += len(schema_meta.tables)
+                totals["views"] += len(schema_meta.views)
+                totals["mviews"] += len(schema_meta.mviews)
+                totals["code_objects"] += len(schema_meta.code_objects)
+                totals["triggers"] += len(schema_meta.triggers)
+                totals["sequences"] += len(schema_meta.sequences)
+                totals["indexes"] += len(schema_meta.indexes)
+                totals["synonyms"] += len(schema_meta.synonyms)
+
+                generated_ann = sync_schema_annotations(
+                    schema_meta,
+                    annotations_path=cfg.annotationsPath,
+                    multi_schema=is_multi,
+                )
+                total_ann += len(generated_ann)
+                progress.advance(task_id)
+
+        elapsed = time.perf_counter() - start_time
+        _print_final_summary_panel(
+            title="Sincronização de Anotações YAML Concluída",
+            total_schemas=len(schemas_meta),
+            totals=totals,
+            elapsed_seconds=elapsed,
+            output_paths={
+                "Anotações YAML Sincronizadas": cfg.annotationsPath,
+            },
         )
-        console.print(f"[bold green]Documentos Markdown compilados:[/bold green] {len(generated_md)} em {cfg.docPath}")
-        console.print(f"[bold cyan]Anotações YAML sincronizadas:[/bold cyan] {len(generated_ann)} em {cfg.annotationsPath}")
+    except Exception as exc:
+        console.print(f"[red]Erro durante a sincronização de anotações:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def compile(
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Caminho para o leai.yml"),
+    object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Tipos de objeto a compilar (ex: tables, views, procedures)"),
+) -> None:
+    """Compila os Markdowns em docPath mesclando rawPath + annotationsPath (Offline)."""
+    start_time = time.perf_counter()
+    try:
+        cfg = load_config(config)
+        if object_types:
+            cfg.object_types = [t.lower() for t in object_types]
+    except ConfigError as exc:
+        console.print(f"[red]Config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    try:
+        console.print(f"[cyan]Carregando snapshots de[/cyan] [bold]{cfg.rawPath}[/bold]...\n")
+        schemas_meta = load_raw_schemas(cfg.rawPath)
+        is_multi = len(schemas_meta) > 1
+
+        totals = {
+            "tables": 0, "views": 0, "mviews": 0, "code_objects": 0,
+            "triggers": 0, "sequences": 0, "indexes": 0, "synonyms": 0,
+        }
+        total_md = 0
+        total_ann = 0
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold cyan]{task.description}[/bold cyan]"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task_id = progress.add_task("Compilando Schemas...", total=len(schemas_meta))
+
+            for schema_meta in schemas_meta:
+                s_name = schema_meta.schema_name or cfg.schema_name
+                progress.update(task_id, description=f"Compilando [bold yellow]{s_name}[/bold yellow]")
+
+                totals["tables"] += len(schema_meta.tables)
+                totals["views"] += len(schema_meta.views)
+                totals["mviews"] += len(schema_meta.mviews)
+                totals["code_objects"] += len(schema_meta.code_objects)
+                totals["triggers"] += len(schema_meta.triggers)
+                totals["sequences"] += len(schema_meta.sequences)
+                totals["indexes"] += len(schema_meta.indexes)
+                totals["synonyms"] += len(schema_meta.synonyms)
+
+                generated_md, generated_ann = write_schema_docs(
+                    schema_meta,
+                    doc_path=cfg.docPath,
+                    annotations_path=cfg.annotationsPath,
+                    docs_overrides=cfg.docs,
+                    multi_schema=is_multi,
+                )
+                total_md += len(generated_md)
+                total_ann += len(generated_ann)
+                progress.advance(task_id)
+
+        elapsed = time.perf_counter() - start_time
+        _print_final_summary_panel(
+            title="Compilação Markdown Concluída",
+            total_schemas=len(schemas_meta),
+            totals=totals,
+            elapsed_seconds=elapsed,
+            output_paths={
+                "Documentos Markdown": cfg.docPath,
+                "Anotações YAML Sincronizadas": cfg.annotationsPath,
+            },
+        )
     except Exception as exc:
         console.print(f"[red]Erro durante a compilação:[/red] {exc}")
         raise typer.Exit(code=1)
@@ -85,10 +321,11 @@ def compile(
 
 @app.command()
 def generate(
-    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Caminho para o leai.yml"),
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Tipos de objeto a gerar (ex: tables, views, procedures)"),
 ) -> None:
-    """Pipeline Completo de 3 Estágios (Extrai RAW ➔ Sincroniza Anotações ➔ Compila Docs)."""
+    """Gera a documentação completa (Extrai RAW -> Sincroniza Anotações -> Compila Markdown)."""
+    start_time = time.perf_counter()
     try:
         cfg = load_config(config)
         if object_types:
@@ -98,29 +335,163 @@ def generate(
         raise typer.Exit(code=1)
 
     try:
-        console.print(f"[cyan]Conectando ao schema[/cyan] [bold]{cfg.schema_name}[/bold]...")
-        schema_meta = fetch_schema_metadata(cfg)
-        _print_summary(schema_meta)
+        connection = oracledb.connect(**_build_connect_kwargs(cfg.dsn))
+        try:
+            target_schemas = fetch_available_schemas(connection, cfg)
+        finally:
+            connection.close()
 
-        # 1. Salva Snapshot RAW
-        save_raw_schema(schema_meta, cfg.rawPath)
-
-        # 2 & 3. Sincroniza anotações e compila Markdown
-        generated_md, generated_ann = write_schema_docs(
-            schema_meta,
-            doc_path=cfg.docPath,
-            annotations_path=cfg.annotationsPath,
-            docs_overrides=cfg.docs,
+        is_multi = len(target_schemas) > 1 or cfg.is_all_schemas
+        console.print(
+            f"[cyan]Schemas a processar:[/cyan] [bold]{', '.join(target_schemas[:10])}{'...' if len(target_schemas) > 10 else ''}[/bold] (Total: {len(target_schemas)})\n"
         )
-        console.print(f"[bold yellow]Snapshot RAW salvo em:[/bold yellow] {cfg.rawPath}")
-        console.print(f"[bold green]Documentos Markdown gerados:[/bold green] {len(generated_md)} em {cfg.docPath}")
-        console.print(f"[bold cyan]Anotações YAML sincronizadas:[/bold cyan] {len(generated_ann)} em {cfg.annotationsPath}")
+
+        totals = {
+            "tables": 0, "views": 0, "mviews": 0, "code_objects": 0,
+            "triggers": 0, "sequences": 0, "indexes": 0, "synonyms": 0,
+        }
+        total_md = 0
+        total_ann = 0
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold cyan]{task.description}[/bold cyan]"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task_id = progress.add_task("Processando Pipeline...", total=len(target_schemas))
+
+            for schema_name in target_schemas:
+                schema_obj_count = [0]
+
+                def _cb(cat: str, count: int, step_idx: int, total_steps: int, s_name=schema_name) -> None:
+                    schema_obj_count[0] += count
+                    pct = int((step_idx / total_steps) * 100) if total_steps else 100
+                    progress.update(
+                        task_id,
+                        description=f"Processando [bold yellow]{s_name}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ([bold green]{schema_obj_count[0]:,} objetos[/bold green])",
+                    )
+
+                progress.update(task_id, description=f"Processando [bold yellow]{schema_name}[/bold yellow]")
+                schema_meta = fetch_schema_metadata(cfg, schema_name=schema_name, callback=_cb)
+
+                totals["tables"] += len(schema_meta.tables)
+                totals["views"] += len(schema_meta.views)
+                totals["mviews"] += len(schema_meta.mviews)
+                totals["code_objects"] += len(schema_meta.code_objects)
+                totals["triggers"] += len(schema_meta.triggers)
+                totals["sequences"] += len(schema_meta.sequences)
+                totals["indexes"] += len(schema_meta.indexes)
+                totals["synonyms"] += len(schema_meta.synonyms)
+
+                # 1. Salvar Snapshot RAW
+                save_raw_schema(schema_meta, cfg.rawPath, multi_schema=is_multi)
+
+                # 2 & 3. Sincronizar Anotações e Compilar Docs
+                generated_md, generated_ann = write_schema_docs(
+                    schema_meta,
+                    doc_path=cfg.docPath,
+                    annotations_path=cfg.annotationsPath,
+                    docs_overrides=cfg.docs,
+                    multi_schema=is_multi,
+                )
+                total_md += len(generated_md)
+                total_ann += len(generated_ann)
+                progress.advance(task_id)
+
+        elapsed = time.perf_counter() - start_time
+        _print_final_summary_panel(
+            title="Geração de Documentação Concluída",
+            total_schemas=len(target_schemas),
+            totals=totals,
+            elapsed_seconds=elapsed,
+            output_paths={
+                "Snapshot RAW": cfg.rawPath,
+                "Documentos Markdown": cfg.docPath,
+                "Anotações YAML Sincronizadas": cfg.annotationsPath,
+            },
+        )
     except Exception as exc:
         console.print(f"[red]Erro durante a execução:[/red] {exc}")
         raise typer.Exit(code=1)
 
 
+@app.command()
+def changes(
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Caminho para o leai.yml"),
+    days: int = typer.Option(7, "--days", "-d", help="Filtrar objetos alterados nos últimos N dias"),
+    user: str = typer.Option(None, "--user", "-u", help="Filtrar por usuário modificador ou schema"),
+) -> None:
+    """Rastreia e exibe objetos do banco alterados nos últimos N dias."""
+    from datetime import datetime, timedelta
+
+    try:
+        cfg = load_config(config)
+    except ConfigError as exc:
+        console.print(f"[red]Config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    try:
+        schemas_meta = load_raw_schemas(cfg.rawPath)
+        cutoff = datetime.now() - timedelta(days=days)
+        results = []
+
+        for schema_meta in schemas_meta:
+            s_name = schema_meta.schema_name or cfg.schema_name
+            categories = [
+                ("Tabela", schema_meta.tables),
+                ("View", schema_meta.views),
+                ("Materialized View", schema_meta.mviews),
+                ("Code Object", schema_meta.code_objects),
+                ("Trigger", schema_meta.triggers),
+                ("Sequence", schema_meta.sequences),
+                ("Índice", schema_meta.indexes),
+                ("Sinônimo", schema_meta.synonyms),
+            ]
+
+            for cat_label, obj_list in categories:
+                for obj in obj_list:
+                    ddl_str = getattr(obj, "last_ddl_time", None)
+                    mod_by = getattr(obj, "last_modified_by", None) or s_name
+                    if user and user.upper() not in (mod_by.upper(), s_name.upper()):
+                        continue
+
+                    if ddl_str:
+                        try:
+                            dt = datetime.strptime(ddl_str, "%Y-%m-%d %H:%M:%S")
+                            if dt >= cutoff:
+                                results.append((s_name, cat_label, obj.name, ddl_str, mod_by))
+                        except ValueError:
+                            pass
+
+        table = Table(show_header=True, header_style="bold cyan", box=None)
+        table.add_column("Schema", style="bold yellow")
+        table.add_column("Categoria", style="dim")
+        table.add_column("Nome do Objeto", style="bold white")
+        table.add_column("Última DDL", style="bold green")
+        table.add_column("Modificado Por", style="magenta")
+
+        for row in sorted(results, key=lambda x: x[3], reverse=True):
+            table.add_row(*row)
+
+        user_filter_str = f" | Usuário: {user}" if user else ""
+        header_text = f"Objetos Alterados nos Últimos {days} Dias ({len(results)} Encontrados){user_filter_str}"
+
+        console.print()
+        console.print(Panel(table, title=f"[bold green]{header_text}[/bold green]", border_style="green"))
+    except Exception as exc:
+        console.print(f"[red]Erro ao rastrear alterações:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
 @app.callback(invoke_without_command=True)
-def default(ctx: typer.Context) -> None:
+def default(
+    ctx: typer.Context,
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Caminho para o leai.yml"),
+    object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Tipos de objeto a gerar (ex: tables, views, procedures)"),
+) -> None:
     if ctx.invoked_subcommand is None:
-        ctx.invoke(generate)
+        ctx.invoke(generate, config=config, object_types=object_types)

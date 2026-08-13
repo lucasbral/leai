@@ -1,0 +1,27 @@
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+.uv/
+build/
+dist/
+*.egg-info/
+
+# LEAI Local Data & Credentials (Do NOT commit real database DSNs)
+leai.yml
+raw/
+docs/
+annotations/
+*.log
+
+# IDE & OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

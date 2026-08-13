@@ -10,44 +10,63 @@ O **LEAI** é uma ferramenta de linha de comando (CLI) em Python desenhada para 
   1. `raw/` ➔ Snapshot técnico 100% puro do dicionário do banco Oracle (em formato JSON).
   2. `annotations/` ➔ Camada editável de anotações de negócio em YAML (descrições, regras de negócio e comentários).
   3. `docs/` ➔ Documentos Markdown compilados e prontos para indexação por bancos vetoriais/RAG.
-- **Desmembramento Inteligente de Pacotes (Package Splitting):**
-  Desmembra automaticamente `PACKAGE` e `PACKAGE BODY` em sub-arquivos atômicos para cada `PROCEDURE` e `FUNCTION`, evitando arquivos gigantes e garantindo vetores de alta precisão no RAG.
+- **Suporte Multi-Schema e Modo `"ALL"`:**
+  Configure schemas individuais (`schema: "HR"`), listas de schemas (`schemas: ["HR", "SALES"]`) ou extraia automaticamente **todos os schemas do banco** (`schemas: "ALL"`).
+- **Detecção Automática de Visões `DBA_*` / `ALL_*`:**
+  Detecta automaticamente se o usuário possui `GRANT SELECT ANY DICTIONARY` ou role `DBA`, utilizando as visões mestre `DBA_*` para garantir 100% de cobertura dos objetos sem necessidade de privilégios em cada tabela.
+- **Desmembramento e Consolidação de Código PL/SQL:**
+  Extrai `PROCEDURE`, `FUNCTION`, `PACKAGE` + `PACKAGE BODY` e `TYPE` + `TYPE BODY`. Consolida especificação e corpo no mesmo arquivo atômico por objeto de código e cria sub-arquivos atômicos para subprogramas de pacotes.
+- **Interface Terminal Rich:**
+  Barra de progresso animada em tempo real com porcentagem intra-schema (`[50%]`), contador acumulativo de objetos (`(14.739 objetos)`), cronômetro de tempo de execução (`25.14s`) e painel de resumo unificado.
+- **Pronto para CI/CD e Segurança:**
+  Suporta interpolação de variáveis de ambiente `${VAR}` no `leai.yml` e sobrescrita direta de credenciais sensíveis via `LEAI_DSN`.
 - **Modo Offline (`leai compile`):**
   Re-compila toda a documentação em Markdown sem precisar estar conectado ao banco de dados Oracle.
-- **Suporte a 10 Tipos de Objetos Oracle:**
-  `tables`, `views`, `mviews`, `procedures`, `functions`, `packages`, `triggers`, `sequences`, `indexes` e `synonyms`.
-- **Filtros e Wildcards:**
-  Filtre tabelas e objetos via `include`/`exclude` com suporte a wildcards no formato LIKE (ex: `BIN$%`, `SYS_%`).
 
 ---
 
-## 📦 Instalação
+## 📦 Instalação e Execução com `uv`
+
+Recomendamos o uso do **`uv`** para gerenciamento ultrarrápido de ambientes virtuais e dependências Python:
 
 ```bash
 # Clone o repositório ou navegue até a pasta
 cd leai
 
-# Instale o pacote em modo editável
-pip install -e .
+# Sincronize as dependências e o ambiente virtual
+uv sync
+
+# Execute o CLI via uv
+uv run leai
 ```
 
 ---
 
 ## ⚙️ Configuração (`leai.yml`)
 
-Crie um arquivo chamado `leai.yml` na raiz do seu projeto. 
-
-### Exemplo Completo de `leai.yml`:
+Crie um arquivo chamado `leai.yml` na raiz do seu projeto:
 
 ```yaml
-# Conexão com o Oracle (Aceita URL oracle:// ou string DSN)
-dsn: "oracle://usuario:senha@localhost:1521/ORCLPDB1"
-schema: "MEU_SCHEMA"
+# Conexão com o Oracle (Aceita URL oracle://, DSN ou variáveis de ambiente)
+dsn: "oracle://${DB_USER}:${DB_PASS}@${DB_HOST}:1521/${DB_SERVICE}"
 
-# Diretórios do Pipeline de 3 Estágios
-rawPath: "./raw"                  # Estágio 1: Snapshots brutos em JSON
-annotationsPath: "./annotations"  # Estágio 2: Anotações de negócio em YAML
-docPath: "./docs"                  # Estágio 3: Markdown final para RAG
+# 1. Schema único:
+schemas:
+  - C_ERGON
+
+# 2. Ou múltiplos schemas:
+# schemas:
+#   - HR
+#   - SALES
+#   - FINANCAS
+
+# 3. Ou TODOS os schemas não-sistema do banco (requer SELECT ANY DICTIONARY):
+# schemas: "ALL"
+
+# Diretórios do Pipeline
+rawPath: "./raw"                  # Snapshots brutos em JSON
+annotationsPath: "./annotations"  # Anotações de negócio em YAML
+docPath: "./docs"                  # Markdown final para RAG
 
 # Filtros de inclusão/exclusão por nome de objeto (Suporta wildcards LIKE)
 include:
@@ -57,7 +76,7 @@ exclude:
   - BIN$%
   - SYS_%
 
-# Tipos de objetos a serem processados (Descomente apenas os desejados)
+# Tipos de objetos a serem processados
 object_types:
   - tables
   - views
@@ -65,6 +84,7 @@ object_types:
   - procedures
   - functions
   - packages
+  - types
   - triggers
   - sequences
   - indexes
@@ -73,107 +93,124 @@ object_types:
 
 ---
 
-## 🚀 Como Usar o CLI
+## 🚀 Comandos Disponíveis no CLI
 
-O `leai` oferece 3 comandos principais no terminal:
+O `leai` disponibiliza 3 subcomandos e uma execução padrão:
 
-### 1. `leai generate` (ou apenas `leai`) - Pipeline Completo
-Conecta no banco, salva o snapshot em `raw/`, garante os arquivos de anotação em `annotations/` e compila os Markdowns em `docs/`.
+### 1. `uv run leai` (ou `uv run leai generate`) - Pipeline Completo
+Executa o fluxo completo: conecta ao banco Oracle, salva os snapshots em `raw/`, sincroniza as anotações em `annotations/` e compila os Markdowns em `docs/`.
 
 ```bash
-leai
-# ou com arquivo de config personalizado:
-leai generate --config meu_config.yml
+uv run leai
+# ou apontando para outro arquivo de configuração:
+uv run leai generate --config producao.yml
 ```
 
-### 2. `leai extract` - Apenas Extração RAW Técnica
-Executa apenas o Estágio 1: conecta no Oracle e salva o snapshot puramente técnico em `raw/`.
+### 2. `uv run leai extract` - Extração RAW Técnica
+Conecta no banco de dados Oracle e realiza apenas a extração dos snapshots técnicos em formato JSON na pasta `raw/`.
 
 ```bash
-leai extract
+uv run leai extract
 ```
 
-### 3. `leai compile` - Compilação Offline (Sem Banco)
-Lê o snapshot da pasta `raw/` + as anotações em `annotations/` e compila os Markdowns da pasta `docs/` **sem precisar conectar no banco Oracle**.
+### 3. `uv run leai annotate` - Sincronização de Anotações YAML (Offline)
+Lê os snapshots da pasta `raw/` e gera/sincroniza **apenas o diretório de anotações** `annotations/` em YAML (com descrições e colunas pré-preenchidas), sem regerar os Markdowns.
 
 ```bash
-leai compile
+uv run leai annotate
+```
+
+### 5. `uv run leai changes` - Auditoria e Rastreamento de DDL (Offline)
+Rastreia e exibe no terminal os objetos do banco de dados que foram **criados ou modificados recentemente** (via `LAST_DDL_TIME` do dicionário Oracle).
+
+```bash
+# Consultar objetos alterados nos últimos 7 dias (Padrão)
+uv run leai changes
+
+# Consultar objetos alterados nos últimos 30 dias
+uv run leai changes -d 30
+
+# Filtrar por usuário modificador ou schema
+uv run leai changes -d 15 -u C_ERGON
 ```
 
 ---
 
 ### 🎯 Filtragem Direta pelo Terminal (`-t` / `--object-type`)
 
-Você pode aplicar filtros rápidos direto do terminal sem alterar o `leai.yml`:
+Você pode aplicar filtros rápidos direto do terminal para processar apenas tipos específicos de objetos:
 
 ```bash
 # Extrair/Gerar apenas tabelas
-leai generate -t tables
+uv run leai generate -t tables
 
-# Extrair apenas procedures e packages
-leai extract -t procedures -t packages
+# Extrair apenas procedimentos, pacotes e tipos
+uv run leai extract -t procedures -t packages -t types
 
 # Compilar offline apenas views
-leai compile -t views
+uv run leai compile -t views
 ```
 
 ---
 
-## 📁 Estrutura de Pastas Gerada
+## 📁 Estrutura de Diretórios Gerada
+
+Em projetos multi-schema ou com `"ALL"`, o `leai` organiza os arquivos em subpastas isoladas por schema:
 
 ```text
 meu_projeto/
 ├── leai.yml
-├── raw/                              <-- Estágio 1: Snapshots brutos (JSON)
-│   ├── tables/
-│   │   └── FUNCIONARIOS.json
-│   └── package_bodys/
-│       └── PKG_FOLHA.json
+├── raw/                              <-- Snapshots brutos (JSON)
+│   └── C_ERGON/
+│       ├── tables/
+│       │   └── FUNCIONARIOS.json
+│       └── code_objects/
+│           └── PKG_FOLHA.json
 │
-├── annotations/                      <-- Estágio 2: Anotações de negócio (YAML)
-│   ├── tables/
-│   │   └── FUNCIONARIOS.yml
-│   └── package_bodys/
-│       ├── PKG_FOLHA.yml
-│       └── PKG_FOLHA/
-│           ├── CALCULA_INSS.yml
-│           └── CALCULA_IRRF.yml
+├── annotations/                      <-- Anotações de negócio em YAML
+│   └── C_ERGON/
+│       ├── tables/
+│       │   └── FUNCIONARIOS.yml
+│       └── code_objects/
+│           ├── PKG_FOLHA.yml
+│           └── PKG_FOLHA/
+│               ├── CALCULA_INSS.yml
+│               └── CALCULA_IRRF.yml
 │
-└── docs/                             <-- Estágio 3: Markdown final para RAG
-    ├── tables/
-    │   └── FUNCIONARIOS.md
-    └── package_bodys/
-        ├── PKG_FOLHA.md              <-- Visão geral + Tabela de procedimentos
-        └── PKG_FOLHA/                <-- Chunks atômicos de sub-rotinas
-            ├── CALCULA_INSS.md
-            └── CALCULA_IRRF.md
+└── docs/                             <-- Markdown final compilado para RAG
+    └── C_ERGON/
+        ├── tables/
+        │   └── FUNCIONARIOS.md
+        └── code_objects/
+            ├── PKG_FOLHA.md          <-- Visão geral do pacote
+            └── PKG_FOLHA/            <-- Sub-rotinas atômicas
+                ├── CALCULA_INSS.md
+                └── CALCULA_IRRF.md
 ```
 
 ---
 
-## ✍️ Como Enriquecer com Anotações de Negócio
+## 🔒 Ambientes de Produção & CI/CD
 
-Na pasta `annotations/`, cada objeto possui um arquivo `.yml` modelo pré-gerado automaticamente. Você pode preenchê-lo para enriquecer a documentação do RAG:
+Para executar o `leai` em pipelines de integração contínua (GitHub Actions, GitLab CI, Jenkins):
 
-### Exemplo: `annotations/tables/FUNCIONARIOS.yml`
+### 1. Interpolação no `leai.yml`:
 ```yaml
-description: "Tabela central do módulo de Recursos Humanos contendo colaboradores ativos e desligados."
-business_rules:
-  - "Funcionários com status_id = 3 foram desligados."
-  - "O campo salario já contempla a bonificação fixa."
-columns:
-  ID: "Código identificador único do colaborador."
-  SALARIO: "Valor bruto do salário mensal em Reais (BRL)."
+dsn: "oracle://${DB_USER}:${DB_PASS}@${DB_HOST}:1521/${DB_SERVICE}"
 ```
 
-Quando você executar `leai compile` ou `leai generate`, esses dados serão **fundidos automaticamente** dentro do arquivo Markdown em `docs/tables/FUNCIONARIOS.md`!
+### 2. Sobrescrita direta por Variável de Ambiente:
+```bash
+export LEAI_DSN="oracle://USER:SENHA@prod.empresa.com:1521/PRODDB"
+uv run leai
+```
 
 ---
 
-## 🧪 Executando os Testes Automatizados
+## 🧪 Executando a Suíte de Testes
 
-O projeto possui uma suíte completa de testes unitários:
+Para rodar todos os testes automatizados da aplicação:
 
 ```bash
-python -m unittest discover tests
+uv run python -m unittest discover tests
 ```

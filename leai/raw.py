@@ -16,8 +16,9 @@ from leai.models import (
 )
 
 
-def save_raw_schema(schema: SchemaMetadata, raw_path: Path) -> list[Path]:
-    raw_path.mkdir(parents=True, exist_ok=True)
+def save_raw_schema(schema: SchemaMetadata, raw_path: Path, multi_schema: bool = False) -> list[Path]:
+    target_path = (raw_path / schema.schema_name) if (multi_schema and schema.schema_name) else raw_path
+    target_path.mkdir(parents=True, exist_ok=True)
     saved_files: list[Path] = []
 
     def _write_json(file_path: Path, data: dict) -> Path:
@@ -27,50 +28,50 @@ def save_raw_schema(schema: SchemaMetadata, raw_path: Path) -> list[Path]:
 
     # 1. Tables
     for table in schema.tables:
-        p = raw_path / "tables" / f"{table.name}.json"
+        p = target_path / "tables" / f"{table.name}.json"
         saved_files.append(_write_json(p, table.model_dump()))
 
     # 2. Views
     for view in schema.views:
-        p = raw_path / "views" / f"{view.name}.json"
+        p = target_path / "views" / f"{view.name}.json"
         saved_files.append(_write_json(p, view.model_dump()))
 
     # 3. Materialized Views
     for mview in schema.mviews:
-        p = raw_path / "mviews" / f"{mview.name}.json"
+        p = target_path / "mviews" / f"{mview.name}.json"
         saved_files.append(_write_json(p, mview.model_dump()))
 
     # 4. Code Objects
     for code_obj in schema.code_objects:
         obj_folder = code_obj.object_type.lower().replace(" ", "_") + "s"
-        p = raw_path / obj_folder / f"{code_obj.name}.json"
+        p = target_path / obj_folder / f"{code_obj.name}.json"
         saved_files.append(_write_json(p, code_obj.model_dump()))
 
     # 5. Triggers
     for trigger in schema.triggers:
-        p = raw_path / "triggers" / f"{trigger.name}.json"
+        p = target_path / "triggers" / f"{trigger.name}.json"
         saved_files.append(_write_json(p, trigger.model_dump()))
 
     # 6. Sequences
     for sequence in schema.sequences:
-        p = raw_path / "sequences" / f"{sequence.name}.json"
+        p = target_path / "sequences" / f"{sequence.name}.json"
         saved_files.append(_write_json(p, sequence.model_dump()))
 
     # 7. Indexes
     for index in schema.indexes:
-        p = raw_path / "indexes" / f"{index.name}.json"
+        p = target_path / "indexes" / f"{index.name}.json"
         saved_files.append(_write_json(p, index.model_dump()))
 
     # 8. Synonyms
     for synonym in schema.synonyms:
-        p = raw_path / "synonyms" / f"{synonym.name}.json"
+        p = target_path / "synonyms" / f"{synonym.name}.json"
         saved_files.append(_write_json(p, synonym.model_dump()))
 
     return saved_files
 
 
-def load_raw_schema(raw_path: Path) -> SchemaMetadata:
-    schema = SchemaMetadata()
+def load_raw_schema(raw_path: Path, schema_name: str = "") -> SchemaMetadata:
+    schema = SchemaMetadata(schema_name=schema_name)
     if not raw_path.exists():
         return schema
 
@@ -132,3 +133,21 @@ def load_raw_schema(raw_path: Path) -> SchemaMetadata:
             schema.synonyms.append(SynonymMeta.model_validate(raw_data))
 
     return schema
+
+
+def load_raw_schemas(raw_path: Path) -> list[SchemaMetadata]:
+    if not raw_path.exists():
+        return []
+
+    # Verificar se raw_path contém subpastas que representam schemas
+    subdirs = [d for d in raw_path.iterdir() if d.is_dir() and d.name not in {
+        "tables", "views", "mviews", "procedures", "functions", "packages", "package_bodys", "triggers", "sequences", "indexes", "synonyms"
+    }]
+
+    if subdirs:
+        schemas: list[SchemaMetadata] = []
+        for d in sorted(subdirs, key=lambda x: x.name):
+            schemas.append(load_raw_schema(d, schema_name=d.name))
+        return schemas
+
+    return [load_raw_schema(raw_path)]
