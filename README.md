@@ -2,6 +2,16 @@
 
 **LEAI** is a reverse engineering, impact analysis, and documentation engine for **Oracle Database**, specifically designed to power **Retrieval-Augmented Generation (RAG)**, **LLMs**, and software engineers maintaining complex enterprise database ecosystems.
 
+> [!IMPORTANT]
+> 🔒 **Segurança e Privacidade de Dados / Security & Data Privacy:**
+>
+> O **LEAI NÃO acessa nem extrai os dados (registros/linhas) armazenados no banco de dados**.
+> Ele lê **exclusivamente metadados do dicionário de dados (DDL)**: tabelas, colunas, tipos, views, procedures, pacotes, triggers, constraints e sinônimos.
+>
+> 💡 **Um usuário de banco com permissão apenas de auditoria / leitura do catálogo (ex: `SELECT ANY DICTIONARY` ou leitura das views `ALL_*`) é 100% suficiente**, garantindo conformidade com LGPD/GDPR sem qualquer risco de exposição de dados de negócio.
+>
+> *(EN: LEAI strictly reads database metadata/DDLs and NEVER accesses table records or confidential business data. An audit/metadata read-only user is completely sufficient.)*
+
 ---
 
 ## 📌 What Is It?
@@ -285,10 +295,16 @@ leai chat --provider anthropic --model claude-3-5-sonnet-20241022
 leai chat --provider ollama --model llama3.1
 ```
 
-#### 🎮 Interactive In-Session Commands:
-- `/clear`: Clears conversation history and active entity memory.
-- `/save [file.md]`: Exports the complete transcript and generated scripts into a Markdown file.
-- `/help`: Displays available commands.
+#### 🎮 Interactive In-Session Features (OpenCode Style):
+- **Smart Autocomplete:** Type `/` to browse slash commands or `@` to autocomplete database tables, views, and procedures (`@EMPLOYEES`).
+- `/trace <obj>`: Generates instant inline dependency lineage & Mermaid graph directly inside chat.
+- `/tables`: Renders formatted table list with column counts and primary keys.
+- `/schema`: Shows catalog overview and object counts.
+- `/changes [days]`: Audits recent database modifications without leaving chat.
+- `/model <provider> [model]`: Switches AI provider (OpenAI, Gemini, Claude, DeepSeek, Ollama) on the fly.
+- `/save [file.md]`: Exports the complete transcript into a Markdown file.
+- `/clear`: Clears conversation history, context memory, and resets the terminal screen.
+- `/help`: Displays interactive command guide.
 - `/exit` or `/quit`: Closes the chat session.
 
 ---
