@@ -5,9 +5,35 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "leai"
 version = "0.1.0"
-description = "Oracle-focused database documentation CLI for RAG workflows"
+description = "Oracle Database reverse engineering, lineage tracing, impact analysis, and RAG/LLM documentation engine"
 readme = "README.md"
 requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Lucas Bral" }
+]
+keywords = [
+  "oracle",
+  "database",
+  "rag",
+  "llm",
+  "plsql",
+  "lineage",
+  "documentation",
+  "copilot",
+  "vector-db"
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Topic :: Database",
+  "Topic :: Software Development :: Documentation",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "License :: OSI Approved :: MIT License"
+]
 dependencies = [
   "oracledb>=2.2.0",
   "typer>=0.12.3",
@@ -16,8 +42,13 @@ dependencies = [
   "pydantic>=2.7.0"
 ]
 
+[project.urls]
+Homepage = "https://github.com/lucasbral/leai"
+Repository = "https://github.com/lucasbral/leai"
+Issues = "https://github.com/lucasbral/leai/issues"
+
 [project.scripts]
 leai = "leai.cli:app"
 
 [tool.setuptools]
-packages = ["leai"]
+packages = ["leai", "leai.ai"]
