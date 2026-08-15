@@ -9,7 +9,7 @@
 Enterprise Oracle databases accumulate years of business rules scattered across hundreds of tables, views, triggers, and massive PL/SQL packages (3,000 to 10,000+ lines of code).
 
 Enabling developers or AI assistants to reliably understand such environments is challenging due to three main issues:
-1. **Token Inefficiency & Hallucinations:** Sending entire monolithic packages into an LLM context is expensive, slow, and triggers the "Lost in the Middle" attention degradation.
+1. **Token Inefficiency & Hallucinations:** Sending entire monolithic packages into an LLM context is expensive, slow, and triggers attention degradation ("Lost in the Middle").
 2. **Hidden Dependencies:** Altering a single column can silently break triggers, views, and procedures across multiple schemas.
 3. **Synonyms and Aliases:** Stored procedures frequently access tables via private or public synonyms (`PUBLIC SYNONYM`), creating the false impression that referenced objects do not exist or belong elsewhere.
 
@@ -55,27 +55,32 @@ LEAI operates via a **3-stage decoupled pipeline**:
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Quickstart: Using LEAI in Any Project
 
-### 1. Installation
+You don't need to clone the repository. You can use LEAI as a standalone CLI tool in any folder in 3 simple steps:
 
-We recommend using **`uv`** for fast and isolated execution:
+### Step 1: Install LEAI via `pip` or `uv`
 
 ```bash
-# Clone the repository and navigate to the directory
-cd leai
+# Using standard pip
+pip install leai
 
-# Synchronize dependencies and virtual environment
-uv sync
+# Or using uv tool (isolated global CLI)
+uv tool install leai
 ```
-
-*(Or using standard pip: `pip install -e .`)*
 
 ---
 
-### 2. Configuration (`leai.yml`)
+### Step 2: Initialize your project directory
 
-Create a `leai.yml` file in the root of your project:
+Create a working directory for your database documentation and enter it:
+
+```bash
+mkdir my-database-docs
+cd my-database-docs
+```
+
+Create a `leai.yml` file in that folder:
 
 ```yaml
 # Oracle connection string (supports environment variables ${VAR})
@@ -87,12 +92,12 @@ schemas:
   - FINANCE
   - CORE
 
-# Pipeline output directories
-rawPath: "./raw"                  # Raw technical snapshots (JSON)
-annotationsPath: "./annotations"  # Business annotations (YAML)
-docPath: "./docs"                  # Final compiled documentation (Markdown)
+# Output directories
+rawPath: "./raw"                  # Raw JSON technical snapshots
+annotationsPath: "./annotations"  # Business annotations in YAML
+docPath: "./docs"                  # Final Markdown docs for RAG
 
-# AI Provider Configuration for enrich, ask, and chat
+# AI Provider Configuration (Optional - for enrich, ask, and chat)
 ai:
   default_provider: "openai"      # openai, gemini, anthropic, deepseek, qwen, kimi, ollama
   temperature: 0.2
@@ -113,9 +118,32 @@ ai:
 
 ---
 
+### Step 3: Run and Explore!
+
+That's it! You can now run LEAI commands directly in your folder:
+
+```bash
+# 1. Extract technical metadata from Oracle into raw/
+leai extract
+
+# 2. Start an interactive AI Copilot chat session about your database
+leai chat
+
+# 3. Analyze impact and trace a specific table with Mermaid diagrams
+leai trace EMPLOYEES --depth 2
+
+# 4. Auto-enrich business rules using AI without overwriting manual notes
+leai enrich
+
+# 5. Compile everything into clean Markdown files in docs/
+leai compile
+```
+
+---
+
 ## 📖 CLI Command Reference
 
-### 1. `uv run leai` (or `leai generate`)
+### 1. `leai` (or `leai generate`)
 Executes the full pipeline: extracts technical snapshots from Oracle, synchronizes business annotation stubs, and compiles final Markdown docs.
 
 | Parameter / Flag | Type | Description |
@@ -124,13 +152,13 @@ Executes the full pipeline: extracts technical snapshots from Oracle, synchroniz
 | `-t`, `--object-type TEXT` | Option | Filter specific object types (e.g., `-t tables -t views -t packages`). |
 
 ```bash
-uv run leai
-uv run leai generate -t tables -t packages --config prod.yml
+leai
+leai generate -t tables -t packages --config prod.yml
 ```
 
 ---
 
-### 2. `uv run leai extract`
+### 2. `leai extract`
 Connects to Oracle and extracts raw JSON technical snapshots into the `raw/` directory.
 
 | Parameter / Flag | Type | Description |
@@ -140,13 +168,13 @@ Connects to Oracle and extracts raw JSON technical snapshots into the `raw/` dir
 | `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash
-uv run leai extract
-uv run leai extract -s HR -t tables -t views
+leai extract
+leai extract -s HR -t tables -t views
 ```
 
 ---
 
-### 3. `uv run leai annotate`
+### 3. `leai annotate`
 Reads JSON snapshots from `raw/` and generates/synchronizes YAML stubs in `annotations/`, preserving existing manual documentation (Offline Mode).
 
 | Parameter / Flag | Type | Description |
@@ -155,13 +183,13 @@ Reads JSON snapshots from `raw/` and generates/synchronizes YAML stubs in `annot
 | `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash
-uv run leai annotate
-uv run leai annotate -t tables
+leai annotate
+leai annotate -t tables
 ```
 
 ---
 
-### 4. `uv run leai compile`
+### 4. `leai compile`
 Recompiles the entire Markdown documentation in `docs/` by merging `raw/` and `annotations/` without connecting to the database.
 
 | Parameter / Flag | Type | Description |
@@ -170,13 +198,13 @@ Recompiles the entire Markdown documentation in `docs/` by merging `raw/` and `a
 | `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash
-uv run leai compile
-uv run leai compile -t views
+leai compile
+leai compile -t views
 ```
 
 ---
 
-### 5. `uv run leai trace <OBJECT>`
+### 5. `leai trace <OBJECT>`
 Generates deep impact analysis, terminal hierarchical trees, change risk calculations, and Mermaid.js lineage dossiers.
 
 | Parameter / Flag | Type | Description |
@@ -191,15 +219,15 @@ Generates deep impact analysis, terminal hierarchical trees, change risk calcula
 
 ```bash
 # Multi-level lineage trace (Depth 2)
-uv run leai trace EMPLOYEES --depth 2
+leai trace EMPLOYEES --depth 2
 
 # Offline mode with RAG JSON chunk export
-uv run leai trace EMPLOYEES --offline --depth 2 --rag-json
+leai trace EMPLOYEES --offline --depth 2 --rag-json
 ```
 
 ---
 
-### 6. `uv run leai enrich`
+### 6. `leai enrich`
 Uses AI (LLMs) to analyze DDLs and PL/SQL code, automatically generating business rules and column descriptions in `annotations/` with real-time progress bars.
 
 | Parameter / Flag | Type | Description |
@@ -213,19 +241,19 @@ Uses AI (LLMs) to analyze DDLs and PL/SQL code, automatically generating busines
 
 ```bash
 # Enrich using default provider
-uv run leai enrich
+leai enrich
 
 # Enrich using Google Gemini or Anthropic Claude
-uv run leai enrich --provider gemini --model gemini-1.5-flash
-uv run leai enrich --provider anthropic --model claude-3-5-sonnet-20241022
+leai enrich --provider gemini --model gemini-1.5-flash
+leai enrich --provider anthropic --model claude-3-5-sonnet-20241022
 
 # Enrich a single table with forced overwrite
-uv run leai enrich -o EMPLOYEES --overwrite
+leai enrich -o EMPLOYEES --overwrite
 ```
 
 ---
 
-### 7. `uv run leai ask <QUESTION>`
+### 7. `leai ask <QUESTION>`
 Asks one-off natural language questions answered with dynamic RAG context directly in your terminal.
 
 | Parameter / Flag | Type | Description |
@@ -236,13 +264,13 @@ Asks one-off natural language questions answered with dynamic RAG context direct
 | `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash
-uv run leai ask "Which views or stored procedures query the EMPLOYEES table?"
-uv run leai ask "How does the payroll calculation workflow operate?" --provider gemini
+leai ask "Which views or stored procedures query the EMPLOYEES table?"
+leai ask "How does the payroll calculation workflow operate?" --provider gemini
 ```
 
 ---
 
-### 8. `uv run leai chat`
+### 8. `leai chat`
 Launches an interactive multi-turn terminal chat session with persistent conversation memory and cumulative graph context.
 
 | Parameter / Flag | Type | Description |
@@ -252,9 +280,9 @@ Launches an interactive multi-turn terminal chat session with persistent convers
 | `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash
-uv run leai chat
-uv run leai chat --provider anthropic --model claude-3-5-sonnet-20241022
-uv run leai chat --provider ollama --model llama3.1
+leai chat
+leai chat --provider anthropic --model claude-3-5-sonnet-20241022
+leai chat --provider ollama --model llama3.1
 ```
 
 #### 🎮 Interactive In-Session Commands:
@@ -265,7 +293,7 @@ uv run leai chat --provider ollama --model llama3.1
 
 ---
 
-### 9. `uv run leai changes`
+### 9. `leai changes`
 Audits and lists recently created or modified database objects (via Oracle's `LAST_DDL_TIME`).
 
 | Parameter / Flag | Type | Description |
@@ -278,10 +306,10 @@ Audits and lists recently created or modified database objects (via Oracle's `LA
 
 ```bash
 # Objects altered in the last 15 days
-uv run leai changes -d 15
+leai changes -d 15
 
 # Filter by schema
-uv run leai changes -d 30 -u HR
+leai changes -d 30 -u HR
 ```
 
 ---
@@ -315,5 +343,5 @@ my_project/
 To run the complete automated test suite:
 
 ```bash
-uv run python -m unittest discover tests
+python -m unittest discover tests
 ```
