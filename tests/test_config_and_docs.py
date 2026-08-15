@@ -20,16 +20,17 @@ from leai.docs import (
 from leai.models import (
     CodeObjectMeta,
     ColumnMeta,
+    ForeignKeyMeta,
     IndexMeta,
     MaterializedViewMeta,
     SchemaMetadata,
     SequenceMeta,
+    SubprogramMeta,
     SynonymMeta,
     TableMeta,
     TriggerMeta,
     ViewMeta,
 )
-from leai.models import SubprogramMeta
 from leai.oracle import _build_connect_kwargs, _format_data_type, _like_pattern_to_regex, _split_package_source
 from leai.raw import load_raw_schema, load_raw_schemas, save_raw_schema
 
@@ -393,8 +394,159 @@ class ConfigAndDocsTests(unittest.TestCase):
             self.assertTrue((ann_dir / "tables" / "TBL1.yml").exists())
             self.assertFalse((docs_dir / "tables" / "TBL1.md").exists())
 
+    def test_trace_raw_dependencies_resolves_full_neighborhood(self):
+        dept = TableMeta(name="DEPARTAMENTOS", columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)])
+        func = TableMeta(
+            name="FUNCIONARIOS",
+            columns=[
+                ColumnMeta(name="ID", data_type="NUMBER", nullable=False),
+                ColumnMeta(name="DEP_ID", data_type="NUMBER", nullable=False),
+            ],
+            foreign_keys=[
+                ForeignKeyMeta(name="FK_FUNC_DEP", column="DEP_ID", referenced_table="DEPARTAMENTOS", referenced_column="ID")
+            ],
+        )
+        dep = TableMeta(
+            name="DEPENDENTES",
+            columns=[
+                ColumnMeta(name="ID", data_type="NUMBER", nullable=False),
+                ColumnMeta(name="FUNC_ID", data_type="NUMBER", nullable=False),
+            ],
+            foreign_keys=[
+                ForeignKeyMeta(name="FK_DEP_FUNC", column="FUNC_ID", referenced_table="FUNCIONARIOS", referenced_column="ID")
+            ],
+        )
+        vw = ViewMeta(name="VW_FOLHA", text="SELECT f.ID, f.DEP_ID FROM FUNCIONARIOS f")
+        trg = TriggerMeta(name="TRG_FUNC_AUDIT", table_name="FUNCIONARIOS", trigger_type="BEFORE INSERT", triggering_event="INSERT")
+
+        schema = SchemaMetadata(
+            tables=[dept, func, dep],
+            views=[vw],
+            triggers=[trg],
+        )
+
+        from leai.raw import trace_raw_dependencies
+        res = trace_raw_dependencies([schema], "FUNCIONARIOS")
+
+        self.assertEqual(res.focal_name, "FUNCIONARIOS")
+        self.assertEqual(res.focal_type, "TABLE")
+        self.assertIsNotNone(res.focal_object)
+
+        # Deve conter 4 links de dependência (FK saída, FK entrada, View, Trigger)
+        self.assertEqual(len(res.dependencies), 4)
+
+        rel_types = {d.relation_type for d in res.dependencies}
+        self.assertIn("FK_REFERENCES", rel_types)
+        self.assertIn("FK_REFERENCED_BY", rel_types)
+        self.assertIn("READS/SELECTS", rel_types)
+        self.assertIn("TRIGGER_ON", rel_types)
+
+        self.assertEqual(len(res.related_tables), 2)  # DEPARTAMENTOS e DEPENDENTES
+        self.assertEqual(len(res.related_views), 1)   # VW_FOLHA
+        self.assertEqual(len(res.related_triggers), 1) # TRG_FUNC_AUDIT
+
+    def test_dossier_markdown_and_mermaid_generation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            docs_dir = root / "docs"
+            ann_dir = root / "annotations"
+
+            func = TableMeta(
+                name="FUNCIONARIOS",
+                comment="Tabela de colaboradores da empresa",
+                columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)],
+            )
+            schema = SchemaMetadata(tables=[func])
+
+            from leai.docs import generate_mermaid_graph, write_dossier_doc, write_rag_json_file
+            from leai.raw import trace_raw_dependencies
+
+            res = trace_raw_dependencies([schema], "FUNCIONARIOS")
+            out_file = docs_dir / "dossiers" / "FUNCIONARIOS.md"
+
+            # Escrever arquivo prévio com seção manual
+            out_file.parent.mkdir(parents=True, exist_ok=True)
+            out_file.write_text(f"{MANUAL_START}\nDocumentação humana prévia do dossiê\n{MANUAL_END}\n", encoding="utf-8")
+
+            written = write_dossier_doc(res, out_file, annotations_path=ann_dir)
+            self.assertTrue(written.exists())
+
+            content = written.read_text(encoding="utf-8")
+            self.assertIn("rag_metadata:", content)
+            self.assertIn("entity: FUNCIONARIOS", content)
+            self.assertIn("Raio-X de Impacto Técnico:", content)
+            self.assertIn("## 🧠 Resumo Narrativo Semântico (RAG Ready)", content)
+            self.assertIn("# DOSSIÊ DE IMPACTO E DOCUMENTAÇÃO FOCAL: FUNCIONARIOS", content)
+            self.assertIn("Tabela de colaboradores da empresa", content)
+            self.assertIn("Documentação humana prévia do dossiê", content)
+
+            # Testar geração de RAG JSON
+            json_file = docs_dir / "chunks" / "FUNCIONARIOS.json"
+            written_json = write_rag_json_file(res, json_file, annotations_path=ann_dir)
+            self.assertTrue(written_json.exists())
+
+            import json
+            chunk_data = json.loads(written_json.read_text(encoding="utf-8"))
+            self.assertEqual(chunk_data["entity"], "FUNCIONARIOS")
+            self.assertEqual(chunk_data["chunk_id"], "trace_funcionarios")
+            self.assertIn("text_for_embedding", chunk_data)
+            self.assertIn("Tabela de colaboradores da empresa", chunk_data["text_for_embedding"])
+
+    def test_trace_raw_dependencies_multilevel_depth_and_cycle_prevention(self):
+        emp = TableMeta(name="EMPRESAS", columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)])
+        dept = TableMeta(
+            name="DEPARTAMENTOS",
+            columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False), ColumnMeta(name="EMP_ID", data_type="NUMBER", nullable=False)],
+            foreign_keys=[ForeignKeyMeta(name="FK_DEP_EMP", column="EMP_ID", referenced_table="EMPRESAS", referenced_column="ID")],
+        )
+        func = TableMeta(
+            name="FUNCIONARIOS",
+            columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False), ColumnMeta(name="DEP_ID", data_type="NUMBER", nullable=False)],
+            foreign_keys=[ForeignKeyMeta(name="FK_FUNC_DEP", column="DEP_ID", referenced_table="DEPARTAMENTOS", referenced_column="ID")],
+        )
+        dep = TableMeta(
+            name="DEPENDENTES",
+            columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False), ColumnMeta(name="FUNC_ID", data_type="NUMBER", nullable=False)],
+            foreign_keys=[ForeignKeyMeta(name="FK_DEP_FUNC", column="FUNC_ID", referenced_table="FUNCIONARIOS", referenced_column="ID")],
+        )
+        hist = TableMeta(
+            name="HISTORICO_DEP",
+            columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False), ColumnMeta(name="DEP_ID", data_type="NUMBER", nullable=False)],
+            foreign_keys=[ForeignKeyMeta(name="FK_HIST_DEP", column="DEP_ID", referenced_table="DEPENDENTES", referenced_column="ID")],
+        )
+
+        # Ciclo: Trigger na EMPRESAS que referencia FUNCIONARIOS
+        trg_cycle = TriggerMeta(name="TRG_EMP_CYCLE", table_name="EMPRESAS", trigger_type="AFTER UPDATE", triggering_event="UPDATE")
+
+        schema = SchemaMetadata(
+            tables=[emp, dept, func, dep, hist],
+            triggers=[trg_cycle],
+        )
+
+        from leai.raw import trace_raw_dependencies
+
+        # 1. Teste Depth = 1 (Apenas vizinhos diretos)
+        res_depth1 = trace_raw_dependencies([schema], "FUNCIONARIOS", max_depth=1)
+        rel_tables_d1 = {t.name for t in res_depth1.related_tables}
+        self.assertEqual(rel_tables_d1, {"DEPARTAMENTOS", "DEPENDENTES"})
+        self.assertNotIn("EMPRESAS", rel_tables_d1)
+        self.assertNotIn("HISTORICO_DEP", rel_tables_d1)
+
+        # 2. Teste Depth = 2 (Vizinhos diretos + indiretos)
+        res_depth2 = trace_raw_dependencies([schema], "FUNCIONARIOS", max_depth=2)
+        rel_tables_d2 = {t.name for t in res_depth2.related_tables}
+        self.assertEqual(rel_tables_d2, {"DEPARTAMENTOS", "DEPENDENTES", "EMPRESAS", "HISTORICO_DEP"})
+
+        # Validar profundidades registradas nos links
+        depth_map = {(d.source_name, d.target_name): d.depth for d in res_depth2.dependencies}
+        self.assertEqual(depth_map.get(("FUNCIONARIOS", "DEPARTAMENTOS")), 1)
+        self.assertEqual(depth_map.get(("DEPENDENTES", "FUNCIONARIOS")), 1)
+        self.assertEqual(depth_map.get(("DEPARTAMENTOS", "EMPRESAS")), 2)
+        self.assertEqual(depth_map.get(("HISTORICO_DEP", "DEPENDENTES")), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 

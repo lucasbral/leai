@@ -151,3 +151,224 @@ def load_raw_schemas(raw_path: Path) -> list[SchemaMetadata]:
         return schemas
 
     return [load_raw_schema(raw_path)]
+
+
+import re
+from leai.models import DependencyLink, ObjectTraceResult
+
+
+def _find_raw_object(schemas: list[SchemaMetadata], name: str):
+    name_upper = name.upper()
+    for s in schemas:
+        for t in s.tables:
+            if t.name.upper() == name_upper:
+                return "TABLE", t
+        for v in s.views:
+            if v.name.upper() == name_upper:
+                return "VIEW", v
+        for mv in s.mviews:
+            if mv.name.upper() == name_upper:
+                return "MATERIALIZED VIEW", mv
+        for co in s.code_objects:
+            if co.name.upper() == name_upper:
+                return co.object_type.upper(), co
+        for trg in s.triggers:
+            if trg.name.upper() == name_upper:
+                return "TRIGGER", trg
+    return "UNKNOWN", None
+
+
+def trace_raw_dependencies(schemas: list[SchemaMetadata], target_object_name: str, max_depth: int = 1) -> ObjectTraceResult:
+    target_upper = target_object_name.strip().upper()
+    focal_type, focal_obj = _find_raw_object(schemas, target_upper)
+
+    result = ObjectTraceResult(
+        focal_name=target_upper,
+        focal_type=focal_type,
+        focal_object=focal_obj,
+    )
+
+    all_related_names = set()
+    visited_nodes = {target_upper}
+    seen_links = set()
+
+    current_layer = {target_upper}
+
+    for current_depth in range(1, max(1, max_depth) + 1):
+        if not current_layer:
+            break
+        next_layer = set()
+
+        for curr_name in current_layer:
+            curr_type, curr_obj = _find_raw_object(schemas, curr_name)
+            word_pattern = re.compile(rf"\b{re.escape(curr_name)}\b", re.IGNORECASE)
+
+            for schema in schemas:
+                # A) Chaves Estrangeiras de saída
+                if isinstance(curr_obj, TableMeta):
+                    for fk in curr_obj.foreign_keys:
+                        ref_tbl = fk.referenced_table.upper()
+                        fk_key = ("FK", curr_name, ref_tbl, (fk.column or "").upper())
+                        if fk_key not in seen_links:
+                            seen_links.add(fk_key)
+                            result.dependencies.append(
+                                DependencyLink(
+                                    source_name=curr_name,
+                                    source_type="TABLE",
+                                    target_name=ref_tbl,
+                                    target_type="TABLE",
+                                    relation_type="FK_REFERENCES",
+                                    details=f"Coluna {fk.column} -> {ref_tbl}.{fk.referenced_column} ({fk.name})",
+                                    depth=current_depth,
+                                )
+                            )
+                        if ref_tbl not in visited_nodes:
+                            visited_nodes.add(ref_tbl)
+                            next_layer.add(ref_tbl)
+                            all_related_names.add(ref_tbl)
+
+                # B) Chaves Estrangeiras de entrada
+                for t in schema.tables:
+                    if t.name.upper() == curr_name:
+                        continue
+                    for fk in t.foreign_keys:
+                        if fk.referenced_table.upper() == curr_name:
+                            child_name = t.name.upper()
+                            fk_key = ("FK", child_name, curr_name, (fk.column or "").upper())
+                            if fk_key not in seen_links:
+                                seen_links.add(fk_key)
+                                result.dependencies.append(
+                                    DependencyLink(
+                                        source_name=child_name,
+                                        source_type="TABLE",
+                                        target_name=curr_name,
+                                        target_type=curr_type,
+                                        relation_type="FK_REFERENCED_BY",
+                                        details=f"Tabela filha {t.name}.{fk.column} referencia {curr_name}.{fk.referenced_column}",
+                                        depth=current_depth,
+                                    )
+                                )
+                            if child_name not in visited_nodes:
+                                visited_nodes.add(child_name)
+                                next_layer.add(child_name)
+                                all_related_names.add(child_name)
+
+                # C) Triggers vinculadas
+                for trg in schema.triggers:
+                    trg_tbl = (trg.table_name or "").upper()
+                    if trg_tbl == curr_name:
+                        trg_name = trg.name.upper()
+                        link_key = (trg_name, curr_name, "TRIGGER_ON")
+                        if link_key not in seen_links:
+                            seen_links.add(link_key)
+                            result.dependencies.append(
+                                DependencyLink(
+                                    source_name=trg_name,
+                                    source_type="TRIGGER",
+                                    target_name=curr_name,
+                                    target_type=curr_type,
+                                    relation_type="TRIGGER_ON",
+                                    details=f"Evento {trg.trigger_type} {trg.triggering_event}",
+                                    depth=current_depth,
+                                )
+                            )
+                        if trg_name not in visited_nodes:
+                            visited_nodes.add(trg_name)
+                            next_layer.add(trg_name)
+                            all_related_names.add(trg_name)
+
+                # D) Views que consultam o objeto
+                for v in schema.views:
+                    if v.name.upper() == curr_name:
+                        continue
+                    if v.text and word_pattern.search(v.text):
+                        v_name = v.name.upper()
+                        link_key = (v_name, curr_name, "READS/SELECTS")
+                        if link_key not in seen_links:
+                            seen_links.add(link_key)
+                            result.dependencies.append(
+                                DependencyLink(
+                                    source_name=v_name,
+                                    source_type="VIEW",
+                                    target_name=curr_name,
+                                    target_type=curr_type,
+                                    relation_type="READS/SELECTS",
+                                    details="View realiza consulta SQL sobre o objeto",
+                                    depth=current_depth,
+                                )
+                            )
+                        if v_name not in visited_nodes:
+                            visited_nodes.add(v_name)
+                            next_layer.add(v_name)
+                            all_related_names.add(v_name)
+
+                # E) Materialized Views
+                for mv in schema.mviews:
+                    if mv.name.upper() == curr_name:
+                        continue
+                    if mv.query and word_pattern.search(mv.query):
+                        mv_name = mv.name.upper()
+                        link_key = (mv_name, curr_name, "READS/SELECTS")
+                        if link_key not in seen_links:
+                            seen_links.add(link_key)
+                            result.dependencies.append(
+                                DependencyLink(
+                                    source_name=mv_name,
+                                    source_type="MATERIALIZED VIEW",
+                                    target_name=curr_name,
+                                    target_type=curr_type,
+                                    relation_type="READS/SELECTS",
+                                    details="Materialized View baseada no objeto",
+                                    depth=current_depth,
+                                )
+                            )
+                        if mv_name not in visited_nodes:
+                            visited_nodes.add(mv_name)
+                            next_layer.add(mv_name)
+                            all_related_names.add(mv_name)
+
+                # F) Code Objects (Procedures, Functions, Packages)
+                for co in schema.code_objects:
+                    if co.name.upper() == curr_name:
+                        continue
+                    if co.source and word_pattern.search(co.source):
+                        co_name = co.name.upper()
+                        link_key = (co_name, curr_name, "PLSQL_DEPENDENCY")
+                        if link_key not in seen_links:
+                            seen_links.add(link_key)
+                            result.dependencies.append(
+                                DependencyLink(
+                                    source_name=co_name,
+                                    source_type=co.object_type.upper(),
+                                    target_name=curr_name,
+                                    target_type=curr_type,
+                                    relation_type="PLSQL_DEPENDENCY",
+                                    details=f"Objeto {co.object_type} manipula ou referencia {curr_name} no código-fonte",
+                                    depth=current_depth,
+                                )
+                            )
+                        if co_name not in visited_nodes:
+                            visited_nodes.add(co_name)
+                            next_layer.add(co_name)
+                            all_related_names.add(co_name)
+
+        current_layer = next_layer
+
+    # Anexar metadados dos objetos relacionados
+    for schema in schemas:
+        for t in schema.tables:
+            if t.name.upper() in all_related_names and t.name.upper() != target_upper:
+                result.related_tables.append(t)
+        for v in schema.views:
+            if v.name.upper() in all_related_names and v.name.upper() != target_upper:
+                result.related_views.append(v)
+        for co in schema.code_objects:
+            if co.name.upper() in all_related_names and co.name.upper() != target_upper:
+                result.related_code_objects.append(co)
+        for trg in schema.triggers:
+            if trg.name.upper() in all_related_names and trg.name.upper() != target_upper:
+                result.related_triggers.append(trg)
+
+    return result
+
+

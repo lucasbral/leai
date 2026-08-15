@@ -141,6 +141,36 @@ Lê os snapshots da pasta `raw/` e gera/sincroniza **apenas o diretório de anot
 uv run leai annotate
 ```
 
+### 4. `uv run leai trace <OBJECT>` - Dossiê de Linhagem e Análise de Impacto Focal (Novo!)
+Gera uma **análise minuciosa e raio-x de impacto relacional** em torno de um objeto específico (ex: uma tabela `FUNCIONARIOS` ou pacote `PKG_FOLHA`) e de todos os objetos do banco que se conectam a ele.
+
+```bash
+# 1. Rastreamento padrão (Nível 1 - Vizinhos diretos)
+uv run leai trace FUNCIONARIOS
+
+# 2. Rastreamento multinível recursivo (Nível 2 - Vizinhos indiretos)
+uv run leai trace FUNCIONARIOS --depth 2
+
+# 3. Modo Offline (Resolve o grafo a partir dos snapshots RAW locais, sem conexão com o Oracle)
+uv run leai trace FUNCIONARIOS --offline --depth 2
+
+# 4. Gerar também o Chunk JSON estruturado para RAG / Vector DB
+uv run leai trace FUNCIONARIOS --rag-json
+
+# 5. Salvar em arquivo de saída customizado
+uv run leai trace FUNCIONARIOS -o ./docs/dossier_funcionarios.md
+```
+
+#### 📊 O Que é Gerado no Dossiê Focal (`docs/dossiers/<OBJECT>.md`):
+- **Frontmatter YAML no Topo (`rag_metadata`):** Cabeçalho estruturado legível por LLMs contendo `risk_level` (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`), lista de tabelas pais (`upstream_parents`), filhas (`downstream_children`) e consumidores (`consumers`).
+- **Card de Raio-X de Impacto:** Bloco visual com badges de alerta indicando o risco de alteração e contagem de entidades afetadas.
+- **Resumo Narrativo Semântico (RAG Ready):** Parágrafo contínuo em linguagem natural otimizado especificamente para **embeddings vetoriais de altíssima precisão** (`pgvector`, Chroma, etc.).
+- **Grafo de Linhagem em Mermaid.js:** Diagrama visual com badges de distância `(L1)`, `(L2)` e destaque dourado para o nó focal.
+- **Tabela de Impacto e Estrutura Técnica:** Chaves estrangeiras, colunas, tipos e resumo dos objetos conectados.
+- **Preservação de Documentação Humana:** Seção `<!-- LEAI:MANUAL:START -->` mantida intacta entre regenerações.
+
+---
+
 ### 5. `uv run leai changes` - Auditoria e Rastreamento de DDL (Offline)
 Rastreia e exibe no terminal os objetos do banco de dados que foram **criados ou modificados recentemente** (via `LAST_DDL_TIME` do dicionário Oracle).
 
@@ -192,6 +222,8 @@ meu_projeto/
 │   └── C_ERGON/
 │       ├── tables/
 │       │   └── FUNCIONARIOS.yml
+│       ├── dossiers/                 <-- Anotações de dossiês focais
+│       │   └── FUNCIONARIOS.yml
 │       └── code_objects/
 │           ├── PKG_FOLHA.yml
 │           └── PKG_FOLHA/
@@ -202,6 +234,10 @@ meu_projeto/
     └── C_ERGON/
         ├── tables/
         │   └── FUNCIONARIOS.md
+        ├── dossiers/                 <-- Dossiês de impacto e linhagem (Mermaid)
+        │   └── FUNCIONARIOS.md
+        ├── chunks/                   <-- Chunks estruturados para RAG (--rag-json)
+        │   └── FUNCIONARIOS.json
         └── code_objects/
             ├── PKG_FOLHA.md          <-- Visão geral do pacote
             └── PKG_FOLHA/            <-- Sub-rotinas atômicas
@@ -235,3 +271,4 @@ Para rodar todos os testes automatizados da aplicação:
 ```bash
 uv run python -m unittest discover tests
 ```
+

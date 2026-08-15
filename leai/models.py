@@ -136,3 +136,26 @@ class SchemaMetadata(BaseModel):
     sequences: list[SequenceMeta] = Field(default_factory=list)
     indexes: list[IndexMeta] = Field(default_factory=list)
     synonyms: list[SynonymMeta] = Field(default_factory=list)
+
+
+class DependencyLink(BaseModel):
+    source_name: str
+    source_type: str  # TABLE, VIEW, PROCEDURE, PACKAGE, TRIGGER, etc.
+    target_name: str
+    target_type: str
+    relation_type: str  # 'FK_REFERENCES', 'READS/SELECTS', 'MODIFIES/DML', 'CALLS', 'TRIGGER_ON'
+    details: str | None = None
+    depth: int = 1
+
+
+
+class ObjectTraceResult(BaseModel):
+    focal_name: str
+    focal_type: str
+    focal_object: TableMeta | ViewMeta | MaterializedViewMeta | CodeObjectMeta | TriggerMeta | SequenceMeta | IndexMeta | SynonymMeta | None = None
+    dependencies: list[DependencyLink] = Field(default_factory=list)
+    related_tables: list[TableMeta] = Field(default_factory=list)
+    related_views: list[ViewMeta] = Field(default_factory=list)
+    related_code_objects: list[CodeObjectMeta] = Field(default_factory=list)
+    related_triggers: list[TriggerMeta] = Field(default_factory=list)
+

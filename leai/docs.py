@@ -1,9 +1,11 @@
 from leai.annotations import ensure_annotation_stub
 from leai.models import (
     CodeObjectMeta,
+    DependencyLink,
     IndexMeta,
     MaterializedViewMeta,
     ObjectAnnotation,
+    ObjectTraceResult,
     SchemaMetadata,
     SequenceMeta,
     SubprogramMeta,
@@ -621,3 +623,299 @@ def sync_schema_annotations(
             generated_ann.append(ann_path)
 
     return generated_ann
+
+
+def generate_mermaid_graph(focal_name: str, dependencies: list[DependencyLink]) -> str:
+    lines = ["```mermaid", "graph TD"]
+    focal_id = focal_name.replace("$", "_").replace(".", "_")
+    lines.append(f'    {focal_id}["⭐ {focal_name} (Focal)"]:::focalClass')
+
+    nodes = {focal_name: focal_id}
+    edges = []
+
+    for dep in dependencies:
+        s_id = dep.source_name.replace("$", "_").replace(".", "_")
+        t_id = dep.target_name.replace("$", "_").replace(".", "_")
+
+        if dep.source_name not in nodes:
+            nodes[dep.source_name] = s_id
+            icon = "📊" if dep.source_type == "TABLE" else ("👁️" if "VIEW" in dep.source_type else ("⚡" if dep.source_type == "TRIGGER" else "⚙️"))
+            lines.append(f'    {s_id}["{icon} {dep.source_name} (L{dep.depth})"]')
+
+        if dep.target_name not in nodes:
+            nodes[dep.target_name] = t_id
+            icon = "📊" if dep.target_type == "TABLE" else ("👁️" if "VIEW" in dep.target_type else ("⚡" if dep.target_type == "TRIGGER" else "⚙️"))
+            lines.append(f'    {t_id}["{icon} {dep.target_name} (L{dep.depth})"]')
+
+        label = dep.relation_type.replace("_", " ")
+        edges.append(f"    {s_id} -->|{label}| {t_id}")
+
+    lines.extend(edges)
+    lines.append("")
+    lines.append("    classDef focalClass fill:#ff9800,stroke:#e65100,stroke-width:3px,font-weight:bold,color:#000;")
+    lines.append("```")
+    return "\n".join(lines)
+
+
+def _calculate_risk_level(dep_count: int) -> str:
+    if dep_count == 0:
+        return "LOW"
+    elif dep_count <= 3:
+        return "MEDIUM"
+    elif dep_count <= 7:
+        return "HIGH"
+    return "CRITICAL"
+
+
+def generate_semantic_rag_text(trace_result: ObjectTraceResult, annotation: ObjectAnnotation | None = None) -> str:
+    focal_name = trace_result.focal_name
+    focal_type = trace_result.focal_type
+    focal_obj = trace_result.focal_object
+    desc = (annotation and annotation.description) or getattr(focal_obj, "comment", None) or f"Objeto {focal_name} do tipo {focal_type}."
+
+    parts = [f"O objeto {focal_name} é do tipo {focal_type}. Descrição de negócio: {desc.strip()}."]
+
+    if annotation and annotation.business_rules:
+        rules_str = " Regras de negócio associadas: " + "; ".join(annotation.business_rules) + "."
+        parts.append(rules_str)
+
+    if isinstance(focal_obj, TableMeta):
+        cols_summary = ", ".join([f"{c.name} ({c.data_type})" for c in focal_obj.columns[:15]])
+        parts.append(f" Estrutura de colunas principais: {cols_summary}.")
+
+    if trace_result.dependencies:
+        dep_descriptions = []
+        for dep in trace_result.dependencies:
+            if dep.relation_type == "FK_REFERENCES":
+                dep_descriptions.append(f"possui chave estrangeira para a tabela {dep.target_name}")
+            elif dep.relation_type == "FK_REFERENCED_BY":
+                dep_descriptions.append(f"é referenciada pela tabela filha {dep.source_name}")
+            elif dep.relation_type == "READS/SELECTS":
+                dep_descriptions.append(f"é lida pela {dep.source_type.lower()} {dep.source_name}")
+            elif dep.relation_type == "TRIGGER_ON":
+                dep_descriptions.append(f"possui a trigger {dep.source_name}")
+            elif dep.relation_type == "PLSQL_DEPENDENCY":
+                dep_descriptions.append(f"é manipulada pelo código PL/SQL {dep.source_name}")
+            else:
+                dep_descriptions.append(f"possui vínculo com {dep.target_name} ({dep.relation_type})")
+        parts.append(" Impacto relacional: " + ", ".join(dep_descriptions[:10]) + ".")
+
+    return "".join(parts)
+
+
+def generate_rag_json(trace_result: ObjectTraceResult, annotation: ObjectAnnotation | None = None) -> dict:
+    focal_name = trace_result.focal_name
+    focal_type = trace_result.focal_type
+    focal_obj = trace_result.focal_object
+    risk = _calculate_risk_level(len(trace_result.dependencies))
+    semantic_text = generate_semantic_rag_text(trace_result, annotation=annotation)
+
+    columns_info = []
+    pks = []
+    fks = []
+    if isinstance(focal_obj, TableMeta):
+        columns_info = [{"name": c.name, "type": c.data_type, "nullable": c.nullable, "comment": c.comment} for c in focal_obj.columns]
+        pks = focal_obj.primary_keys
+        fks = [{"name": fk.name, "column": fk.column, "referenced_table": fk.referenced_table, "referenced_column": fk.referenced_column} for fk in focal_obj.foreign_keys]
+
+    deps_info = [
+        {
+            "depth": d.depth,
+            "source_name": d.source_name,
+            "source_type": d.source_type,
+            "target_name": d.target_name,
+            "target_type": d.target_type,
+            "relation_type": d.relation_type,
+            "details": d.details,
+        }
+        for d in trace_result.dependencies
+    ]
+
+    return {
+        "chunk_id": f"trace_{focal_name.lower()}",
+        "entity": focal_name,
+        "type": focal_type,
+        "risk_level": risk,
+        "tags": annotation.tags if annotation else [],
+        "text_for_embedding": semantic_text,
+        "schema_context": {
+            "columns": columns_info,
+            "primary_keys": pks,
+            "foreign_keys": fks,
+            "dependencies": deps_info,
+        },
+    }
+
+
+def write_rag_json_file(
+    trace_result: ObjectTraceResult,
+    output_path: Path,
+    annotations_path: Path | None = None,
+) -> Path:
+    import json
+    base_ann = annotations_path or (output_path.parent.parent / "annotations")
+    ann_path = base_ann / "dossiers" / f"{trace_result.focal_name}.yml"
+    annotation = ensure_annotation_stub(ann_path)
+
+    data = generate_rag_json(trace_result, annotation=annotation)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    return output_path
+
+
+def render_dossier_markdown(
+    trace_result: ObjectTraceResult,
+    annotation: ObjectAnnotation | None = None,
+    manual_doc: str = "",
+) -> str:
+    focal_name = trace_result.focal_name
+    focal_type = trace_result.focal_type
+    focal_obj = trace_result.focal_object
+    dep_count = len(trace_result.dependencies)
+    risk_level = _calculate_risk_level(dep_count)
+
+    parents = [d.target_name for d in trace_result.dependencies if d.relation_type == "FK_REFERENCES"]
+    children = [d.source_name for d in trace_result.dependencies if d.relation_type == "FK_REFERENCED_BY"]
+    consumers = [d.source_name for d in trace_result.dependencies if d.relation_type in ("READS/SELECTS", "PLSQL_DEPENDENCY", "TRIGGER_ON")]
+
+    # 1. Frontmatter YAML para RAG / LLM
+    import yaml
+    rag_meta = {
+        "rag_metadata": {
+            "entity": focal_name,
+            "type": focal_type,
+            "risk_level": risk_level,
+            "tags": annotation.tags if annotation else [],
+            "impact_summary": {
+                "total_connections": dep_count,
+                "upstream_parents": list(set(parents)),
+                "downstream_children": list(set(children)),
+                "consumers": list(set(consumers)),
+            },
+        }
+    }
+    yaml_frontmatter = yaml.safe_dump(rag_meta, sort_keys=False, allow_unicode=True).strip()
+
+    lines = [
+        "---",
+        yaml_frontmatter,
+        "---",
+        "",
+        f"# DOSSIÊ DE IMPACTO E DOCUMENTAÇÃO FOCAL: {focal_name}",
+        "",
+        f"**Tipo de Objeto:** `{focal_type}`",
+    ]
+
+    if focal_obj:
+        lines.extend(_render_audit_meta(focal_obj))
+
+    # 2. Card de Resumo Executivo / Raio-X de Impacto
+    risk_badge_color = "CRITICAL" if risk_level == "CRITICAL" else ("WARNING" if risk_level in ("HIGH", "MEDIUM") else "NOTE")
+    lines.extend(
+        [
+            f"> [!{risk_badge_color}]",
+            f"> **Raio-X de Impacto Técnico:**",
+            f"> - **Nível de Risco de Alteração:** `{risk_level}` ({dep_count} conexões no grafo)",
+            f"> - **Tabelas Pais (Upstream):** `{len(set(parents))}` | **Tabelas Filhas (Downstream):** `{len(set(children))}`",
+            f"> - **Consumidores Ativos (Views/Procs/Triggers):** `{len(set(consumers))}`",
+            "",
+        ]
+    )
+
+    desc = (annotation and annotation.description) or getattr(focal_obj, "comment", None) or f"Análise minuciosa e rastreamento de linhagem técnica para o objeto `{focal_name}`."
+    lines.extend(["## Visão geral de negócio", "", desc])
+    lines.extend(_render_business_rules(annotation))
+
+    # 3. Resumo Narrativo Semântico (RAG Ready)
+    semantic_text = generate_semantic_rag_text(trace_result, annotation=annotation)
+    lines.extend(["", "## 🧠 Resumo Narrativo Semântico (RAG Ready)", "", semantic_text])
+
+    # 4. Grafo de Linhagem Mermaid
+    lines.extend(["", "## Grafo de Linhagem e Relacionamentos", ""])
+    if trace_result.dependencies:
+        lines.append(generate_mermaid_graph(focal_name, trace_result.dependencies))
+    else:
+        lines.append("*Nenhuma dependência direta identificada no catálogo/snapshot.*")
+
+    # 5. Tabela de Dependências
+    lines.extend(["", "## Mapa de Dependências e Impacto", ""])
+    if trace_result.dependencies:
+        lines.append("| Nível | Objeto Origem | Tipo | Relação | Objeto Alvo | Tipo | Detalhes |")
+        lines.append("|---|---|---|---|---|---|---|")
+        for dep in sorted(trace_result.dependencies, key=lambda d: (d.depth, d.source_name)):
+            lines.append(
+                f"| **Nível {dep.depth}** | `{dep.source_name}` | {dep.source_type} | `{dep.relation_type}` | `{dep.target_name}` | {dep.target_type} | {dep.details or ''} |"
+            )
+    else:
+        lines.append("Nenhuma dependência registrada.")
+
+    # 6. Detalhes do Objeto Focal
+    if isinstance(focal_obj, TableMeta):
+        lines.extend(["", "## Estrutura de Colunas do Objeto Focal", "", "| Coluna | Tipo | Nulo | Padrão | Comentário |", "|---|---|---|---|---|"])
+        ann_cols = annotation.columns if annotation else {}
+        for col in focal_obj.columns:
+            comm = ann_cols.get(col.name) or col.comment or ""
+            lines.append(f"| {col.name} | {col.data_type} | {'SIM' if col.nullable else 'NÃO'} | {col.default or ''} | {comm} |")
+
+        lines.extend(["", "### Chaves Primárias", ", ".join(focal_obj.primary_keys) if focal_obj.primary_keys else "Não definida"])
+        lines.extend(["", "### Chaves Estrangeiras de Saída"])
+        if focal_obj.foreign_keys:
+            for fk in focal_obj.foreign_keys:
+                lines.append(f"- `{fk.name}`: Coluna `{fk.column}` aponta para `{fk.referenced_table}.{fk.referenced_column}`")
+        else:
+            lines.append("Nenhuma")
+    elif isinstance(focal_obj, ViewMeta) and focal_obj.text:
+        lines.extend(["", "## Definição SQL da View", "```sql", focal_obj.text.strip(), "```"])
+    elif isinstance(focal_obj, CodeObjectMeta) and focal_obj.source:
+        lines.extend(["", "## Código-Fonte PL/SQL", "```sql", focal_obj.source.strip(), "```"])
+
+    # 7. Detalhamento de Objetos Relacionados
+    if trace_result.related_tables or trace_result.related_views or trace_result.related_code_objects or trace_result.related_triggers:
+        lines.extend(["", "## Detalhes dos Objetos Relacionados", ""])
+
+        if trace_result.related_tables:
+            lines.append("### 📊 Tabelas Conectadas")
+            for t in trace_result.related_tables:
+                lines.append(f"- **`{t.name}`**: {len(t.columns)} colunas, {len(t.foreign_keys)} FKs ({t.comment or 'Sem comentário'})")
+
+        if trace_result.related_views:
+            lines.append("")
+            lines.append("### 👁️ Views Conectadas")
+            for v in trace_result.related_views:
+                lines.append(f"- **`{v.name}`**: {len(v.columns)} colunas ({v.comment or 'Sem comentário'})")
+
+        if trace_result.related_triggers:
+            lines.append("")
+            lines.append("### ⚡ Triggers Conectados")
+            for trg in trace_result.related_triggers:
+                lines.append(f"- **`{trg.name}`** (Disparo: `{trg.trigger_type} {trg.triggering_event}` na tabela `{trg.table_name}`)")
+
+        if trace_result.related_code_objects:
+            lines.append("")
+            lines.append("### ⚙️ Packages / Procedures / Functions Conectadas")
+            for co in trace_result.related_code_objects:
+                lines.append(f"- **`{co.name}`** ({co.object_type})")
+
+    lines.extend(_render_manual_section(manual_doc))
+    return "\n".join(lines)
+
+
+def write_dossier_doc(
+    trace_result: ObjectTraceResult,
+    output_path: Path,
+    annotations_path: Path | None = None,
+) -> Path:
+    base_ann = annotations_path or (output_path.parent.parent / "annotations")
+    ann_path = base_ann / "dossiers" / f"{trace_result.focal_name}.yml"
+    annotation = ensure_annotation_stub(ann_path)
+
+    existing = output_path.read_text(encoding="utf-8") if output_path.exists() else None
+    manual_doc = _extract_manual_section(existing)
+
+    markdown = render_dossier_markdown(trace_result, annotation=annotation, manual_doc=manual_doc)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(markdown, encoding="utf-8")
+    return output_path
+
+
+
