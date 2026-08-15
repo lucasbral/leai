@@ -19,12 +19,12 @@ class CliIntegrationTests(unittest.TestCase):
     def test_version_option(self):
         result = self.runner.invoke(app, ["--version"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("LEAI CLI version 0.1.2", result.output)
+        self.assertIn("LEAI CLI version 0.1.3", result.output)
 
     def test_version_short_option(self):
         result = self.runner.invoke(app, ["-v"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("LEAI CLI version 0.1.2", result.output)
+        self.assertIn("LEAI CLI version 0.1.3", result.output)
 
     def test_help_command(self):
         result = self.runner.invoke(app, ["--help"])
