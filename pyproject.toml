@@ -40,7 +40,8 @@ dependencies = [
   "typer>=0.12.3",
   "rich>=13.7.1",
   "PyYAML>=6.0.1",
-  "pydantic>=2.7.0"
+  "pydantic>=2.7.0",
+  "prompt_toolkit>=3.0.40"
 ]
 
 [project.optional-dependencies]

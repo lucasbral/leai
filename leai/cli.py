@@ -26,6 +26,7 @@ from leai.docs import sync_schema_annotations, write_dossier_doc, write_rag_json
 from leai.enrich import enrich_schema_annotations
 from leai.oracle import _build_connect_kwargs, fetch_available_schemas, fetch_focal_trace, fetch_schema_metadata
 from leai.raw import load_raw_schemas, save_raw_schema, trace_raw_dependencies
+from leai.tui import InteractiveTUISession
 
 app = typer.Typer(help="CLI for Oracle Database Intelligence & Documentation.")
 console = Console()
@@ -814,11 +815,7 @@ def chat(
     model: str = typer.Option(None, "--model", "-m", help="AI model name"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
 ) -> None:
-    """Starts an interactive multi-turn terminal chat with RAG and database context memory."""
-    from rich.markdown import Markdown
-
-    from leai.chat_session import ChatSession
-
+    """Starts an interactive OpenCode-style TUI copilot with RAG, slash commands and @ mentions."""
     try:
         cfg = load_config(config)
     except ConfigError as exc:
@@ -836,74 +833,13 @@ def chat(
         console.print(f"[red]Error initializing AI client:[/red] {exc}")
         raise typer.Exit(code=1)
 
-    session = ChatSession(schemas=schemas, config=cfg, client=client)
-    provider_name = (provider or cfg.ai.default_provider or "openai").upper()
-    schemas_label = " • ".join(s.schema_name for s in schemas) if schemas else "Full Database"
-
-    console.print(
-        Panel(
-            f"[bold cyan]🤖 LEAI Interactive Studio Copilot (Integrated Multi-Schema Ecosystem)[/bold cyan]\n"
-            f"[dim]Provider:[/dim] [bold yellow]{provider_name}[/bold yellow] | [dim]Model:[/dim] [bold green]{client.model}[/bold green] | [dim]Schemas in Graph:[/dim] [bold]{schemas_label}[/bold]\n"
-            f"[dim]Commands: [bold cyan]/clear[/bold cyan] (clear memory) • [bold cyan]/save [file.md][/bold cyan] (save transcript) • [bold cyan]/exit[/bold cyan] (exit)[/dim]",
-            title="[bold yellow]Oracle Database AI Chat[/bold yellow]",
-            border_style="cyan",
-        )
+    session = InteractiveTUISession(
+        schemas=schemas,
+        config=cfg,
+        client=client,
+        provider_name=provider,
     )
-
-    while True:
-        try:
-            prompt_label = "[bold cyan](leai)[/bold cyan] ❯ "
-            user_input = console.input(f"\n{prompt_label}").strip()
-            if not user_input:
-                continue
-
-            cmd_lower = user_input.lower()
-            if cmd_lower in ("/exit", "/quit", "exit", "quit"):
-                console.print("[yellow]Ending chat session. Goodbye![/yellow]")
-                break
-
-            if cmd_lower == "/clear":
-                session.clear()
-                console.print("[dim]🧹 Conversation history and entities cleared successfully![/dim]")
-                continue
-
-            if cmd_lower.startswith("/save"):
-                parts = user_input.split(maxsplit=1)
-                save_file = Path(parts[1].strip()) if len(parts) > 1 else None
-                saved_path = session.save_transcript(save_file)
-                console.print(f"[green]✓ Conversation transcript saved to:[/green] [bold cyan]{saved_path}[/bold cyan]")
-                continue
-
-            if cmd_lower == "/help":
-                console.print(
-                    Panel(
-                        "- [bold cyan]/clear[/bold cyan]: Clears session memory and history.\n"
-                        "- [bold cyan]/save [file.md][/bold cyan]: Saves conversation history to a Markdown file.\n"
-                        "- [bold cyan]/exit[/bold cyan] or [bold cyan]/quit[/bold cyan]: Exits chat.",
-                        title="LEAI Chat Help",
-                        border_style="yellow",
-                    )
-                )
-                continue
-
-            # Process question via LLM with animated spinner
-            start_t = time.perf_counter()
-            with console.status(f"[cyan]Thinking with {provider_name} ({client.model})...[/cyan]", spinner="dots"):
-                reply, detected = session.send(user_input)
-
-            elapsed_t = time.perf_counter() - start_t
-
-            if detected:
-                console.print(f"[dim]🔍 Updated RAG Context: [bold yellow]{', '.join(detected)}[/bold yellow][/dim]")
-
-            subtitle_text = f"[dim]⚡ {elapsed_t:.2f}s • Provider: {provider_name} ({client.model}){' • RAG: ' + ', '.join(detected) if detected else ''}[/dim]"
-            console.print(Panel(Markdown(reply), title="[bold green]🤖 LEAI Assistant[/bold green]", subtitle=subtitle_text, border_style="cyan"))
-
-        except (KeyboardInterrupt, EOFError):
-            console.print("\n[yellow]Chat session ended.[/yellow]")
-            break
-        except Exception as exc:
-            console.print(f"[red]Error in AI response:[/red] {exc}")
+    session.run()
 
 
 @app.callback(invoke_without_command=True)
