@@ -10,9 +10,11 @@ from leai.config import LeaiConfig
 from leai.models import (
     CodeObjectMeta,
     ColumnMeta,
+    DependencyLink,
     ForeignKeyMeta,
     IndexMeta,
     MaterializedViewMeta,
+    ObjectTraceResult,
     SchemaMetadata,
     SequenceMeta,
     SubprogramMeta,
@@ -713,3 +715,209 @@ def fetch_schema_metadata(
         return schema_meta
     finally:
         connection.close()
+
+
+def fetch_focal_trace(
+    config: LeaiConfig,
+    object_name: str,
+    schema_name: str | None = None,
+    max_depth: int = 1,
+) -> ObjectTraceResult:
+    target_schema = (schema_name or config.schema_name).upper()
+    target_upper = object_name.strip().upper()
+    connection = oracledb.connect(**_build_connect_kwargs(config.dsn))
+    try:
+        cursor = connection.cursor()
+        prefix = _detect_catalog_prefix(cursor)
+
+        # 1. Descobrir tipo do objeto focal
+        cursor.execute(
+            f"""
+            SELECT object_type FROM {prefix}_objects
+            WHERE owner = :owner AND object_name = :name
+            """,
+            owner=target_schema,
+            name=target_upper,
+        )
+        types_found = [row[0].upper() for row in cursor.fetchall()]
+        if not types_found:
+            raise ValueError(f"Objeto '{target_upper}' não encontrado no schema '{target_schema}'.")
+
+        focal_type = types_found[0]
+        if "PACKAGE BODY" in types_found or "PACKAGE" in types_found:
+            focal_type = "PACKAGE"
+
+        # Carregar metadados do objeto focal
+        focal_cfg = config.model_copy()
+        focal_cfg.schemas = [target_schema]
+        focal_cfg.include = [target_upper]
+        focal_meta_schema = fetch_schema_metadata(focal_cfg, schema_name=target_schema)
+
+        focal_obj = None
+        if focal_type == "TABLE" and focal_meta_schema.tables:
+            focal_obj = focal_meta_schema.tables[0]
+        elif focal_type == "VIEW" and focal_meta_schema.views:
+            focal_obj = focal_meta_schema.views[0]
+        elif focal_type == "MATERIALIZED VIEW" and focal_meta_schema.mviews:
+            focal_obj = focal_meta_schema.mviews[0]
+        elif focal_meta_schema.code_objects:
+            focal_obj = focal_meta_schema.code_objects[0]
+        elif focal_meta_schema.triggers:
+            focal_obj = focal_meta_schema.triggers[0]
+
+        result = ObjectTraceResult(
+            focal_name=target_upper,
+            focal_type=focal_type,
+            focal_object=focal_obj,
+        )
+
+        all_related_names = set()
+        visited_nodes = {target_upper}
+        seen_links = set()
+        current_layer = {target_upper}
+
+        for current_depth in range(1, max(1, max_depth) + 1):
+            if not current_layer:
+                break
+            next_layer = set()
+
+            for curr_name in current_layer:
+                # A) ALL_DEPENDENCIES
+                cursor.execute(
+                    f"""
+                    SELECT name, type, referenced_name, referenced_type
+                    FROM {prefix}_dependencies
+                    WHERE (referenced_owner = :owner AND referenced_name = :target)
+                       OR (owner = :owner AND name = :target)
+                    ORDER BY type, name
+                    """,
+                    owner=target_schema,
+                    target=curr_name,
+                )
+                for s_name, s_type, r_name, r_type in cursor.fetchall():
+                    s_upper = s_name.upper()
+                    r_upper = r_name.upper()
+                    if s_upper == curr_name:
+                        link_key = (curr_name, r_upper, "DEPENDS_ON")
+                        if link_key not in seen_links:
+                            seen_links.add(link_key)
+                            result.dependencies.append(
+                                DependencyLink(
+                                    source_name=curr_name,
+                                    source_type=s_type,
+                                    target_name=r_upper,
+                                    target_type=r_type,
+                                    relation_type="DEPENDS_ON",
+                                    details=f"{curr_name} referencia {r_type} {r_upper}",
+                                    depth=current_depth,
+                                )
+                            )
+                        if r_upper not in visited_nodes:
+                            visited_nodes.add(r_upper)
+                            next_layer.add(r_upper)
+                            all_related_names.add(r_upper)
+                    else:
+                        link_key = (s_upper, curr_name, "REFERENCED_BY")
+                        if link_key not in seen_links:
+                            seen_links.add(link_key)
+                            result.dependencies.append(
+                                DependencyLink(
+                                    source_name=s_upper,
+                                    source_type=s_type,
+                                    target_name=curr_name,
+                                    target_type=r_type,
+                                    relation_type="REFERENCED_BY",
+                                    details=f"{s_type} {s_upper} depende de {curr_name}",
+                                    depth=current_depth,
+                                )
+                            )
+                        if s_upper not in visited_nodes:
+                            visited_nodes.add(s_upper)
+                            next_layer.add(s_upper)
+                            all_related_names.add(s_upper)
+
+                # B) Foreign Keys e Triggers (se for tabela)
+                cursor.execute(
+                    f"""
+                    SELECT c.table_name, cc.column_name, c.constraint_name, rcc.column_name AS ref_column
+                    FROM {prefix}_constraints c
+                    JOIN {prefix}_cons_columns cc ON cc.owner = c.owner AND cc.constraint_name = c.constraint_name
+                    JOIN {prefix}_constraints rc ON rc.owner = c.r_owner AND rc.constraint_name = c.r_constraint_name
+                    JOIN {prefix}_cons_columns rcc ON rcc.owner = rc.owner AND rcc.constraint_name = rc.constraint_name AND rcc.position = cc.position
+                    WHERE c.constraint_type = 'R'
+                      AND rc.owner = :owner
+                      AND rc.table_name = :target
+                    ORDER BY c.table_name, c.constraint_name
+                    """,
+                    owner=target_schema,
+                    target=curr_name,
+                )
+                for child_table, child_col, c_name, parent_col in cursor.fetchall():
+                    child_upper = child_table.upper()
+                    link_key = ("FK", child_upper, curr_name, (child_col or "").upper())
+                    if link_key not in seen_links:
+                        seen_links.add(link_key)
+                        result.dependencies.append(
+                            DependencyLink(
+                                source_name=child_upper,
+                                source_type="TABLE",
+                                target_name=curr_name,
+                                target_type="TABLE",
+                                relation_type="FK_REFERENCED_BY",
+                                details=f"Tabela filha {child_upper}.{child_col} -> {curr_name}.{parent_col} ({c_name})",
+                                depth=current_depth,
+                            )
+                        )
+                    if child_upper not in visited_nodes:
+                        visited_nodes.add(child_upper)
+                        next_layer.add(child_upper)
+                        all_related_names.add(child_upper)
+
+                cursor.execute(
+                    f"""
+                    SELECT trigger_name, trigger_type, triggering_event
+                    FROM {prefix}_triggers
+                    WHERE owner = :owner AND table_name = :target
+                    """,
+                    owner=target_schema,
+                    target=curr_name,
+                )
+                for trg_name, trg_type, trg_ev in cursor.fetchall():
+                    trg_upper = trg_name.upper()
+                    link_key = ("TRIGGER", trg_upper, curr_name)
+                    if link_key not in seen_links:
+                        seen_links.add(link_key)
+                        result.dependencies.append(
+                            DependencyLink(
+                                source_name=trg_upper,
+                                source_type="TRIGGER",
+                                target_name=curr_name,
+                                target_type="TABLE",
+                                relation_type="TRIGGER_ON",
+                                details=f"{trg_type} {trg_ev}",
+                                depth=current_depth,
+                            )
+                        )
+                    if trg_upper not in visited_nodes:
+                        visited_nodes.add(trg_upper)
+                        next_layer.add(trg_upper)
+                        all_related_names.add(trg_upper)
+
+            current_layer = next_layer
+
+        # Extrair metadados dos objetos relacionados encontrados
+        if all_related_names:
+            rel_cfg = config.model_copy()
+            rel_cfg.schemas = [target_schema]
+            rel_cfg.include = list(all_related_names)
+            rel_meta_schema = fetch_schema_metadata(rel_cfg, schema_name=target_schema)
+            result.related_tables = rel_meta_schema.tables
+            result.related_views = rel_meta_schema.views
+            result.related_code_objects = rel_meta_schema.code_objects
+            result.related_triggers = rel_meta_schema.triggers
+
+        return result
+    finally:
+        connection.close()
+
+
