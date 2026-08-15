@@ -1,98 +1,98 @@
 # LEAI — Oracle Database Intelligence & Documentation Engine
 
-O **LEAI** é um motor de engenharia reversa, análise de impacto e documentação para bancos de dados **Oracle Database**, projetado para alimentar aplicações de **RAG (Retrieval-Augmented Generation)**, **LLMs** e desenvolvedores que mantêm sistemas corporativos complexos.
+**LEAI** is a reverse engineering, impact analysis, and documentation engine for **Oracle Database**, specifically designed to power **Retrieval-Augmented Generation (RAG)**, **LLMs**, and software engineers maintaining complex enterprise database ecosystems.
 
 ---
 
-## 📌 O Que É?
+## 📌 What Is It?
 
-Bancos Oracle corporativos acumulam anos de regras de negócio espalhadas em centenas de tabelas, views, triggers e pacotes PL/SQL gigantescos (3.000 a 10.000 linhas). 
+Enterprise Oracle databases accumulate years of business rules scattered across hundreds of tables, views, triggers, and massive PL/SQL packages (3,000 to 10,000+ lines of code).
 
-Fazer com que um desenvolvedor ou uma IA entenda esse ambiente é difícil por três motivos:
-1. **Desperdício de Tokens:** Enviar pacotes inteiros para um LLM é caro, lento e gera alucinações ("Lost in the Middle").
-2. **Dependências Ocultas:** Uma alteração em uma coluna pode quebrar triggers, views e procedures de múltiplos schemas.
-3. **Sinônimos e Aliases:** Procedures chamam tabelas via sinônimos privados ou públicos (`PUBLIC SYNONYM`), criando a ilusão de que o objeto não existe ou pertence a outro lugar.
+Enabling developers or AI assistants to reliably understand such environments is challenging due to three main issues:
+1. **Token Inefficiency & Hallucinations:** Sending entire monolithic packages into an LLM context is expensive, slow, and triggers the "Lost in the Middle" attention degradation.
+2. **Hidden Dependencies:** Altering a single column can silently break triggers, views, and procedures across multiple schemas.
+3. **Synonyms and Aliases:** Stored procedures frequently access tables via private or public synonyms (`PUBLIC SYNONYM`), creating the false impression that referenced objects do not exist or belong elsewhere.
 
-O LEAI resolve isso extraindo o dicionário de dados do Oracle, mapeando o grafo real de dependências entre schemas e estruturando o contexto técnico em formato otimizado para humanos e LLMs.
+LEAI solves this by extracting the Oracle data dictionary, constructing a cross-schema dependency graph, and formatting the technical context specifically for humans and LLMs.
 
 ---
 
-## ⚙️ Como Funciona?
+## ⚙️ How It Works
 
-O LEAI opera através de uma arquitetura modular dividida em **3 camadas desacopladas**:
+LEAI operates via a **3-stage decoupled pipeline**:
 
 ```
- [Banco Oracle]
+ [Oracle Database]
        │
        ▼ (leai extract)
  ┌─────────────┐
- │ 1. RAW JSON │ ──> Snapshot técnico puro do dicionário (DDL, colunas, tipos, PKs, FKs, Sinônimos).
+ │ 1. RAW JSON │ ──> Pure technical dictionary snapshot (DDL, columns, types, PKs, FKs, Synonyms).
  └─────────────┘
        │
        ▼ (leai annotate / leai enrich)
  ┌─────────────┐
- │ 2. YAML     │ ──> Camada de negócio editável (descrições, regras, tags). Preserva o que o
- └─────────────┘     humano escreve e permite que a IA complete stubs vazios sem sobrescrever.
+ │ 2. YAML     │ ──> Editable business annotations (descriptions, rules, tags). Preserves human
+ └─────────────┘     documentation and allows AI to fill missing stubs without overwriting.
        │
        ▼ (leai compile / leai trace)
  ┌─────────────┐
- │ 3. DOCS     │ ──> Markdown com Frontmatter YAML + Diagramas Mermaid.js de linhagem + Chunks
- └─────────────┘     estruturados para Vector DBs (pgvector, Chroma, Qdrant).
+ │ 3. DOCS     │ ──> Markdown with YAML Frontmatter + Mermaid.js lineage diagrams + structured
+ └─────────────┘     chunks for Vector DBs (pgvector, Chroma, Qdrant).
 ```
 
-### Tecnologias e Mecanismos Internos:
+### Core Technologies & Internal Mechanics:
 
-- **Rastreamento de Linhagem Multinível (`trace`):**
-  Identifica o que um objeto referencia (upstream) e quem depende dele (downstream) com profundidade configurável (`--depth N`), calculando o nível de risco de alteração (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
-- **Resolução Transparente de Sinônimos:**
-  Mapeia `ALL_SYNONYMS` e `PUBLIC SYNONYMS` diretamente para a tabela física de destino, inclusive através de **Database Links (`@dblink`)**.
-- **Compressão Semântica PL/SQL:**
-  Quando você consulta uma procedure (`TESTE`) dentro de um pacote de 10.000 linhas, o LEAI extrai cirurgicamente apenas o bloco da procedure e gera o esqueleto de assinaturas do restante do pacote, **reduzindo o consumo de tokens em até 95%**.
-- **RAG Contextual Dinâmico (`ask` & `chat`):**
-  Detecta entidades na sua pergunta, executa o trace em tempo de execução e entrega ao LLM um contexto cirúrgico sem ruídos.
-- **Suporte Multi-Provedor Nativo:**
-  Conecta diretamente via HTTP REST em **OpenAI (ChatGPT)**, **Google Gemini**, **Anthropic Claude**, **DeepSeek**, **Qwen**, **Kimi** e **Ollama (local)** sem dependências externas pesadas.
+- **Multi-Level Lineage Tracing (`trace`):**
+  Identifies upstream dependencies and downstream consumers with configurable depth (`--depth N`), automatically computing change risk levels (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
+- **Transparent Synonym & Dblink Resolution:**
+  Resolves `ALL_SYNONYMS` and `PUBLIC SYNONYMS` directly to their underlying physical target objects, including remote database links (`@dblink`).
+- **PL/SQL Semantic Compression:**
+  When querying a specific procedure (`TEST_PROC`) inside a 10,000-line package, LEAI surgically extracts only the requested subprogram body and produces a lightweight signature skeleton of the rest of the package, **reducing token consumption by up to 95%**.
+- **Dynamic Contextual RAG (`ask` & `chat`):**
+  Automatically detects database entities mentioned in user prompts, executes on-the-fly dependency tracing, and delivers a surgical, noise-free context payload to the LLM.
+- **Native Multi-Provider AI Support:**
+  Direct HTTPS REST integration with **OpenAI (ChatGPT)**, **Google Gemini**, **Anthropic Claude**, **DeepSeek**, **Qwen**, **Kimi**, and **Ollama (local & free)** without heavy external dependencies.
 
 ---
 
-## 🚀 Como Fazer Funcionar? (Guia Prático)
+## 🚀 Getting Started
 
-### 1. Instalação
+### 1. Installation
 
-Recomendamos o uso do **`uv`** pela velocidade e isolamento:
+We recommend using **`uv`** for fast and isolated execution:
 
 ```bash
-# Clonar o repositório e entrar na pasta
+# Clone the repository and navigate to the directory
 cd leai
 
-# Instalar dependências e sincronizar ambiente
+# Synchronize dependencies and virtual environment
 uv sync
 ```
 
-*(Ou usando `pip install -e .`)*
+*(Or using standard pip: `pip install -e .`)*
 
 ---
 
-### 2. Configuração (`leai.yml`)
+### 2. Configuration (`leai.yml`)
 
-Crie um arquivo `leai.yml` na raiz do projeto:
+Create a `leai.yml` file in the root of your project:
 
 ```yaml
-# String de conexão Oracle (suporta variáveis de ambiente ${VAR})
+# Oracle connection string (supports environment variables ${VAR})
 dsn: "oracle://${DB_USER}:${DB_PASS}@${DB_HOST}:1521/${DB_SERVICE}"
 
-# Schemas que fazem parte do seu ecossistema integrado
+# Schemas integrated into your ecosystem graph
 schemas:
   - HR
-  - FINANCEIRO
-  - CADASTRO
+  - FINANCE
+  - CORE
 
-# Pastas de saída do pipeline
-rawPath: "./raw"                  # Snapshots técnicos brutos
-annotationsPath: "./annotations"  # Anotações de negócio
-docPath: "./docs"                  # Documentação final compilada
+# Pipeline output directories
+rawPath: "./raw"                  # Raw technical snapshots (JSON)
+annotationsPath: "./annotations"  # Business annotations (YAML)
+docPath: "./docs"                  # Final compiled documentation (Markdown)
 
-# Provedores de IA para enrich, ask e chat
+# AI Provider Configuration for enrich, ask, and chat
 ai:
   default_provider: "openai"      # openai, gemini, anthropic, deepseek, qwen, kimi, ollama
   temperature: 0.2
@@ -113,15 +113,15 @@ ai:
 
 ---
 
-## 📖 Referência Completa de Comandos e Parâmetros
+## 📖 CLI Command Reference
 
-### 1. `uv run leai` (ou `leai generate`)
-Executa o pipeline completo (extração ➔ sincronização de anotações ➔ compilação dos Markdowns).
+### 1. `uv run leai` (or `leai generate`)
+Executes the full pipeline: extracts technical snapshots from Oracle, synchronizes business annotation stubs, and compiles final Markdown docs.
 
-| Parâmetro / Opção | Tipo | Descrição |
+| Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-c`, `--config PATH` | Opção | Caminho para o arquivo de configuração (Padrão: `leai.yml`). |
-| `-t`, `--object-type TEXT` | Opção | Filtra tipos de objetos (ex: `-t tables -t views -t packages`). |
+| `-c`, `--config PATH` | Option | Path to the configuration file (Default: `leai.yml`). |
+| `-t`, `--object-type TEXT` | Option | Filter specific object types (e.g., `-t tables -t views -t packages`). |
 
 ```bash
 uv run leai
@@ -131,13 +131,13 @@ uv run leai generate -t tables -t packages --config prod.yml
 ---
 
 ### 2. `uv run leai extract`
-Conecta no banco de dados Oracle e extrai snapshots técnicos em formato JSON para a pasta `raw/`.
+Connects to Oracle and extracts raw JSON technical snapshots into the `raw/` directory.
 
-| Parâmetro / Opção | Tipo | Descrição |
+| Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-s`, `--schema TEXT` | Opção | Extrai apenas um schema específico. |
-| `-t`, `--object-type TEXT` | Opção | Extrai apenas tipos específicos de objetos. |
-| `-c`, `--config PATH` | Opção | Caminho para o `leai.yml`. |
+| `-s`, `--schema TEXT` | Option | Extract only a specific schema. |
+| `-t`, `--object-type TEXT` | Option | Filter object types to extract. |
+| `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash
 uv run leai extract
@@ -147,12 +147,12 @@ uv run leai extract -s HR -t tables -t views
 ---
 
 ### 3. `uv run leai annotate`
-Lê os snapshots de `raw/` e cria/sincroniza stubs YAML em `annotations/` preservando anotações humanas existentes (Modo Offline).
+Reads JSON snapshots from `raw/` and generates/synchronizes YAML stubs in `annotations/`, preserving existing manual documentation (Offline Mode).
 
-| Parâmetro / Opção | Tipo | Descrição |
+| Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-t`, `--object-type TEXT` | Opção | Sincroniza apenas tipos específicos de objetos. |
-| `-c`, `--config PATH` | Opção | Caminho para o `leai.yml`. |
+| `-t`, `--object-type TEXT` | Option | Synchronize only specific object types. |
+| `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash
 uv run leai annotate
@@ -162,12 +162,12 @@ uv run leai annotate -t tables
 ---
 
 ### 4. `uv run leai compile`
-Re-compila toda a documentação em Markdown em `docs/` unindo `raw/` e `annotations/` sem precisar de conexão com o banco.
+Recompiles the entire Markdown documentation in `docs/` by merging `raw/` and `annotations/` without connecting to the database.
 
-| Parâmetro / Opção | Tipo | Descrição |
+| Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-t`, `--object-type TEXT` | Opção | Compila apenas tipos específicos de objetos. |
-| `-c`, `--config PATH` | Opção | Caminho para o `leai.yml`. |
+| `-t`, `--object-type TEXT` | Option | Compile only specific object types. |
+| `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash
 uv run leai compile
@@ -177,79 +177,79 @@ uv run leai compile -t views
 ---
 
 ### 5. `uv run leai trace <OBJECT>`
-Gera análise minuciosa de impacto, árvore hierárquica no terminal, cálculo de risco e dossiê com diagramas Mermaid.js.
+Generates deep impact analysis, terminal hierarchical trees, change risk calculations, and Mermaid.js lineage dossiers.
 
-| Parâmetro / Opção | Tipo | Descrição |
+| Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
-| `OBJECT` | **Argumento Obrigatório** | Nome da tabela, view, procedure ou sinônimo a rastrear (ex: `FUNCIONARIOS`). |
-| `-d`, `--depth INT` | Opção | Profundidade da busca no grafo (Padrão: `1` para diretos, `2+` para multinível). |
-| `--rag-json`, `--rag` | Flag | Exporta também chunk JSON estruturado para ingestão em Vector DBs. |
-| `--offline` | Flag | Resolve o grafo a partir dos snapshots `raw/` locais sem conectar ao banco. |
-| `-s`, `--schema TEXT` | Opção | Schema do objeto alvo (se omitido, busca em todos os configurados). |
-| `-o`, `--output PATH` | Opção | Caminho customizado para salvar o arquivo Markdown gerado. |
-| `-c`, `--config PATH` | Opção | Caminho para o `leai.yml`. |
+| `OBJECT` | **Required Argument** | Name of the table, view, procedure, or synonym to trace (e.g., `EMPLOYEES`). |
+| `-d`, `--depth INT` | Option | Max graph traversal depth (Default: `1` for direct, `2+` for multi-level). |
+| `--rag-json`, `--rag` | Flag | Also exports structured JSON chunks for Vector DB ingestion. |
+| `--offline` | Flag | Resolves dependencies locally from `raw/` snapshots without connecting to Oracle. |
+| `-s`, `--schema TEXT` | Option | Schema of target object (searches all configured schemas if omitted). |
+| `-o`, `--output PATH` | Option | Custom file path for the generated Markdown dossier. |
+| `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash
-# Rastreamento multinível Nível 2
-uv run leai trace FUNCIONARIOS --depth 2
+# Multi-level lineage trace (Depth 2)
+uv run leai trace EMPLOYEES --depth 2
 
-# Modo Offline com exportação de chunk RAG
-uv run leai trace FUNCIONARIOS --offline --depth 2 --rag-json
+# Offline mode with RAG JSON chunk export
+uv run leai trace EMPLOYEES --offline --depth 2 --rag-json
 ```
 
 ---
 
 ### 6. `uv run leai enrich`
-Utiliza IA (LLMs) para analisar DDLs e códigos PL/SQL, preenchendo automaticamente regras de negócio e comentários de colunas faltantes em `annotations/`.
+Uses AI (LLMs) to analyze DDLs and PL/SQL code, automatically generating business rules and column descriptions in `annotations/` with real-time progress bars.
 
-| Parâmetro / Opção | Tipo | Descrição |
+| Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-o`, `--object-name TEXT` | Opção | Nome de um objeto específico para enriquecer (ex: `-o FUNCIONARIOS`). |
-| `-p`, `--provider TEXT` | Opção | Provedor de IA (`openai`, `gemini`, `anthropic`, `deepseek`, `qwen`, `kimi`, `ollama`). |
-| `-m`, `--model TEXT` | Opção | Nome do modelo (ex: `gpt-4o-mini`, `gemini-1.5-flash`, `claude-3-5-sonnet-20241022`). |
-| `--overwrite` | Flag | Força a regeração de descrições e comentários já preenchidos. |
-| `-t`, `--object-type TEXT` | Opção | Tipos de objeto a enriquecer (ex: `-t tables -t packages`). |
-| `-c`, `--config PATH` | Opção | Caminho para o `leai.yml`. |
+| `-o`, `--object-name TEXT` | Option | Specific object name to enrich (e.g., `-o EMPLOYEES`). |
+| `-p`, `--provider TEXT` | Option | AI provider (`openai`, `gemini`, `anthropic`, `deepseek`, `qwen`, `kimi`, `ollama`). |
+| `-m`, `--model TEXT` | Option | Model identifier (e.g., `gpt-4o-mini`, `gemini-1.5-flash`, `claude-3-5-sonnet-20241022`). |
+| `--overwrite` | Flag | Forces regeneration of existing descriptions and comments. |
+| `-t`, `--object-type TEXT` | Option | Filter object types to enrich (e.g., `-t tables -t packages`). |
+| `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash
-# Enriquecer com provedor padrão
+# Enrich using default provider
 uv run leai enrich
 
-# Enriquecer com Google Gemini ou Claude
+# Enrich using Google Gemini or Anthropic Claude
 uv run leai enrich --provider gemini --model gemini-1.5-flash
 uv run leai enrich --provider anthropic --model claude-3-5-sonnet-20241022
 
-# Enriquecer apenas uma tabela forçando sobrescrita
-uv run leai enrich -o FUNCIONARIOS --overwrite
+# Enrich a single table with forced overwrite
+uv run leai enrich -o EMPLOYEES --overwrite
 ```
 
 ---
 
 ### 7. `uv run leai ask <QUESTION>`
-Faz uma pergunta pontual em linguagem natural com RAG contextual dinâmico.
+Asks one-off natural language questions answered with dynamic RAG context directly in your terminal.
 
-| Parâmetro / Opção | Tipo | Descrição |
+| Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
-| `QUESTION` | **Argumento Obrigatório** | A pergunta a ser respondida pela IA sobre o banco de dados. |
-| `-p`, `--provider TEXT` | Opção | Provedor de IA a ser utilizado. |
-| `-m`, `--model TEXT` | Opção | Nome do modelo a ser utilizado. |
-| `-c`, `--config PATH` | Opção | Caminho para o `leai.yml`. |
+| `QUESTION` | **Required Argument** | The question regarding database structure, dependencies, or business rules. |
+| `-p`, `--provider TEXT` | Option | AI provider to use. |
+| `-m`, `--model TEXT` | Option | Model identifier to use. |
+| `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash
-uv run leai ask "Quais views ou procedures consultam a tabela FUNCIONARIOS?"
-uv run leai ask "Como funciona o cálculo de folha de pagamento?" --provider gemini
+uv run leai ask "Which views or stored procedures query the EMPLOYEES table?"
+uv run leai ask "How does the payroll calculation workflow operate?" --provider gemini
 ```
 
 ---
 
 ### 8. `uv run leai chat`
-Inicia um chat interativo multi-turno no terminal com memória de contexto e RAG acumulativo.
+Launches an interactive multi-turn terminal chat session with persistent conversation memory and cumulative graph context.
 
-| Parâmetro / Opção | Tipo | Descrição |
+| Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-p`, `--provider TEXT` | Opção | Provedor de IA a ser utilizado. |
-| `-m`, `--model TEXT` | Opção | Nome do modelo a ser utilizado. |
-| `-c`, `--config PATH` | Opção | Caminho para o `leai.yml`. |
+| `-p`, `--provider TEXT` | Option | AI provider to use. |
+| `-m`, `--model TEXT` | Option | Model identifier to use. |
+| `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash
 uv run leai chat
@@ -257,62 +257,62 @@ uv run leai chat --provider anthropic --model claude-3-5-sonnet-20241022
 uv run leai chat --provider ollama --model llama3.1
 ```
 
-#### 🎮 Comandos Interativos Disponíveis Dentro da Sessão:
-- `/clear`: Limpa o histórico de mensagens e entidades acumuladas na sessão.
-- `/save [arquivo.md]`: Salva a transcrição completa da conversa em arquivo Markdown.
-- `/help`: Exibe os comandos de ajuda no terminal.
-- `/exit` ou `/quit`: Encerra o chat.
+#### 🎮 Interactive In-Session Commands:
+- `/clear`: Clears conversation history and active entity memory.
+- `/save [file.md]`: Exports the complete transcript and generated scripts into a Markdown file.
+- `/help`: Displays available commands.
+- `/exit` or `/quit`: Closes the chat session.
 
 ---
 
 ### 9. `uv run leai changes`
-Audita e lista no terminal os objetos criados ou modificados recentemente no banco (via `LAST_DDL_TIME`).
+Audits and lists recently created or modified database objects (via Oracle's `LAST_DDL_TIME`).
 
-| Parâmetro / Opção | Tipo | Descrição |
+| Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-d`, `--days INT` | Opção | Quantidade de dias retroativos a auditar (Padrão: `7`). |
-| `-u`, `--user TEXT` | Opção | Filtrar pelo usuário modificador / schema (ex: `-u HR`). |
-| `-s`, `--schema TEXT` | Opção | Schema alvo da consulta. |
-| `-t`, `--object-type TEXT` | Opção | Filtrar tipos de objeto modificados. |
-| `-c`, `--config PATH` | Opção | Caminho para o `leai.yml`. |
+| `-d`, `--days INT` | Option | Number of trailing days to audit (Default: `7`). |
+| `-u`, `--user TEXT` | Option | Filter by modifying user / schema (e.g., `-u HR`). |
+| `-s`, `--schema TEXT` | Option | Target schema. |
+| `-t`, `--object-type TEXT` | Option | Filter object types. |
+| `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash
-# Consultar objetos alterados nos últimos 15 dias
+# Objects altered in the last 15 days
 uv run leai changes -d 15
 
-# Filtrar por schema
+# Filter by schema
 uv run leai changes -d 30 -u HR
 ```
 
 ---
 
-## 📁 Estrutura de Pastas Gerada
+## 📁 Directory Structure
 
 ```text
-meu_projeto/
+my_project/
 ├── leai.yml
-├── raw/                      <-- Snapshots puros em JSON extraídos do Oracle
+├── raw/                      <-- Raw JSON snapshots extracted from Oracle
 │   └── HR/
 │       ├── tables/
 │       ├── views/
 │       ├── synonyms/
 │       └── code_objects/
-├── annotations/              <-- Regras de negócio em YAML (editáveis)
+├── annotations/              <-- YAML business rules & annotations (editable)
 │   └── HR/
 │       ├── tables/
 │       └── code_objects/
-└── docs/                     <-- Markdown final para LLM, RAG e leitura humana
+└── docs/                     <-- Final compiled Markdown for LLMs, RAG, and humans
     └── HR/
         ├── tables/
-        ├── dossiers/         <-- Dossiês de impacto gerados pelo leai trace
+        ├── dossiers/         <-- Impact dossiers generated by leai trace
         └── code_objects/
 ```
 
 ---
 
-## 🧪 Testes Automatizados
+## 🧪 Automated Testing
 
-Para rodar a suíte completa de testes unitários:
+To run the complete automated test suite:
 
 ```bash
 uv run python -m unittest discover tests
