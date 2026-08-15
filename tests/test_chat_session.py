@@ -43,7 +43,7 @@ class ChatSessionTests(unittest.TestCase):
         self.session = ChatSession(schemas=[self.schema], config=self.cfg, client=self.client)
 
     def test_chat_multi_turn_conversation_and_memory(self):
-        # Turno 1
+        # Turn 1
         reply1, detected1 = self.session.send("Explique a tabela FUNCIONARIOS")
         self.assertIn("FUNCIONARIOS", detected1)
         self.assertIn("FUNCIONARIOS", self.session.active_entities)
@@ -52,7 +52,7 @@ class ChatSessionTests(unittest.TestCase):
         self.assertEqual(self.session.messages[1]["role"], "assistant")
         self.assertIn("Resposta simulada para: Explique a tabela FUNCIONARIOS", reply1)
 
-        # Turno 2
+        # Turn 2
         reply2, detected2 = self.session.send("E como calcular o salário?")
         self.assertEqual(len(self.session.messages), 4)
         self.assertIn("FUNCIONARIOS", self.session.active_entities)

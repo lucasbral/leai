@@ -392,7 +392,7 @@ def _fetch_code_objects(cursor: oracledb.Cursor, config: LeaiConfig, target_type
     for obj_name, obj_type in raw_objs:
         if obj_type not in target_types:
             continue
-        # Se existe PACKAGE BODY ou TYPE BODY, priorizar o BODY para obter a implementação completa
+        # If PACKAGE BODY or TYPE BODY exists, prioritize BODY to retrieve complete implementation
         if obj_type == "PACKAGE" and obj_name in pkg_bodies and "PACKAGE BODY" in target_types:
             continue
         if obj_type == "TYPE" and obj_name in type_bodies and "TYPE BODY" in target_types:
@@ -606,7 +606,7 @@ def fetch_schema_metadata(
         schema_meta = SchemaMetadata(schema_name=target_schema)
         types = set(config.object_types)
 
-        # Criar uma config temporária apontando para target_schema para reutilizar os fetchers internos
+        # Create a temporary config pointing to target_schema to reuse internal fetchers
         temp_config = config.model_copy()
         temp_config.schemas = [target_schema]
 
@@ -620,7 +620,7 @@ def fetch_schema_metadata(
         if "types" in types:
             code_target_types.update({"TYPE", "TYPE BODY"})
 
-        # Calcular número total de etapas ativas para percentual intra-schema
+        # Calculate total active steps for progress tracking
         active_steps = []
         if "tables" in types:
             active_steps.append("tables")
@@ -646,7 +646,7 @@ def fetch_schema_metadata(
             schema_meta.tables = _fetch_tables(cursor, temp_config, prefix=prefix)
             current_step += 1
             if callback:
-                callback("Tabelas", len(schema_meta.tables), current_step, total_steps)
+                callback("Tables", len(schema_meta.tables), current_step, total_steps)
 
         if "views" in types:
             schema_meta.views = _fetch_views(cursor, temp_config, prefix=prefix)
@@ -682,15 +682,15 @@ def fetch_schema_metadata(
             schema_meta.indexes = _fetch_indexes(cursor, temp_config, prefix=prefix)
             current_step += 1
             if callback:
-                callback("Índices", len(schema_meta.indexes), current_step, total_steps)
+                callback("Indexes", len(schema_meta.indexes), current_step, total_steps)
 
         if "synonyms" in types:
             schema_meta.synonyms = _fetch_synonyms(cursor, temp_config, prefix=prefix)
             current_step += 1
             if callback:
-                callback("Sinônimos", len(schema_meta.synonyms), current_step, total_steps)
+                callback("Synonyms", len(schema_meta.synonyms), current_step, total_steps)
 
-        # Enriquecer os objetos com os metadados de auditoria (CREATED, LAST_DDL_TIME, OWNER)
+        # Enrich objects with audit metadata (CREATED, LAST_DDL_TIME, OWNER)
         try:
             timestamps = _fetch_object_timestamps(cursor, target_schema, prefix=prefix)
             category_mapping = [
@@ -737,7 +737,7 @@ def fetch_focal_trace(
         cursor = connection.cursor()
         prefix = _detect_catalog_prefix(cursor)
 
-        # 1. Descobrir tipo do objeto focal
+        # 1. Discover focal object type
         cursor.execute(
             f"""
             SELECT object_type FROM {prefix}_objects
@@ -748,13 +748,13 @@ def fetch_focal_trace(
         )
         types_found = [row[0].upper() for row in cursor.fetchall()]
         if not types_found:
-            raise ValueError(f"Objeto '{target_upper}' não encontrado no schema '{target_schema}'.")
+            raise ValueError(f"Object '{target_upper}' not found in schema '{target_schema}'.")
 
         focal_type = types_found[0]
         if "PACKAGE BODY" in types_found or "PACKAGE" in types_found:
             focal_type = "PACKAGE"
 
-        # Carregar metadados do objeto focal
+        # Load focal object metadata
         focal_cfg = config.model_copy()
         focal_cfg.schemas = [target_schema]
         focal_cfg.include = [target_upper]
@@ -843,7 +843,7 @@ def fetch_focal_trace(
                             next_layer.add(s_upper)
                             all_related_names.add(s_upper)
 
-                # B) Foreign Keys e Triggers (se for tabela)
+                # B) Foreign Keys and Triggers (if table)
                 cursor.execute(
                     f"""
                     SELECT c.table_name, cc.column_name, c.constraint_name, rcc.column_name AS ref_column
@@ -912,7 +912,7 @@ def fetch_focal_trace(
 
             current_layer = next_layer
 
-        # Extrair metadados dos objetos relacionados encontrados
+        # Extract metadata of related objects found
         if all_related_names:
             rel_cfg = config.model_copy()
             rel_cfg.schemas = [target_schema]

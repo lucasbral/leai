@@ -74,7 +74,7 @@ def load_config(config_path: Path) -> LeaiConfig:
 
     raw_schemas = raw.get("schemas") or raw.get("schema")
     if not raw_schemas:
-        raise ConfigError("É necessário definir 'schema' ou 'schemas' no leai.yml")
+        raise ConfigError("Must define 'schema' or 'schemas' in leai.yml")
 
     is_all = False
     parsed_schemas: list[str] = []
@@ -104,5 +104,6 @@ def load_config(config_path: Path) -> LeaiConfig:
     config.docPath = (config_path.parent / config.docPath).resolve()
     config.annotationsPath = (config_path.parent / config.annotationsPath).resolve()
     config.include = [item.upper() for item in config.include]
+    config.exclude = [item.upper() for item in config.exclude]
     config.object_types = [item.lower() for item in config.object_types]
     return config

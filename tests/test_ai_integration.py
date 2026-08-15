@@ -102,13 +102,13 @@ class AIIntegrationTests(unittest.TestCase):
 
         enriched = enrich_table_annotation(table, ann, client, overwrite=False)
 
-        # Deve manter a descrição manual
+        # Must keep manual description
         self.assertEqual(enriched.description, "Descrição humana manual existente")
-        # Deve manter a coluna existente
+        # Must keep existing column comment
         self.assertEqual(enriched.columns["ID"], "Identificador do cliente mantido manualmente")
-        # Deve preencher a coluna faltante
+        # Must populate missing column
         self.assertEqual(enriched.columns["EMAIL"], "Endereço eletrônico do cliente")
-        # Deve adicionar regras e tags
+        # Must add rules and tags
         self.assertIn("Email deve ser único", enriched.business_rules)
         self.assertIn("crm", enriched.tags)
 

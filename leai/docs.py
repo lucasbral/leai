@@ -488,7 +488,7 @@ def write_schema_docs(
         markdown = render_code_object_markdown(code_obj, code_doc=manual_doc, annotation=annotation)
         generated_md.append(_write_single_doc(file_path, markdown))
 
-        # Desmembramento de sub-rotinas (Package Splitting)
+        # Package Splitting (Subprogram disassembly)
         for sub in code_obj.subprograms:
             sub_ann_path = target_ann_path / obj_folder / code_obj.name / f"{sub.name}.yml"
             sub_annotation = ensure_annotation_stub(sub_ann_path, db_comment=sub.comment)
@@ -700,6 +700,12 @@ def generate_semantic_rag_text(trace_result: ObjectTraceResult, annotation: Obje
                 dep_descriptions.append(f"possui a trigger {dep.source_name}")
             elif dep.relation_type == "PLSQL_DEPENDENCY":
                 dep_descriptions.append(f"é manipulada pelo código PL/SQL {dep.source_name}")
+            elif dep.relation_type == "SYNONYM_FOR":
+                dep_descriptions.append(f"possui o sinônimo {dep.source_name} apontando para si")
+            elif dep.relation_type == "REFERENCED_BY":
+                dep_descriptions.append(f"é referenciada pelo objeto {dep.source_type.lower()} {dep.source_name}")
+            elif dep.relation_type == "DEPENDS_ON":
+                dep_descriptions.append(f"depende do objeto {dep.target_type.lower()} {dep.target_name}")
             else:
                 dep_descriptions.append(f"possui vínculo com {dep.target_name} ({dep.relation_type})")
         parts.append(" Impacto relacional: " + ", ".join(dep_descriptions[:10]) + ".")
@@ -778,11 +784,11 @@ def render_dossier_markdown(
     dep_count = len(trace_result.dependencies)
     risk_level = _calculate_risk_level(dep_count)
 
-    parents = [d.target_name for d in trace_result.dependencies if d.relation_type == "FK_REFERENCES"]
+    parents = [d.target_name for d in trace_result.dependencies if d.relation_type in ("FK_REFERENCES", "DEPENDS_ON")]
     children = [d.source_name for d in trace_result.dependencies if d.relation_type == "FK_REFERENCED_BY"]
-    consumers = [d.source_name for d in trace_result.dependencies if d.relation_type in ("READS/SELECTS", "PLSQL_DEPENDENCY", "TRIGGER_ON")]
+    consumers = [d.source_name for d in trace_result.dependencies if d.relation_type in ("READS/SELECTS", "PLSQL_DEPENDENCY", "TRIGGER_ON", "REFERENCED_BY")]
 
-    # 1. Frontmatter YAML para RAG / LLM
+    # 1. YAML Frontmatter for RAG / LLM
     import yaml
     rag_meta = {
         "rag_metadata": {
@@ -813,7 +819,7 @@ def render_dossier_markdown(
     if focal_obj:
         lines.extend(_render_audit_meta(focal_obj))
 
-    # 2. Card de Resumo Executivo / Raio-X de Impacto
+    # 2. Executive Summary Card / Impact X-Ray
     risk_badge_color = "CRITICAL" if risk_level == "CRITICAL" else ("WARNING" if risk_level in ("HIGH", "MEDIUM") else "NOTE")
     lines.extend(
         [
@@ -830,18 +836,18 @@ def render_dossier_markdown(
     lines.extend(["## Visão geral de negócio", "", desc])
     lines.extend(_render_business_rules(annotation))
 
-    # 3. Resumo Narrativo Semântico (RAG Ready)
+    # 3. Semantic Narrative Summary (RAG Ready)
     semantic_text = generate_semantic_rag_text(trace_result, annotation=annotation)
     lines.extend(["", "## 🧠 Resumo Narrativo Semântico (RAG Ready)", "", semantic_text])
 
-    # 4. Grafo de Linhagem Mermaid
+    # 4. Mermaid Lineage Graph
     lines.extend(["", "## Grafo de Linhagem e Relacionamentos", ""])
     if trace_result.dependencies:
         lines.append(generate_mermaid_graph(focal_name, trace_result.dependencies))
     else:
         lines.append("*Nenhuma dependência direta identificada no catálogo/snapshot.*")
 
-    # 5. Tabela de Dependências
+    # 5. Dependency Table
     lines.extend(["", "## Mapa de Dependências e Impacto", ""])
     if trace_result.dependencies:
         lines.append("| Nível | Objeto Origem | Tipo | Relação | Objeto Alvo | Tipo | Detalhes |")
@@ -853,7 +859,7 @@ def render_dossier_markdown(
     else:
         lines.append("Nenhuma dependência registrada.")
 
-    # 6. Detalhes do Objeto Focal
+    # 6. Focal Object Details
     if isinstance(focal_obj, TableMeta):
         lines.extend(["", "## Estrutura de Colunas do Objeto Focal", "", "| Coluna | Tipo | Nulo | Padrão | Comentário |", "|---|---|---|---|---|"])
         ann_cols = annotation.columns if annotation else {}
@@ -873,7 +879,7 @@ def render_dossier_markdown(
     elif isinstance(focal_obj, CodeObjectMeta) and focal_obj.source:
         lines.extend(["", "## Código-Fonte PL/SQL", "```sql", focal_obj.source.strip(), "```"])
 
-    # 7. Detalhamento de Objetos Relacionados
+    # 7. Related Objects Details
     if trace_result.related_tables or trace_result.related_views or trace_result.related_code_objects or trace_result.related_triggers:
         lines.extend(["", "## Detalhes dos Objetos Relacionados", ""])
 

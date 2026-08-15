@@ -18,15 +18,15 @@ def enrich_table_annotation(
     client: BaseLLMClient,
     overwrite: bool = False,
 ) -> ObjectAnnotation:
-    """Enriquece uma anotação de tabela utilizando o LLM."""
-    # Verificar se precisa enriquecer
+    """Enriches a table annotation using the LLM client."""
+    # Check if enrichment is needed
     has_desc = bool(annotation.description and annotation.description.strip())
     missing_cols = [c.name for c in table.columns if not annotation.columns.get(c.name)]
 
     if has_desc and not missing_cols and not overwrite:
         return annotation
 
-    # Montar contexto para o LLM
+    # Build context for the LLM
     cols_data = [{"name": c.name, "type": c.data_type, "nullable": c.nullable, "existing_comment": c.comment} for c in table.columns]
     fks_data = [{"name": fk.name, "column": fk.column, "referenced_table": fk.referenced_table} for fk in table.foreign_keys]
 
@@ -38,20 +38,20 @@ def enrich_table_annotation(
         "columns": cols_data,
     }
 
-    user_prompt = f"Analise a seguinte tabela Oracle e retorne a documentação de negócio:\n```json\n{json.dumps(payload, indent=2, ensure_ascii=False)}\n```"
+    user_prompt = f"Analyze the following Oracle table and return the business documentation:\n```json\n{json.dumps(payload, indent=2, ensure_ascii=False)}\n```"
 
     try:
         ai_data = client.generate_json(user_prompt, system_prompt=TABLE_ENRICHMENT_SYSTEM_PROMPT)
     except Exception as exc:
-        console.print(f"[yellow]Aviso: Falha ao enriquecer tabela {table.name} com IA: {exc}[/yellow]")
+        console.print(f"[yellow]Warning: Failed to enrich table {table.name} with AI: {exc}[/yellow]")
         return annotation
 
-    # Atualizar descrição
+    # Update description
     if overwrite or not has_desc:
         if ai_data.get("description"):
             annotation.description = str(ai_data["description"]).strip()
 
-    # Atualizar regras de negócio
+    # Update business rules
     if ai_data.get("business_rules") and isinstance(ai_data["business_rules"], list):
         if overwrite:
             annotation.business_rules = [str(r).strip() for r in ai_data["business_rules"]]
@@ -62,7 +62,7 @@ def enrich_table_annotation(
                 if r_clean and r_clean not in existing_rules:
                     annotation.business_rules.append(r_clean)
 
-    # Atualizar tags
+    # Update tags
     if ai_data.get("tags") and isinstance(ai_data["tags"], list):
         if overwrite:
             annotation.tags = [str(t).strip() for t in ai_data["tags"]]
@@ -73,7 +73,7 @@ def enrich_table_annotation(
                 if t_clean and t_clean not in existing_tags:
                     annotation.tags.append(t_clean)
 
-    # Atualizar colunas
+    # Update columns
     ai_cols = ai_data.get("columns", {})
     if isinstance(ai_cols, dict):
         for col in table.columns:
@@ -90,12 +90,12 @@ def enrich_code_object_annotation(
     client: BaseLLMClient,
     overwrite: bool = False,
 ) -> ObjectAnnotation:
-    """Enriquece uma anotação de Procedure, Function, Package ou Trigger com LLM."""
+    """Enriches a Procedure, Function, Package or Trigger annotation using LLM."""
     has_desc = bool(annotation.description and annotation.description.strip())
     if has_desc and not overwrite:
         return annotation
 
-    source_preview = (co.source or "")[:12000]  # Limite razoável de tokens
+    source_preview = (co.source or "")[:12000]  # Reasonable token limit
     subprograms_list = [sp.name for sp in co.subprograms]
 
     payload = {
@@ -105,12 +105,12 @@ def enrich_code_object_annotation(
         "source_code": source_preview,
     }
 
-    user_prompt = f"Analise o seguinte código PL/SQL Oracle e retorne a documentação de negócio:\n```json\n{json.dumps(payload, indent=2, ensure_ascii=False)}\n```"
+    user_prompt = f"Analyze the following Oracle PL/SQL code and return the business documentation:\n```json\n{json.dumps(payload, indent=2, ensure_ascii=False)}\n```"
 
     try:
         ai_data = client.generate_json(user_prompt, system_prompt=CODE_OBJECT_ENRICHMENT_SYSTEM_PROMPT)
     except Exception as exc:
-        console.print(f"[yellow]Aviso: Falha ao enriquecer {co.object_type} {co.name} com IA: {exc}[/yellow]")
+        console.print(f"[yellow]Warning: Failed to enrich {co.object_type} {co.name} with AI: {exc}[/yellow]")
         return annotation
 
     if overwrite or not has_desc:
@@ -152,8 +152,8 @@ def enrich_schema_annotations(
     target_object_types: list[str] | None = None,
     progress_callback: Callable[[str, str], None] | None = None,
 ) -> tuple[int, int]:
-    """Percorre os schemas e auto-completa anotações usando o cliente LLM.
-    Retorna (tabelas_processadas, code_objects_processados).
+    """Iterates through schemas and auto-completes annotations using the LLM client.
+    Returns (processed_tables_count, processed_code_objects_count).
     """
     tables_count = 0
     code_count = 0
@@ -164,7 +164,7 @@ def enrich_schema_annotations(
     for schema in schemas:
         base_dir = config.annotationsPath / schema.schema_name if is_multi else config.annotationsPath
 
-        # 1. Tabelas
+        # 1. Tables
         if "table" in types_filter or not target_object_types:
             for t in schema.tables:
                 if target_upper and t.name.upper() != target_upper:

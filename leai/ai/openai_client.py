@@ -9,8 +9,8 @@ from leai.ai.base import BaseLLMClient
 
 
 class OpenAICompatibleClient(BaseLLMClient):
-    """Cliente universal compatível com o endpoint /chat/completions da OpenAI.
-    Suporta: OpenAI (ChatGPT), DeepSeek, Qwen (DashScope), Kimi (Moonshot), Ollama, vLLM, LM Studio.
+    """Universal client compatible with OpenAI's /chat/completions endpoint.
+    Supports: OpenAI (ChatGPT), DeepSeek, Qwen (DashScope), Kimi (Moonshot), Ollama, vLLM, LM Studio.
     """
 
     def __init__(
@@ -43,7 +43,7 @@ class OpenAICompatibleClient(BaseLLMClient):
         }
 
         if response_format_json and "ollama" not in (self.base_url or "").lower():
-            # A maioria das APIs OpenAI-compatible suporta type: json_object
+            # Most OpenAI-compatible APIs support response_format type: json_object
             payload["response_format"] = {"type": "json_object"}
 
         data = json.dumps(payload).encode("utf-8")
@@ -55,9 +55,9 @@ class OpenAICompatibleClient(BaseLLMClient):
                 return resp_data["choices"][0]["message"]["content"]
         except urllib.error.HTTPError as exc:
             err_body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Erro na API de IA ({self.base_url} HTTP {exc.code}): {err_body}") from exc
+            raise RuntimeError(f"AI API error ({self.base_url} HTTP {exc.code}): {err_body}") from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"Erro de conexão com o provedor de IA ({self.base_url}): {exc.reason}") from exc
+            raise RuntimeError(f"Connection error with AI provider ({self.base_url}): {exc.reason}") from exc
 
     def generate_text(self, prompt: str, system_prompt: str | None = None) -> str:
         messages = []
@@ -67,14 +67,14 @@ class OpenAICompatibleClient(BaseLLMClient):
         return self._send_request(messages, response_format_json=False)
 
     def generate_json(self, prompt: str, system_prompt: str | None = None) -> dict[str, Any]:
-        sys = (system_prompt or "") + "\nIMPORTANTE: Responda APENAS com um objeto JSON válido, sem tags markdown ou comentários."
+        sys = (system_prompt or "") + "\nIMPORTANT: Respond ONLY with a valid JSON object, without markdown tags or comments."
         messages = []
         if sys.strip():
             messages.append({"role": "system", "content": sys.strip()})
         messages.append({"role": "user", "content": prompt})
 
         raw_output = self._send_request(messages, response_format_json=True)
-        # Limpar possíveis blocos ```json ... ```
+        # Clean potential ```json ... ``` code blocks
         cleaned = raw_output.strip()
         if cleaned.startswith("```json"):
             cleaned = cleaned[7:]
@@ -87,11 +87,11 @@ class OpenAICompatibleClient(BaseLLMClient):
         try:
             return json.loads(cleaned)
         except json.JSONDecodeError as exc:
-            # Fallback para regex de primeiro bloco JSON
+            # Fallback to regex for first valid JSON block
             match = re.search(r"(\{.*\})", cleaned, re.DOTALL)
             if match:
                 return json.loads(match.group(1))
-            raise ValueError(f"Não foi possível converter a resposta do LLM para JSON: {cleaned[:200]}") from exc
+            raise ValueError(f"Could not parse LLM response as JSON: {cleaned[:200]}") from exc
 
     def generate_chat(self, messages: list[dict[str, str]], system_prompt: str | None = None) -> str:
         all_msgs = []

@@ -51,7 +51,7 @@ def get_llm_client(
     provider_override: str | None = None,
     model_override: str | None = None,
 ) -> BaseLLMClient:
-    """Instancia e retorna o cliente LLM apropriado baseado na configuração ou overrides."""
+    """Instantiates and returns the appropriate LLM client based on configuration or overrides."""
     provider_name = (provider_override or config.ai.default_provider or "openai").lower()
     p_cfg = config.ai.providers.get(provider_name)
     defaults = PROVIDER_DEFAULTS.get(provider_name, {})
@@ -67,5 +67,5 @@ def get_llm_client(
     elif provider_name in ("anthropic", "claude"):
         return AnthropicClient(api_key=api_key, model=model, base_url=base_url, temperature=temp)
     else:
-        # Padrão OpenAI-compatible (atende OpenAI, DeepSeek, Qwen, Kimi, Ollama, etc.)
+        # Default OpenAI-compatible client (handles OpenAI, DeepSeek, Qwen, Kimi, Ollama, etc.)
         return OpenAICompatibleClient(api_key=api_key, model=model, base_url=base_url, temperature=temp)

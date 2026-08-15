@@ -15,9 +15,9 @@ from leai.raw import trace_raw_dependencies
 
 
 def extract_entities_from_question(question: str, available_objects: set[str]) -> list[str]:
-    """Identifica nomes de objetos do banco de dados presentes na pergunta do usuário."""
+    """Identifies database object names present in the user question."""
     found = []
-    # Ordenar por tamanho decrescente para priorizar nomes mais longos/específicos (ex: PKG_FOLHA_PAGAMENTO antes de PKG_FOLHA)
+    # Sort in descending length order to prioritize longer/more specific names (e.g. PKG_PAYROLL_PROCESSING before PKG_PAYROLL)
     sorted_candidates = sorted(available_objects, key=len, reverse=True)
 
     for obj_name in sorted_candidates:
@@ -34,8 +34,8 @@ def build_rag_context(
     schemas: list[SchemaMetadata],
     config: LeaiConfig,
 ) -> tuple[str, list[str]]:
-    """Constrói o payload contextual de RAG combinando catálogo geral comprimido e trace detalhado com minificação PL/SQL."""
-    # 1. Mapear todos os nomes de objetos, subprogramas e sinônimos disponíveis
+    """Builds the contextual RAG payload combining compressed schema overview and detailed trace with PL/SQL minification."""
+    # 1. Map all available object names, subprograms, and synonyms
     all_objects = set()
     subprogram_to_package_map = {}
     synonym_map = {}
@@ -63,10 +63,9 @@ def build_rag_context(
 
     detected_entities = extract_entities_from_question(question, all_objects)
 
-
     context_parts = []
 
-    # 2. Se subprogramas internos foram detectados, extrair cirurgicamente o bloco de código
+    # 2. If internal subprograms were detected, surgically extract their code block
     for entity in detected_entities:
         if entity in subprogram_to_package_map:
             co, sp = subprogram_to_package_map[entity]
@@ -79,31 +78,31 @@ def build_rag_context(
                     f"CÓDIGO-FONTE MINIFICADO DO SUBPROGRAMA REQUISITADO:\n```sql\n{sub_block}\n```"
                 )
 
-    # 3. Se entidades principais forem detectadas, gerar o trace e dossiê contextual
+    # 3. If primary entities are detected, generate the trace and contextual dossier
     if detected_entities:
         context_parts.append("### [RAG CONTEXT] DETALHAMENTO DE IMPACTO E LINHAGEM TÉCNICA DAS ENTIDADES FOCAIS:")
-        for entity in detected_entities[:3]:  # Limitar a até 3 entidades para evitar estouro de contexto
-            # Se a entidade for um subprograma, rastrear a package pai
+        for entity in detected_entities[:3]:  # Limit to 3 entities to avoid context overflow
+            # If the entity is a subprogram, trace its parent package
             target_trace = subprogram_to_package_map[entity][0].name if entity in subprogram_to_package_map else entity
             trace_res = trace_raw_dependencies(schemas, target_trace, max_depth=2)
 
             if trace_res.focal_object or trace_res.focal_type != "UNKNOWN":
-                # Minificar o código PL/SQL se for code object
+                # Minify PL/SQL source code if it is a code object
                 if isinstance(trace_res.focal_object, CodeObjectMeta) and trace_res.focal_object.source:
                     trace_res.focal_object.source = minify_plsql_source(trace_res.focal_object.source)[:6000]
 
-                # Tentar carregar anotação existente
+                # Try loading existing annotation
                 is_multi = len(schemas) > 1 or config.is_all_schemas
                 schema_name = getattr(trace_res.focal_object, "schema_name", None) or (schemas[0].schema_name if schemas else "")
                 ann_dir = config.annotationsPath / schema_name if is_multi else config.annotationsPath
                 ann_path = ann_dir / "dossiers" / f"{target_trace}.yml"
                 ann = load_annotation(ann_path) if ann_path.exists() else None
 
-                # Renderizar dossiê em Markdown com Mermaid e Frontmatter
+                # Render dossier in Markdown with Mermaid and Frontmatter
                 dossier_text = render_dossier_markdown(trace_res, annotation=ann)
                 context_parts.append(f"\n--- INÍCIO DO DOSSIÊ FOCAL: {target_trace} ---\n{dossier_text}\n--- FIM DO DOSSIÊ FOCAL: {target_trace} ---")
 
-    # 4. Adicionar resumo macro do banco em notação compacta e densa (baixo consumo de tokens)
+    # 4. Add high-level macro catalog summary in compact notation (low token consumption)
     context_parts.append("\n### [CATÁLOGO COMPACTO DO SCHEMA]")
     for s in schemas:
         compact_text = compact_schema_notation(s, max_tables=50)

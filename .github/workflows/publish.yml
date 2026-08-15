@@ -37,7 +37,7 @@ jobs:
       name: pypi
       url: https://pypi.org/p/leai
     permissions:
-      id-token: write  # Necessário para Trusted Publishing (OIDC)
+      id-token: write  # Required for Trusted Publishing (OIDC)
       contents: read
 
     steps:
@@ -64,6 +64,6 @@ jobs:
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          # Suporta tanto Trusted Publishing (OIDC automático sem senha)
-          # quanto secret PYPI_API_TOKEN tradicional
+          # Supports both Trusted Publishing (OIDC passwordless)
+          # and traditional PYPI_API_TOKEN secret
           password: ${{ secrets.PYPI_API_TOKEN }}

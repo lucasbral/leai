@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "leai"
-version = "0.1.1"
+version = "0.1.2"
 description = "Oracle Database reverse engineering, lineage tracing, impact analysis, and RAG/LLM documentation engine"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,6 +32,7 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "License :: OSI Approved :: MIT License"
 ]
 dependencies = [
@@ -40,6 +41,13 @@ dependencies = [
   "rich>=13.7.1",
   "PyYAML>=6.0.1",
   "pydantic>=2.7.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+  "pytest-cov>=4.1.0",
+  "ruff>=0.4.0"
 ]
 
 [project.urls]
@@ -52,3 +60,10 @@ leai = "leai.cli:app"
 
 [tool.setuptools]
 packages = ["leai", "leai.ai"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py310"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
