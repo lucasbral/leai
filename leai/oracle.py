@@ -520,13 +520,19 @@ def _fetch_synonyms(cursor: oracledb.Cursor, config: LeaiConfig, prefix: str = "
         SELECT synonym_name, table_owner, table_name, db_link
         FROM {prefix}_synonyms
         WHERE owner = :owner
+           OR (owner = 'PUBLIC' AND table_owner = :owner)
         ORDER BY synonym_name
         """,
         owner=config.schema_name,
     )
     synonyms: list[SynonymMeta] = []
+    seen = set()
     for syn_name, tbl_owner, tbl_name, db_link in cursor.fetchall():
+        syn_upper = syn_name.upper()
+        if syn_upper in seen:
+            continue
         if _should_include(syn_name, config):
+            seen.add(syn_upper)
             synonyms.append(
                 SynonymMeta(
                     name=syn_name,
@@ -536,6 +542,7 @@ def _fetch_synonyms(cursor: oracledb.Cursor, config: LeaiConfig, prefix: str = "
                 )
             )
     return synonyms
+
 
 
 ORACLE_SYSTEM_SCHEMAS = {
