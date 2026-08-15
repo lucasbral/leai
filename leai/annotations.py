@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+import sys
 from pathlib import Path
 import yaml
 
@@ -13,8 +12,8 @@ def load_annotation(file_path: Path) -> ObjectAnnotation:
         raw = yaml.safe_load(file_path.read_text(encoding="utf-8"))
         if isinstance(raw, dict):
             return ObjectAnnotation.model_validate(raw)
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"Aviso: Erro ao carregar arquivo de anotação '{file_path}': {exc}", file=sys.stderr)
     return ObjectAnnotation()
 
 

@@ -27,65 +27,6 @@ app = typer.Typer(help="CLI para Documentação de Bancos de Dados Oracle.")
 console = Console()
 
 
-def _print_summary(schema_meta, schema_name: str = "") -> None:
-    header = f" [{schema_name}]" if schema_name else ""
-    console.print(f"[green]Objetos processados{header}:[/green]")
-    console.print(f"  - Tabelas: [bold]{len(schema_meta.tables)}[/bold]")
-    console.print(f"  - Views: [bold]{len(schema_meta.views)}[/bold]")
-    console.print(f"  - Materialized Views: [bold]{len(schema_meta.mviews)}[/bold]")
-    console.print(f"  - Code Objects (Proc/Func/Pkg): [bold]{len(schema_meta.code_objects)}[/bold]")
-    console.print(f"  - Triggers: [bold]{len(schema_meta.triggers)}[/bold]")
-    console.print(f"  - Sequences: [bold]{len(schema_meta.sequences)}[/bold]")
-    console.print(f"  - Índices: [bold]{len(schema_meta.indexes)}[/bold]")
-    console.print(f"  - Sinônimos: [bold]{len(schema_meta.synonyms)}[/bold]")
-
-
-def _print_final_summary_panel(
-    title: str,
-    total_schemas: int,
-    totals: dict[str, int],
-    elapsed_seconds: float,
-    output_paths: dict[str, Path],
-) -> None:
-    table = Table(show_header=True, header_style="bold cyan", box=None)
-    table.add_column("Categoria de Objeto", style="dim")
-    table.add_column("Total Processado", justify="right", style="bold green")
-
-    categories = [
-        ("Tabelas", totals.get("tables", 0)),
-        ("Views", totals.get("views", 0)),
-        ("Materialized Views", totals.get("mviews", 0)),
-        ("Code Objects (Proc/Func/Pkg)", totals.get("code_objects", 0)),
-        ("Triggers", totals.get("triggers", 0)),
-        ("Sequences", totals.get("sequences", 0)),
-        ("Índices", totals.get("indexes", 0)),
-        ("Sinônimos", totals.get("synonyms", 0)),
-    ]
-
-    for cat_name, count in categories:
-        if count > 0 or total_schemas == 1:
-            table.add_row(cat_name, f"{count:,}")
-
-    formatted_time = (
-        f"{elapsed_seconds:.2f}s"
-        if elapsed_seconds < 60
-        else f"{int(elapsed_seconds // 60)}m {elapsed_seconds % 60:.1f}s"
-    )
-
-    paths_str = "\n".join([f"[bold yellow]{label}:[/bold yellow] {path}" for label, path in output_paths.items()])
-
-    summary_info = (
-        f"\n[bold blue]Schemas Processados:[/bold blue] [bold]{total_schemas}[/bold]\n"
-        f"[bold magenta]Tempo Total de Execução:[/bold magenta] [bold yellow]{formatted_time}[/bold yellow]\n\n"
-        f"{paths_str}"
-    )
-
-    unified_content = Group(table, summary_info)
-
-    console.print()
-    console.print(Panel(unified_content, title=f"[bold green]{title}[/bold green]", border_style="green"))
-
-
 @app.command()
 def extract(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Caminho para o leai.yml"),
@@ -222,13 +163,14 @@ def annotate(
                     schema_meta,
                     annotations_path=cfg.annotationsPath,
                     multi_schema=is_multi,
+                    object_types=cfg.object_types,
                 )
                 total_ann += len(generated_ann)
                 progress.advance(task_id)
 
         elapsed = time.perf_counter() - start_time
         _print_final_summary_panel(
-            title="Sincronização de Anotações YAML Concluída",
+            title="Sincronização de Anotações Concluída",
             total_schemas=len(schemas_meta),
             totals=totals,
             elapsed_seconds=elapsed,
@@ -298,6 +240,7 @@ def compile(
                     annotations_path=cfg.annotationsPath,
                     docs_overrides=cfg.docs,
                     multi_schema=is_multi,
+                    object_types=cfg.object_types,
                 )
                 total_md += len(generated_md)
                 total_ann += len(generated_ann)
@@ -397,6 +340,7 @@ def generate(
                     annotations_path=cfg.annotationsPath,
                     docs_overrides=cfg.docs,
                     multi_schema=is_multi,
+                    object_types=cfg.object_types,
                 )
                 total_md += len(generated_md)
                 total_ann += len(generated_ann)
@@ -460,12 +404,15 @@ def changes(
                         continue
 
                     if ddl_str:
-                        try:
-                            dt = datetime.strptime(ddl_str, "%Y-%m-%d %H:%M:%S")
-                            if dt >= cutoff:
-                                results.append((s_name, cat_label, obj.name, ddl_str, mod_by))
-                        except ValueError:
-                            pass
+                        dt = None
+                        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+                            try:
+                                dt = datetime.strptime(ddl_str, fmt)
+                                break
+                            except ValueError:
+                                pass
+                        if dt and dt >= cutoff:
+                            results.append((s_name, cat_label, obj.name, ddl_str, mod_by))
 
         table = Table(show_header=True, header_style="bold cyan", box=None)
         table.add_column("Schema", style="bold yellow")
