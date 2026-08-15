@@ -580,6 +580,7 @@ def trace(
 ) -> None:
     """Generates in-depth technical dossier and Mermaid.js dependency graph for a specific object."""
     from rich.tree import Tree
+
     from leai.docs import _calculate_risk_level
 
     start_time = time.perf_counter()
@@ -815,6 +816,7 @@ def chat(
 ) -> None:
     """Starts an interactive multi-turn terminal chat with RAG and database context memory."""
     from rich.markdown import Markdown
+
     from leai.chat_session import ChatSession
 
     try:

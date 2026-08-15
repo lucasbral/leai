@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+
 import yaml
 
 from leai.models import ObjectAnnotation

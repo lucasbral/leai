@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from leai.models import (
     CodeObjectMeta,
+    DependencyLink,
     IndexMeta,
     MaterializedViewMeta,
+    ObjectTraceResult,
     SchemaMetadata,
     SequenceMeta,
     SynonymMeta,
@@ -151,10 +154,6 @@ def load_raw_schemas(raw_path: Path) -> list[SchemaMetadata]:
         return schemas
 
     return [load_raw_schema(raw_path)]
-
-
-import re
-from leai.models import DependencyLink, ObjectTraceResult
 
 
 def _find_raw_object(schemas: list[SchemaMetadata], name: str):

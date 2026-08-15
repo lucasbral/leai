@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 import re
-from pathlib import Path
+
 from leai.annotations import load_annotation
 from leai.compression import (
     compact_schema_notation,

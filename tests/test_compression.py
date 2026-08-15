@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import unittest
+
 from leai.compression import (
     compact_schema_notation,
     extract_package_skeleton,
@@ -19,12 +21,12 @@ class CompressionTests(unittest.TestCase):
          * History:
          * 2026-01-01 - Criacao
          */
-        
+
         -- =======================================================
         -- Bloco de validacao
         -- =======================================================
-        
-        
+
+
         PROCEDURE CALCULA_VALOR IS
         BEGIN
             -- regra: se valor for negativo, zera
@@ -51,24 +53,24 @@ class CompressionTests(unittest.TestCase):
     def test_extract_subprogram_block(self):
         huge_package = """
         PACKAGE BODY PKG_COMPLEXA IS
-        
+
             PROCEDURE OUTRA_PROC IS
             BEGIN
                 NULL;
             END OUTRA_PROC;
-            
+
             PROCEDURE TESTE(p_id NUMBER, p_nome VARCHAR2) IS
                 v_aux NUMBER;
             BEGIN
                 v_aux := 10;
                 UPDATE FUNCIONARIOS SET SALARIO = v_aux WHERE ID = p_id;
             END TESTE;
-            
+
             FUNCTION MAIS_UMA RETURN NUMBER IS
             BEGIN
                 RETURN 1;
             END MAIS_UMA;
-            
+
         END PKG_COMPLEXA;
         """
 

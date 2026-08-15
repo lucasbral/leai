@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -15,15 +16,12 @@ class BaseLLMClient(ABC):
     @abstractmethod
     def generate_text(self, prompt: str, system_prompt: str | None = None) -> str:
         """Generates plain text response from the given prompt."""
-        pass
 
     @abstractmethod
     def generate_json(self, prompt: str, system_prompt: str | None = None) -> dict[str, Any]:
         """Generates and returns a structured JSON object from the given prompt."""
-        pass
 
     @abstractmethod
     def generate_chat(self, messages: list[dict[str, str]], system_prompt: str | None = None) -> str:
         """Generates a response considering the full multi-turn message history."""
-        pass
 

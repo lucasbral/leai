@@ -1,25 +1,22 @@
 from __future__ import annotations
+
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
 
 from leai.ai.anthropic_client import AnthropicClient
 from leai.ai.base import BaseLLMClient
 from leai.ai.factory import get_llm_client
 from leai.ai.gemini_client import GeminiClient
 from leai.ai.openai_client import OpenAICompatibleClient
-from leai.annotations import load_annotation, save_annotation
+from leai.annotations import load_annotation
 from leai.config import AIConfig, AIProviderConfig, LeaiConfig
 from leai.enrich import (
-    enrich_code_object_annotation,
     enrich_schema_annotations,
     enrich_table_annotation,
 )
 from leai.models import (
-    CodeObjectMeta,
     ColumnMeta,
-    ForeignKeyMeta,
     ObjectAnnotation,
     SchemaMetadata,
     TableMeta,

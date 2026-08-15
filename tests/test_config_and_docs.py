@@ -6,14 +6,7 @@ from leai.config import load_config
 from leai.docs import (
     MANUAL_END,
     MANUAL_START,
-    render_code_object_markdown,
-    render_index_markdown,
-    render_mview_markdown,
-    render_sequence_markdown,
-    render_synonym_markdown,
     render_table_markdown,
-    render_trigger_markdown,
-    render_view_markdown,
     write_schema_docs,
     write_table_docs,
 )
@@ -21,17 +14,13 @@ from leai.models import (
     CodeObjectMeta,
     ColumnMeta,
     ForeignKeyMeta,
-    IndexMeta,
-    MaterializedViewMeta,
     SchemaMetadata,
-    SequenceMeta,
     SubprogramMeta,
-    SynonymMeta,
     TableMeta,
     TriggerMeta,
     ViewMeta,
 )
-from leai.oracle import _build_connect_kwargs, _format_data_type, _like_pattern_to_regex, _split_package_source
+from leai.oracle import _build_connect_kwargs, _like_pattern_to_regex, _split_package_source
 from leai.raw import load_raw_schema, load_raw_schemas, save_raw_schema
 
 
@@ -458,7 +447,7 @@ class ConfigAndDocsTests(unittest.TestCase):
             )
             schema = SchemaMetadata(tables=[func])
 
-            from leai.docs import generate_mermaid_graph, write_dossier_doc, write_rag_json_file
+            from leai.docs import write_dossier_doc, write_rag_json_file
             from leai.raw import trace_raw_dependencies
 
             res = trace_raw_dependencies([schema], "FUNCIONARIOS")

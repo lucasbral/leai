@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from collections.abc import Callable
 from urllib.parse import unquote, urlparse
 
 import oracledb
@@ -565,9 +566,6 @@ def fetch_available_schemas(connection: oracledb.Connection, config: LeaiConfig)
         all_users = [row[0].upper() for row in cursor.fetchall()]
         return [u for u in all_users if u not in ORACLE_SYSTEM_SCHEMAS]
     return config.schemas
-
-
-from typing import Callable
 
 
 def _fetch_object_timestamps(cursor: oracledb.Cursor, owner: str, prefix: str = "all") -> dict[tuple[str, str], tuple[str, str, str]]:

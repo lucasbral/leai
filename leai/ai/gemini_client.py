@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import json
 import re
 import urllib.error
@@ -79,8 +80,7 @@ class GeminiClient(BaseLLMClient):
             cleaned = cleaned[7:]
         elif cleaned.startswith("```"):
             cleaned = cleaned[3:]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
+        cleaned = cleaned.removesuffix("```")
         cleaned = cleaned.strip()
 
         try:
