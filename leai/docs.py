@@ -79,13 +79,26 @@ def _render_annotation_details(annotation: ObjectAnnotation | None) -> list[str]
     return lines
 
 
+def _render_use_cases(annotation: ObjectAnnotation | None) -> list[str]:
+    if not annotation or not annotation.use_cases:
+        return []
+    lines = ["", "## Casos de uso e Consultas de Exemplo", ""]
+    for uc in annotation.use_cases:
+        uc_clean = uc.strip()
+        if "SELECT " in uc_clean.upper() and not uc_clean.startswith("```"):
+            lines.append(f"```sql\n{uc_clean}\n```\n")
+        else:
+            lines.append(f"- {uc_clean}")
+    return lines
+
+
 def _render_business_rules(annotation: ObjectAnnotation | None) -> list[str]:
     lines = _render_annotation_details(annotation)
-    if not annotation or not annotation.business_rules:
-        return lines
-    lines.extend(["", "## Regras de negócio", ""])
-    for rule in annotation.business_rules:
-        lines.append(f"- {rule}")
+    if annotation and annotation.business_rules:
+        lines.extend(["", "## Regras de negócio", ""])
+        for rule in annotation.business_rules:
+            lines.append(f"- {rule}")
+    lines.extend(_render_use_cases(annotation))
     return lines
 
 
@@ -684,6 +697,10 @@ def generate_semantic_rag_text(trace_result: ObjectTraceResult, annotation: Obje
         rules_str = " Regras de negócio associadas: " + "; ".join(annotation.business_rules) + "."
         parts.append(rules_str)
 
+    if annotation and annotation.use_cases:
+        use_cases_str = " Casos de uso e consultas de referência: " + " | ".join(annotation.use_cases) + "."
+        parts.append(use_cases_str)
+
     if isinstance(focal_obj, TableMeta):
         cols_summary = ", ".join([f"{c.name} ({c.data_type})" for c in focal_obj.columns[:15]])
         parts.append(f" Estrutura de colunas principais: {cols_summary}.")
@@ -748,6 +765,7 @@ def generate_rag_json(trace_result: ObjectTraceResult, annotation: ObjectAnnotat
         "type": focal_type,
         "risk_level": risk,
         "tags": annotation.tags if annotation else [],
+        "use_cases": annotation.use_cases if annotation else [],
         "text_for_embedding": semantic_text,
         "schema_context": {
             "columns": columns_info,
@@ -796,6 +814,7 @@ def render_dossier_markdown(
             "type": focal_type,
             "risk_level": risk_level,
             "tags": annotation.tags if annotation else [],
+            "use_cases": annotation.use_cases if annotation else [],
             "impact_summary": {
                 "total_connections": dep_count,
                 "upstream_parents": list(set(parents)),

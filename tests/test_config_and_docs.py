@@ -533,6 +533,38 @@ class ConfigAndDocsTests(unittest.TestCase):
         self.assertEqual(depth_map.get(("DEPARTAMENTOS", "EMPRESAS")), 2)
         self.assertEqual(depth_map.get(("HISTORICO_DEP", "DEPENDENTES")), 2)
 
+    def test_annotation_use_cases_and_markdown_rendering(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            from leai.annotations import load_annotation, save_annotation
+            from leai.docs import render_table_markdown
+            from leai.models import ObjectAnnotation
+
+            ann_file = Path(tmpdir) / "EMPLOYEES.yml"
+            ann = ObjectAnnotation(
+                description="Tabela de empregados",
+                business_rules=["Regra 1: Salário maior que zero"],
+                use_cases=[
+                    "SELECT id, nome FROM employees WHERE status = 'A';",
+                    "Relatório de folha de pagamento por departamento",
+                ],
+                columns={"ID": "Identificador único"},
+            )
+            save_annotation(ann_file, ann)
+            self.assertTrue(ann_file.exists())
+
+            loaded = load_annotation(ann_file)
+            self.assertEqual(len(loaded.use_cases), 2)
+            self.assertIn("SELECT id, nome FROM employees WHERE status = 'A';", loaded.use_cases[0])
+
+            table = TableMeta(
+                name="EMPLOYEES",
+                columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)],
+            )
+            md = render_table_markdown(table, annotation=loaded)
+            self.assertIn("## Casos de uso e Consultas de Exemplo", md)
+            self.assertIn("```sql\nSELECT id, nome FROM employees WHERE status = 'A';\n```", md)
+            self.assertIn("- Relatório de folha de pagamento por departamento", md)
+
 
 if __name__ == "__main__":
     unittest.main()

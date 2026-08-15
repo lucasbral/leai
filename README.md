@@ -195,6 +195,30 @@ leai annotate
 leai annotate -t tables
 ```
 
+#### 📝 Annotation Schema Layout (`annotations/tables/EMPLOYEES.yml`):
+```yaml
+description: "Core employees and contractors table."
+tags:
+  - HR
+  - Payroll
+business_rules:
+  - "Rule 1: Salary cannot be negative."
+  - "Rule 2: Status 'A' indicates active employee, 'I' inactive."
+use_cases:
+  - "Active employees payroll query:"
+  - |
+    SELECT id, name, salary 
+    FROM employees 
+    WHERE status = 'A' AND salary > 0;
+related_objects:
+  - DEPARTMENTS
+warnings:
+  - "Modifying employee status triggers TRG_AUDIT_EMP."
+columns:
+  ID: "Primary key identifier."
+  NAME: "Full legal name."
+```
+
 ---
 
 ### 4. `leai compile`
