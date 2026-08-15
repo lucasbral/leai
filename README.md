@@ -83,9 +83,9 @@ dsn: "oracle://${DB_USER}:${DB_PASS}@${DB_HOST}:1521/${DB_SERVICE}"
 
 # Schemas que fazem parte do seu ecossistema integrado
 schemas:
-  - C_ERGON
-  # - CADASTRO
-  # - FINANCEIRO
+  - HR
+  - FINANCEIRO
+  - CADASTRO
 
 # Pastas de saída do pipeline
 rawPath: "./raw"                  # Snapshots técnicos brutos
@@ -141,7 +141,7 @@ Conecta no banco de dados Oracle e extrai snapshots técnicos em formato JSON pa
 
 ```bash
 uv run leai extract
-uv run leai extract -s C_ERGON -t tables -t views
+uv run leai extract -s HR -t tables -t views
 ```
 
 ---
@@ -271,7 +271,7 @@ Audita e lista no terminal os objetos criados ou modificados recentemente no ban
 | Parâmetro / Opção | Tipo | Descrição |
 | :--- | :--- | :--- |
 | `-d`, `--days INT` | Opção | Quantidade de dias retroativos a auditar (Padrão: `7`). |
-| `-u`, `--user TEXT` | Opção | Filtrar pelo usuário modificador / schema (ex: `-u C_ERGON`). |
+| `-u`, `--user TEXT` | Opção | Filtrar pelo usuário modificador / schema (ex: `-u HR`). |
 | `-s`, `--schema TEXT` | Opção | Schema alvo da consulta. |
 | `-t`, `--object-type TEXT` | Opção | Filtrar tipos de objeto modificados. |
 | `-c`, `--config PATH` | Opção | Caminho para o `leai.yml`. |
@@ -281,7 +281,7 @@ Audita e lista no terminal os objetos criados ou modificados recentemente no ban
 uv run leai changes -d 15
 
 # Filtrar por schema
-uv run leai changes -d 30 -u C_ERGON
+uv run leai changes -d 30 -u HR
 ```
 
 ---
@@ -292,17 +292,17 @@ uv run leai changes -d 30 -u C_ERGON
 meu_projeto/
 ├── leai.yml
 ├── raw/                      <-- Snapshots puros em JSON extraídos do Oracle
-│   └── C_ERGON/
+│   └── HR/
 │       ├── tables/
 │       ├── views/
 │       ├── synonyms/
 │       └── code_objects/
 ├── annotations/              <-- Regras de negócio em YAML (editáveis)
-│   └── C_ERGON/
+│   └── HR/
 │       ├── tables/
 │       └── code_objects/
 └── docs/                     <-- Markdown final para LLM, RAG e leitura humana
-    └── C_ERGON/
+    └── HR/
         ├── tables/
         ├── dossiers/         <-- Dossiês de impacto gerados pelo leai trace
         └── code_objects/

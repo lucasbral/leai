@@ -37,8 +37,8 @@ class ChatSessionTests(unittest.TestCase):
                 ColumnMeta(name="SALARIO", data_type="NUMBER", nullable=False),
             ],
         )
-        self.schema = SchemaMetadata(schema_name="C_ERGON", tables=[t1])
-        self.cfg = LeaiConfig(dsn="", schemas=["C_ERGON"])
+        self.schema = SchemaMetadata(schema_name="HR", tables=[t1])
+        self.cfg = LeaiConfig(dsn="", schemas=["HR"])
         self.client = MockChatLLMClient()
         self.session = ChatSession(schemas=[self.schema], config=self.cfg, client=self.client)
 

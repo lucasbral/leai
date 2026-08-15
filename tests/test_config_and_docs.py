@@ -336,7 +336,7 @@ class ConfigAndDocsTests(unittest.TestCase):
                 name="AUDIT_TBL",
                 columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)],
                 last_ddl_time="2026-08-13 14:30:00",
-                last_modified_by="C_ERGON",
+                last_modified_by="HR",
             )
             schema = SchemaMetadata(tables=[tbl])
 
@@ -344,12 +344,12 @@ class ConfigAndDocsTests(unittest.TestCase):
             save_raw_schema(schema, raw_dir)
             loaded = load_raw_schema(raw_dir)
             self.assertEqual(loaded.tables[0].last_ddl_time, "2026-08-13 14:30:00")
-            self.assertEqual(loaded.tables[0].last_modified_by, "C_ERGON")
+            self.assertEqual(loaded.tables[0].last_modified_by, "HR")
 
             # Testar renderização Markdown
             write_schema_docs(loaded, docs_dir)
             md = (docs_dir / "tables" / "AUDIT_TBL.md").read_text(encoding="utf-8")
-            self.assertIn("**Última Modificação DDL:** 2026-08-13 14:30:00 (por `C_ERGON`)", md)
+            self.assertIn("**Última Modificação DDL:** 2026-08-13 14:30:00 (por `HR`)", md)
 
     def test_raw_schema_type_and_type_body_loading(self):
         with tempfile.TemporaryDirectory() as tmp:
