@@ -121,6 +121,7 @@ class ObjectAnnotation(BaseModel):
     description: str | None = None
     tags: list[str] = Field(default_factory=list)
     business_rules: list[str] = Field(default_factory=list)
+    use_cases: list[str] = Field(default_factory=list)
     related_objects: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     columns: dict[str, str] = Field(default_factory=dict)

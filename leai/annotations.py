@@ -25,6 +25,7 @@ def save_annotation(file_path: Path, annotation: ObjectAnnotation) -> None:
         "description": data.get("description") or "",
         "tags": data.get("tags") or [],
         "business_rules": data.get("business_rules") or [],
+        "use_cases": data.get("use_cases") or [],
         "related_objects": data.get("related_objects") or [],
         "warnings": data.get("warnings") or [],
         "columns": data.get("columns") or {},
@@ -54,6 +55,7 @@ def ensure_annotation_stub(
     annotation = ObjectAnnotation(
         description=db_comment or "",
         business_rules=[],
+        use_cases=[],
         columns=cols_dict,
     )
     save_annotation(file_path, annotation)
