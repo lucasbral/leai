@@ -65,5 +65,9 @@ packages = ["leai", "leai.ai"]
 line-length = 140
 target-version = "py310"
 
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

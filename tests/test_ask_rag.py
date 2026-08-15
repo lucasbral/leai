@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import unittest
+
 from leai.ask_rag import build_rag_context, extract_entities_from_question
 from leai.config import LeaiConfig
 from leai.models import (

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import json
 from pathlib import Path
 
@@ -762,7 +763,6 @@ def write_rag_json_file(
     output_path: Path,
     annotations_path: Path | None = None,
 ) -> Path:
-    import json
     base_ann = annotations_path or (output_path.parent.parent / "annotations")
     ann_path = base_ann / "dossiers" / f"{trace_result.focal_name}.yml"
     annotation = ensure_annotation_stub(ann_path)
@@ -824,7 +824,7 @@ def render_dossier_markdown(
     lines.extend(
         [
             f"> [!{risk_badge_color}]",
-            f"> **Raio-X de Impacto Técnico:**",
+            "> **Raio-X de Impacto Técnico:**",
             f"> - **Nível de Risco de Alteração:** `{risk_level}` ({dep_count} conexões no grafo)",
             f"> - **Tabelas Pais (Upstream):** `{len(set(parents))}` | **Tabelas Filhas (Downstream):** `{len(set(children))}`",
             f"> - **Consumidores Ativos (Views/Procs/Triggers):** `{len(set(consumers))}`",

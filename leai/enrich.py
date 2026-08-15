@@ -1,11 +1,13 @@
 from __future__ import annotations
+
 import json
-from pathlib import Path
+from collections.abc import Callable
+
 from rich.console import Console
 
 from leai.ai.base import BaseLLMClient
 from leai.ai.prompts import CODE_OBJECT_ENRICHMENT_SYSTEM_PROMPT, TABLE_ENRICHMENT_SYSTEM_PROMPT
-from leai.annotations import ensure_annotation_stub, load_annotation, save_annotation
+from leai.annotations import ensure_annotation_stub, save_annotation
 from leai.config import LeaiConfig
 from leai.models import CodeObjectMeta, ObjectAnnotation, SchemaMetadata, TableMeta
 
@@ -138,9 +140,6 @@ def enrich_code_object_annotation(
                     annotation.tags.append(t_clean)
 
     return annotation
-
-
-from typing import Callable
 
 
 def enrich_schema_annotations(

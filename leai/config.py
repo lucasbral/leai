@@ -4,7 +4,6 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
-
 DEFAULT_OBJECT_TYPES = [
     "tables",
     "views",
