@@ -18,7 +18,7 @@ dsn: "oracle://${DB_USER}:${DB_PASS}@${DB_HOST}:1521/${DB_SERVICE}"
 # ------------------------------------------------------------------------------
 # Opção A: Schema único (Modo tradicional)
 schemas:
-  - C_ERGON
+  - HR
 
 # Opção B: Lista de múltiplos schemas específicos
 # schemas:

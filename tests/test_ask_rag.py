@@ -54,14 +54,14 @@ class AskRAGTests(unittest.TestCase):
         )
 
         self.schema = SchemaMetadata(
-            schema_name="C_ERGON",
+            schema_name="HR",
             tables=[self.dep_table, self.func_table],
             views=[self.vw_folha],
             triggers=[self.trg_audit],
             code_objects=[self.pkg_folha],
         )
 
-        self.cfg = LeaiConfig(dsn="", schemas=["C_ERGON"])
+        self.cfg = LeaiConfig(dsn="", schemas=["HR"])
 
     def test_extract_entities_from_question(self):
         objects = {"FUNCIONARIOS", "DEPARTAMENTOS", "VW_FOLHA", "PKG_FOLHA"}
