@@ -9,7 +9,7 @@ from leai.ai.base import BaseLLMClient
 
 
 class AnthropicClient(BaseLLMClient):
-    """Cliente direto para a API Anthropic Claude (REST)."""
+    """Direct client for the Anthropic Claude REST API."""
 
     def __init__(
         self,
@@ -27,7 +27,7 @@ class AnthropicClient(BaseLLMClient):
 
     def _send_request(self, prompt: str, system_prompt: str | None = None) -> str:
         if not self.api_key:
-            raise ValueError("Chave de API da Anthropic (ANTHROPIC_API_KEY) não configurada.")
+            raise ValueError("Anthropic API key (ANTHROPIC_API_KEY) is not configured.")
 
         url = f"{self.base_url}/messages"
         headers = {
@@ -55,19 +55,19 @@ class AnthropicClient(BaseLLMClient):
                 resp_data = json.loads(resp.read().decode("utf-8"))
                 contents = resp_data.get("content", [])
                 if not contents:
-                    raise RuntimeError(f"Anthropic API retornou resposta sem conteúdo: {resp_data}")
+                    raise RuntimeError(f"Anthropic API returned empty response content: {resp_data}")
                 return contents[0]["text"]
         except urllib.error.HTTPError as exc:
             err_body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Erro na API da Anthropic (HTTP {exc.code}): {err_body}") from exc
+            raise RuntimeError(f"Anthropic API error (HTTP {exc.code}): {err_body}") from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"Erro de conexão com a Anthropic: {exc.reason}") from exc
+            raise RuntimeError(f"Connection error with Anthropic: {exc.reason}") from exc
 
     def generate_text(self, prompt: str, system_prompt: str | None = None) -> str:
         return self._send_request(prompt, system_prompt=system_prompt)
 
     def generate_json(self, prompt: str, system_prompt: str | None = None) -> dict[str, Any]:
-        sys = (system_prompt or "") + "\nIMPORTANTE: Responda APENAS com um objeto JSON válido, sem tags markdown ou comentários."
+        sys = (system_prompt or "") + "\nIMPORTANT: Respond ONLY with a valid JSON object, without markdown tags or comments."
         raw_output = self._send_request(prompt, system_prompt=sys.strip())
         cleaned = raw_output.strip()
         if cleaned.startswith("```json"):
@@ -84,11 +84,11 @@ class AnthropicClient(BaseLLMClient):
             match = re.search(r"(\{.*\})", cleaned, re.DOTALL)
             if match:
                 return json.loads(match.group(1))
-            raise ValueError(f"Não foi possível converter a resposta da Anthropic para JSON: {cleaned[:200]}") from exc
+            raise ValueError(f"Could not parse Anthropic response as JSON: {cleaned[:200]}") from exc
 
     def generate_chat(self, messages: list[dict[str, str]], system_prompt: str | None = None) -> str:
         if not self.api_key:
-            raise ValueError("Chave de API da Anthropic (ANTHROPIC_API_KEY) não configurada.")
+            raise ValueError("Anthropic API key (ANTHROPIC_API_KEY) is not configured.")
 
         url = f"{self.base_url}/messages"
         headers = {

@@ -9,7 +9,7 @@ from leai.models import SchemaMetadata
 
 
 class ChatSession:
-    """Gerenciador de sessão de conversa interativa multi-turno com RAG contextual."""
+    """Interactive multi-turn conversation session manager with contextual RAG."""
 
     def __init__(
         self,
@@ -27,7 +27,7 @@ class ChatSession:
 
     def add_user_message(self, content: str) -> None:
         self.messages.append({"role": "user", "content": content})
-        # Limitar histórico para não estourar janela de contexto
+        # Limit history to prevent context window overflow
         if len(self.messages) > self.max_history_turns * 2:
             self.messages = self.messages[-(self.max_history_turns * 2):]
 
@@ -35,26 +35,26 @@ class ChatSession:
         self.messages.append({"role": "assistant", "content": content})
 
     def clear(self) -> None:
-        """Limpa o histórico e a memória da sessão."""
+        """Clears session history and memory."""
         self.messages.clear()
         self.active_entities.clear()
 
     def save_transcript(self, output_file: Path | None = None) -> Path:
-        """Exporta o histórico da conversa formatado em Markdown."""
+        """Exports the conversation history formatted in Markdown."""
         now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         target_path = output_file or Path(f"leai_chat_{now}.md")
 
         lines = [
             f"# LEAI Chat Session Transcript - {now}",
-            f"- **Provedor:** {self.client.__class__.__name__} ({self.client.model})",
-            f"- **Entidades Mapeadas:** {', '.join(self.active_entities) if self.active_entities else 'Nenhuma'}",
+            f"- **Provider:** {self.client.__class__.__name__} ({self.client.model})",
+            f"- **Mapped Entities:** {', '.join(self.active_entities) if self.active_entities else 'None'}",
             "",
             "---",
             "",
         ]
 
         for msg in self.messages:
-            role = "👤 **Você**" if msg["role"] == "user" else "🤖 **Assistente LEAI**"
+            role = "👤 **User**" if msg["role"] == "user" else "🤖 **LEAI Assistant**"
             lines.append(f"### {role}")
             lines.append(msg["content"])
             lines.append("")
@@ -64,24 +64,24 @@ class ChatSession:
         return target_path
 
     def send(self, user_input: str) -> tuple[str, list[str]]:
-        """Processa a entrada do usuário, atualiza o contexto RAG e obtém a resposta da IA."""
-        # 1. Atualizar contexto RAG com a nova pergunta
+        """Processes user input, updates RAG context, and retrieves AI response."""
+        # 1. Update RAG context with the new question
         rag_context, detected = build_rag_context(user_input, self.schemas, self.config)
         for entity in detected:
             self.active_entities.add(entity)
 
-        # 2. Montar System Prompt com RAG acumulado
+        # 2. Assemble System Prompt with accumulated RAG memory
         combined_sys = (
             f"{ASK_SYSTEM_PROMPT}\n\n"
-            f"### [MEMÓRIA DE CONVERSA E RAG ACUMULADO]\n"
-            f"Entidades ativas na conversa: {', '.join(self.active_entities) if self.active_entities else 'Nenhuma'}\n\n"
-            f"Contexto do Banco de Dados Oracle:\n{rag_context}"
+            f"### [CONVERSATION MEMORY & ACCUMULATED RAG]\n"
+            f"Active entities in conversation: {', '.join(self.active_entities) if self.active_entities else 'None'}\n\n"
+            f"Oracle Database Context:\n{rag_context}"
         )
 
-        # 3. Adicionar mensagem do usuário
+        # 3. Add user message
         self.add_user_message(user_input)
 
-        # 4. Gerar resposta com histórico multi-turno
+        # 4. Generate multi-turn response
         reply = self.client.generate_chat(self.messages, system_prompt=combined_sys)
         self.add_assistant_message(reply)
 

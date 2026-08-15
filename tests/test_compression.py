@@ -39,6 +39,15 @@ class CompressionTests(unittest.TestCase):
         self.assertIn("PROCEDURE CALCULA_VALOR IS", minified)
         self.assertIn("-- regra: se valor for negativo, zera", minified)
 
+    def test_minify_preserves_oracle_hints(self):
+        source = """
+        SELECT /*+ INDEX(t emp_idx) */ id, nome
+        FROM funcionarios t
+        WHERE id = 10;
+        """
+        minified = minify_plsql_source(source)
+        self.assertIn("/*+ INDEX(t emp_idx) */", minified)
+
     def test_extract_subprogram_block(self):
         huge_package = """
         PACKAGE BODY PKG_COMPLEXA IS

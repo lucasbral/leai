@@ -13,7 +13,7 @@ def load_annotation(file_path: Path) -> ObjectAnnotation:
         if isinstance(raw, dict):
             return ObjectAnnotation.model_validate(raw)
     except Exception as exc:
-        print(f"Aviso: Erro ao carregar arquivo de anotação '{file_path}': {exc}", file=sys.stderr)
+        print(f"Warning: Error loading annotation file '{file_path}': {exc}", file=sys.stderr)
     return ObjectAnnotation()
 
 
@@ -39,7 +39,7 @@ def ensure_annotation_stub(
     column_names = column_names or []
     if file_path.exists():
         existing = load_annotation(file_path)
-        # Preserva 100% das anotações humanas e insere apenas colunas novas que surgiram no banco
+        # Preserve 100% of human annotations and only insert new columns added to the database
         updated = False
         for col in column_names:
             if col not in existing.columns:

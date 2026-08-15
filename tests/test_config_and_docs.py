@@ -99,7 +99,7 @@ class ConfigAndDocsTests(unittest.TestCase):
             self.assertEqual(cfg.schemas, ["HR", "SALES"])
             self.assertFalse(cfg.is_all_schemas)
 
-            # Teste modo ALL
+            # Test ALL mode
             cfg_file_all = root / "leai_all.yml"
             cfg_file_all.write_text(
                 """
@@ -128,12 +128,12 @@ class ConfigAndDocsTests(unittest.TestCase):
             self.assertTrue((raw_dir / "HR" / "tables" / "EMPLOYEES.json").exists())
             self.assertTrue((raw_dir / "SALES" / "tables" / "ORDERS.json").exists())
 
-            # Testar carregamento multi-schema
+            # Test multi-schema loading
             loaded_schemas = load_raw_schemas(raw_dir)
             self.assertEqual(len(loaded_schemas), 2)
             self.assertEqual({s.schema_name for s in loaded_schemas}, {"HR", "SALES"})
 
-            # Compilar para Markdown
+            # Compile to Markdown
             for s in loaded_schemas:
                 write_schema_docs(s, docs_dir, annotations_path=ann_dir, multi_schema=True)
 
@@ -244,19 +244,19 @@ class ConfigAndDocsTests(unittest.TestCase):
             schema = SchemaMetadata(code_objects=[code_pkg])
             generated_md, generated_ann = write_schema_docs(schema, docs_dir, annotations_path=ann_dir)
 
-            # 1 Pkg Global + 2 Subprogramas = 3 arquivos gerados
+            # 1 Global Pkg + 2 Subprograms = 3 generated files
             self.assertEqual(len(generated_md), 3)
             self.assertEqual(len(generated_ann), 3)
 
-            # Verificar existência dos sub-arquivos
+            # Verify existence of sub-files
             self.assertTrue((docs_dir / "package_bodys" / "PKG_FOLHA.md").exists())
             self.assertTrue((docs_dir / "package_bodys" / "PKG_FOLHA" / "CALCULA_INSS.md").exists())
             self.assertTrue((docs_dir / "package_bodys" / "PKG_FOLHA" / "CALCULA_IRRF.md").exists())
 
-            # Verificar anotações dos subprogramas
+            # Verify subprogram annotations
             self.assertTrue((ann_dir / "package_bodys" / "PKG_FOLHA" / "CALCULA_INSS.yml").exists())
 
-            # Conteúdo do sub-markdown
+            # Content of subprogram markdown
             inss_md = (docs_dir / "package_bodys" / "PKG_FOLHA" / "CALCULA_INSS.md").read_text(encoding="utf-8")
             self.assertIn("# PROCEDURE: PKG_FOLHA.CALCULA_INSS", inss_md)
             self.assertIn("PROCEDURE CALCULA_INSS IS BEGIN NULL; END;", inss_md)
@@ -289,12 +289,12 @@ class ConfigAndDocsTests(unittest.TestCase):
             schema = SchemaMetadata(tables=[TableMeta(name="T1", columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)])])
             save_raw_schema(schema, raw_dir)
 
-            # Modificar anotação
+            # Modify annotation
             ann_file = ann_dir / "tables" / "T1.yml"
             ann_file.parent.mkdir(parents=True, exist_ok=True)
             ann_file.write_text("description: 'Anotação offline'\nbusiness_rules:\n  - 'Regra offline'", encoding="utf-8")
 
-            # Compilar offline
+            # Compile offline
             loaded_schema = load_raw_schema(raw_dir)
             write_schema_docs(loaded_schema, docs_dir, annotations_path=ann_dir)
 
@@ -318,7 +318,7 @@ class ConfigAndDocsTests(unittest.TestCase):
             )
 
             from leai.annotations import ensure_annotation_stub
-            # Simular nova coluna 'EMAIL' vinda do raw/banco
+            # Simulate new 'EMAIL' column coming from RAW/database
             ann = ensure_annotation_stub(ann_file, column_names=["COD", "EMAIL"])
 
             self.assertEqual(ann.description, "Descrição de negócio existente")
@@ -340,13 +340,13 @@ class ConfigAndDocsTests(unittest.TestCase):
             )
             schema = SchemaMetadata(tables=[tbl])
 
-            # Testar salvamento e carregamento RAW
+            # Test saving and loading RAW
             save_raw_schema(schema, raw_dir)
             loaded = load_raw_schema(raw_dir)
             self.assertEqual(loaded.tables[0].last_ddl_time, "2026-08-13 14:30:00")
             self.assertEqual(loaded.tables[0].last_modified_by, "HR")
 
-            # Testar renderização Markdown
+            # Test Markdown rendering
             write_schema_docs(loaded, docs_dir)
             md = (docs_dir / "tables" / "AUDIT_TBL.md").read_text(encoding="utf-8")
             self.assertIn("**Última Modificação DDL:** 2026-08-13 14:30:00 (por `HR`)", md)
@@ -374,7 +374,7 @@ class ConfigAndDocsTests(unittest.TestCase):
             view = ViewMeta(name="VIEW1", text="SELECT 1 FROM DUAL")
             schema = SchemaMetadata(tables=[tbl], views=[view])
 
-            # Filtrar apenas tabelas
+            # Filter only tables
             gen_md, gen_ann = write_schema_docs(schema, docs_dir, annotations_path=ann_dir, object_types=["tables"])
             self.assertTrue((docs_dir / "tables" / "TBL1.md").exists())
             self.assertFalse((docs_dir / "views" / "VIEW1.md").exists())
@@ -432,7 +432,7 @@ class ConfigAndDocsTests(unittest.TestCase):
         self.assertEqual(res.focal_type, "TABLE")
         self.assertIsNotNone(res.focal_object)
 
-        # Deve conter 4 links de dependência (FK saída, FK entrada, View, Trigger)
+        # Must contain 4 dependency links (outgoing FK, incoming FK, View, Trigger)
         self.assertEqual(len(res.dependencies), 4)
 
         rel_types = {d.relation_type for d in res.dependencies}
@@ -441,7 +441,7 @@ class ConfigAndDocsTests(unittest.TestCase):
         self.assertIn("READS/SELECTS", rel_types)
         self.assertIn("TRIGGER_ON", rel_types)
 
-        self.assertEqual(len(res.related_tables), 2)  # DEPARTAMENTOS e DEPENDENTES
+        self.assertEqual(len(res.related_tables), 2)  # DEPARTAMENTOS and DEPENDENTES
         self.assertEqual(len(res.related_views), 1)   # VW_FOLHA
         self.assertEqual(len(res.related_triggers), 1) # TRG_FUNC_AUDIT
 
@@ -464,7 +464,7 @@ class ConfigAndDocsTests(unittest.TestCase):
             res = trace_raw_dependencies([schema], "FUNCIONARIOS")
             out_file = docs_dir / "dossiers" / "FUNCIONARIOS.md"
 
-            # Escrever arquivo prévio com seção manual
+            # Write pre-existing file with manual section
             out_file.parent.mkdir(parents=True, exist_ok=True)
             out_file.write_text(f"{MANUAL_START}\nDocumentação humana prévia do dossiê\n{MANUAL_END}\n", encoding="utf-8")
 
@@ -480,7 +480,7 @@ class ConfigAndDocsTests(unittest.TestCase):
             self.assertIn("Tabela de colaboradores da empresa", content)
             self.assertIn("Documentação humana prévia do dossiê", content)
 
-            # Testar geração de RAG JSON
+            # Test RAG JSON generation
             json_file = docs_dir / "chunks" / "FUNCIONARIOS.json"
             written_json = write_rag_json_file(res, json_file, annotations_path=ann_dir)
             self.assertTrue(written_json.exists())
@@ -515,7 +515,7 @@ class ConfigAndDocsTests(unittest.TestCase):
             foreign_keys=[ForeignKeyMeta(name="FK_HIST_DEP", column="DEP_ID", referenced_table="DEPENDENTES", referenced_column="ID")],
         )
 
-        # Ciclo: Trigger na EMPRESAS que referencia FUNCIONARIOS
+        # Cycle: Trigger on EMPRESAS referencing FUNCIONARIOS
         trg_cycle = TriggerMeta(name="TRG_EMP_CYCLE", table_name="EMPRESAS", trigger_type="AFTER UPDATE", triggering_event="UPDATE")
 
         schema = SchemaMetadata(
@@ -525,19 +525,19 @@ class ConfigAndDocsTests(unittest.TestCase):
 
         from leai.raw import trace_raw_dependencies
 
-        # 1. Teste Depth = 1 (Apenas vizinhos diretos)
+        # 1. Test Depth = 1 (Direct neighbors only)
         res_depth1 = trace_raw_dependencies([schema], "FUNCIONARIOS", max_depth=1)
         rel_tables_d1 = {t.name for t in res_depth1.related_tables}
         self.assertEqual(rel_tables_d1, {"DEPARTAMENTOS", "DEPENDENTES"})
         self.assertNotIn("EMPRESAS", rel_tables_d1)
         self.assertNotIn("HISTORICO_DEP", rel_tables_d1)
 
-        # 2. Teste Depth = 2 (Vizinhos diretos + indiretos)
+        # 2. Test Depth = 2 (Direct + Indirect neighbors)
         res_depth2 = trace_raw_dependencies([schema], "FUNCIONARIOS", max_depth=2)
         rel_tables_d2 = {t.name for t in res_depth2.related_tables}
         self.assertEqual(rel_tables_d2, {"DEPARTAMENTOS", "DEPENDENTES", "EMPRESAS", "HISTORICO_DEP"})
 
-        # Validar profundidades registradas nos links
+        # Validate recorded link depths
         depth_map = {(d.source_name, d.target_name): d.depth for d in res_depth2.dependencies}
         self.assertEqual(depth_map.get(("FUNCIONARIOS", "DEPARTAMENTOS")), 1)
         self.assertEqual(depth_map.get(("DEPENDENTES", "FUNCIONARIOS")), 1)

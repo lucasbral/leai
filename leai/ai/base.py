@@ -4,7 +4,7 @@ from typing import Any
 
 
 class BaseLLMClient(ABC):
-    """Interface abstrata padronizada para clientes LLM no LEAI."""
+    """Standardized abstract interface for LLM clients in LEAI."""
 
     def __init__(self, api_key: str | None = None, model: str | None = None, base_url: str | None = None, temperature: float = 0.2):
         self.api_key = api_key
@@ -14,16 +14,16 @@ class BaseLLMClient(ABC):
 
     @abstractmethod
     def generate_text(self, prompt: str, system_prompt: str | None = None) -> str:
-        """Gera resposta em texto plano a partir do prompt."""
+        """Generates plain text response from the given prompt."""
         pass
 
     @abstractmethod
     def generate_json(self, prompt: str, system_prompt: str | None = None) -> dict[str, Any]:
-        """Gera e retorna um objeto JSON estruturado a partir do prompt."""
+        """Generates and returns a structured JSON object from the given prompt."""
         pass
 
     @abstractmethod
     def generate_chat(self, messages: list[dict[str, str]], system_prompt: str | None = None) -> str:
-        """Gera resposta considerando todo o histórico de mensagens multi-turno."""
+        """Generates a response considering the full multi-turn message history."""
         pass
 

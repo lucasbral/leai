@@ -139,7 +139,7 @@ def load_raw_schemas(raw_path: Path) -> list[SchemaMetadata]:
     if not raw_path.exists():
         return []
 
-    # Verificar se raw_path contém subpastas que representam schemas
+    # Check if raw_path contains subdirectories representing multiple schemas
     subdirs = [d for d in raw_path.iterdir() if d.is_dir() and d.name not in {
         "tables", "views", "mviews", "procedures", "functions", "packages", "package_bodys", "types", "type_bodys", "triggers", "sequences", "indexes", "synonyms"
     }]
@@ -197,7 +197,7 @@ def trace_raw_dependencies(schemas: list[SchemaMetadata], target_object_name: st
 
     current_layer = {target_upper}
 
-    # Se o objeto inicial for um Sinônimo, resolver para o alvo real
+    # If initial object is a Synonym, resolve to the actual target
     if focal_type == "SYNONYM" and focal_obj and focal_obj.table_name:
         real_target = focal_obj.table_name.upper()
         details_str = f"Sinônimo aponta para {focal_obj.table_owner or ''}.{focal_obj.table_name}"
@@ -228,7 +228,7 @@ def trace_raw_dependencies(schemas: list[SchemaMetadata], target_object_name: st
             word_pattern = re.compile(rf"\b{re.escape(curr_name)}\b", re.IGNORECASE)
 
             for schema in schemas:
-                # 0) Sinônimos que apontam para o objeto atual
+                # 0) Synonyms pointing to current object
                 for syn in schema.synonyms:
                     if syn.table_name and syn.table_name.upper() == curr_name:
                         syn_name = syn.name.upper()
@@ -253,7 +253,7 @@ def trace_raw_dependencies(schemas: list[SchemaMetadata], target_object_name: st
 
 
             for schema in schemas:
-                # A) Chaves Estrangeiras de saída
+                # A) Outgoing Foreign Keys
                 if isinstance(curr_obj, TableMeta):
                     for fk in curr_obj.foreign_keys:
                         ref_tbl = fk.referenced_table.upper()
@@ -276,7 +276,7 @@ def trace_raw_dependencies(schemas: list[SchemaMetadata], target_object_name: st
                             next_layer.add(ref_tbl)
                             all_related_names.add(ref_tbl)
 
-                # B) Chaves Estrangeiras de entrada
+                # B) Incoming Foreign Keys
                 for t in schema.tables:
                     if t.name.upper() == curr_name:
                         continue
@@ -302,7 +302,7 @@ def trace_raw_dependencies(schemas: list[SchemaMetadata], target_object_name: st
                                 next_layer.add(child_name)
                                 all_related_names.add(child_name)
 
-                # C) Triggers vinculadas
+                # C) Attached Triggers
                 for trg in schema.triggers:
                     trg_tbl = (trg.table_name or "").upper()
                     if trg_tbl == curr_name:
@@ -326,7 +326,7 @@ def trace_raw_dependencies(schemas: list[SchemaMetadata], target_object_name: st
                             next_layer.add(trg_name)
                             all_related_names.add(trg_name)
 
-                # D) Views que consultam o objeto
+                # D) Views querying this object
                 for v in schema.views:
                     if v.name.upper() == curr_name:
                         continue
@@ -403,7 +403,7 @@ def trace_raw_dependencies(schemas: list[SchemaMetadata], target_object_name: st
 
         current_layer = next_layer
 
-    # Anexar metadados dos objetos relacionados
+    # Attach metadata of related objects
     for schema in schemas:
         for t in schema.tables:
             if t.name.upper() in all_related_names and t.name.upper() != target_upper:

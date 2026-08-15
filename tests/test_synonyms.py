@@ -8,7 +8,7 @@ from leai.raw import trace_raw_dependencies
 
 class SynonymTests(unittest.TestCase):
     def setUp(self):
-        # Schema CADASTRO com a tabela física TB_FUNCIONARIOS
+        # CADASTRO schema with physical table TB_FUNCIONARIOS
         self.func_table = TableMeta(
             name="TB_FUNCIONARIOS",
             columns=[
@@ -22,7 +22,7 @@ class SynonymTests(unittest.TestCase):
             tables=[self.func_table],
         )
 
-        # Schema FOLHA com um sinônimo apontando para CADASTRO.TB_FUNCIONARIOS
+        # FOLHA schema with a synonym pointing to CADASTRO.TB_FUNCIONARIOS
         self.syn_func = SynonymMeta(
             name="FUNCIONARIOS",
             table_owner="CADASTRO",
@@ -42,7 +42,7 @@ class SynonymTests(unittest.TestCase):
         self.cfg = LeaiConfig(dsn="", schemas=["CADASTRO", "FOLHA"])
 
     def test_trace_resolves_synonym_to_real_target(self):
-        # Executar trace no sinônimo FUNCIONARIOS
+        # Execute trace on synonym FUNCIONARIOS
         trace_res = trace_raw_dependencies([self.schema_cadastro, self.schema_folha], "FUNCIONARIOS", max_depth=2)
 
         self.assertEqual(trace_res.focal_type, "SYNONYM")
