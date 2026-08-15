@@ -65,3 +65,36 @@ object_types:
   - sequences
   - indexes
   - synonyms
+
+# ------------------------------------------------------------------------------
+# 6. CONFIGURAÇÃO DE IA (LLMs para Auto-Enriquecimento e Assistente)
+# ------------------------------------------------------------------------------
+ai:
+  default_provider: "openai" # "openai", "gemini", "anthropic", "deepseek", "qwen", "kimi", "ollama"
+  temperature: 0.2
+  providers:
+    openai:
+      api_key: "${OPENAI_API_KEY}"
+      model: "gpt-4o-mini"
+    gemini:
+      api_key: "${GEMINI_API_KEY}"
+      model: "gemini-1.5-flash"
+    anthropic:
+      api_key: "${ANTHROPIC_API_KEY}"
+      model: "claude-3-5-sonnet-20241022"
+    deepseek:
+      api_key: "${DEEPSEEK_API_KEY}"
+      base_url: "https://api.deepseek.com/v1"
+      model: "deepseek-chat"
+    qwen:
+      api_key: "${DASHSCOPE_API_KEY}"
+      base_url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+      model: "qwen-plus"
+    kimi:
+      api_key: "${MOONSHOT_API_KEY}"
+      base_url: "https://api.moonshot.cn/v1"
+      model: "moonshot-v1-8k"
+    ollama:
+      base_url: "http://localhost:11434/v1"
+      model: "llama3.1"
+

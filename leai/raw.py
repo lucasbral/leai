@@ -175,6 +175,9 @@ def _find_raw_object(schemas: list[SchemaMetadata], name: str):
         for trg in s.triggers:
             if trg.name.upper() == name_upper:
                 return "TRIGGER", trg
+        for syn in s.synonyms:
+            if syn.name.upper() == name_upper:
+                return "SYNONYM", syn
     return "UNKNOWN", None
 
 
@@ -194,6 +197,27 @@ def trace_raw_dependencies(schemas: list[SchemaMetadata], target_object_name: st
 
     current_layer = {target_upper}
 
+    # Se o objeto inicial for um Sinônimo, resolver para o alvo real
+    if focal_type == "SYNONYM" and focal_obj and focal_obj.table_name:
+        real_target = focal_obj.table_name.upper()
+        details_str = f"Sinônimo aponta para {focal_obj.table_owner or ''}.{focal_obj.table_name}"
+        if focal_obj.db_link:
+            details_str += f"@{focal_obj.db_link}"
+        result.dependencies.append(
+            DependencyLink(
+                source_name=target_upper,
+                source_type="SYNONYM",
+                target_name=real_target,
+                target_type="TARGET",
+                relation_type="SYNONYM_FOR",
+                details=details_str,
+                depth=1,
+            )
+        )
+        visited_nodes.add(real_target)
+        current_layer.add(real_target)
+        all_related_names.add(real_target)
+
     for current_depth in range(1, max(1, max_depth) + 1):
         if not current_layer:
             break
@@ -202,6 +226,31 @@ def trace_raw_dependencies(schemas: list[SchemaMetadata], target_object_name: st
         for curr_name in current_layer:
             curr_type, curr_obj = _find_raw_object(schemas, curr_name)
             word_pattern = re.compile(rf"\b{re.escape(curr_name)}\b", re.IGNORECASE)
+
+            for schema in schemas:
+                # 0) Sinônimos que apontam para o objeto atual
+                for syn in schema.synonyms:
+                    if syn.table_name and syn.table_name.upper() == curr_name:
+                        syn_name = syn.name.upper()
+                        link_key = ("SYNONYM", syn_name, curr_name)
+                        if link_key not in seen_links:
+                            seen_links.add(link_key)
+                            result.dependencies.append(
+                                DependencyLink(
+                                    source_name=syn_name,
+                                    source_type="SYNONYM",
+                                    target_name=curr_name,
+                                    target_type=curr_type,
+                                    relation_type="SYNONYM_FOR",
+                                    details=f"Sinônimo {syn_name} aponta para {curr_name}",
+                                    depth=current_depth,
+                                )
+                            )
+                        if syn_name not in visited_nodes:
+                            visited_nodes.add(syn_name)
+                            next_layer.add(syn_name)
+                            all_related_names.add(syn_name)
+
 
             for schema in schemas:
                 # A) Chaves Estrangeiras de saída

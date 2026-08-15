@@ -25,3 +25,9 @@ annotations/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Test Coverage
+.coverage
+.coverage.*
+htmlcov/
+

@@ -20,10 +20,24 @@ DEFAULT_OBJECT_TYPES = [
 ]
 
 
+class AIProviderConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    api_key: str | None = None
+    base_url: str | None = None
+    model: str | None = None
+
+
+class AIConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    default_provider: str = "openai"
+    temperature: float = 0.2
+    providers: dict[str, AIProviderConfig] = Field(default_factory=dict)
+
+
 class LeaiConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    dsn: str
+    dsn: str = ""
     schemas: list[str] = Field(default_factory=list)
     is_all_schemas: bool = False
     rawPath: Path = Field(default=Path("./raw"))
@@ -33,10 +47,12 @@ class LeaiConfig(BaseModel):
     exclude: list[str] = Field(default_factory=list)
     object_types: list[str] = Field(default_factory=lambda: list(DEFAULT_OBJECT_TYPES))
     docs: dict[str, dict[str, str]] = Field(default_factory=dict)
+    ai: AIConfig = Field(default_factory=AIConfig)
 
     @property
     def schema_name(self) -> str:
         return self.schemas[0] if self.schemas else ""
+
 
 
 class ConfigError(ValueError):
