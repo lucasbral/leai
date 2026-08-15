@@ -3,14 +3,12 @@
 **LEAI** is a reverse engineering, impact analysis, and documentation engine for **Oracle Database**, specifically designed to power **Retrieval-Augmented Generation (RAG)**, **LLMs**, and software engineers maintaining complex enterprise database ecosystems.
 
 > [!IMPORTANT]
-> 🔒 **Segurança e Privacidade de Dados / Security & Data Privacy:**
+> 🔒 **Security & Data Privacy Guarantee:**
 >
-> O **LEAI NÃO acessa nem extrai os dados (registros/linhas) armazenados no banco de dados**.
-> Ele lê **exclusivamente metadados do dicionário de dados (DDL)**: tabelas, colunas, tipos, views, procedures, pacotes, triggers, constraints e sinônimos.
+> **LEAI NEVER accesses, reads, or extracts business data (table records or rows) stored in the database.**
+> It strictly reads **data dictionary metadata and DDL definitions**: tables, column types, primary/foreign keys, views, materialized views, stored procedures, packages, triggers, indexes, and synonyms.
 >
-> 💡 **Um usuário de banco com permissão apenas de auditoria / leitura do catálogo (ex: `SELECT ANY DICTIONARY` ou leitura das views `ALL_*`) é 100% suficiente**, garantindo conformidade com LGPD/GDPR sem qualquer risco de exposição de dados de negócio.
->
-> *(EN: LEAI strictly reads database metadata/DDLs and NEVER accesses table records or confidential business data. An audit/metadata read-only user is completely sufficient.)*
+> 💡 **A database user with metadata-only / audit permissions (such as `SELECT ANY DICTIONARY` or read access to `ALL_*` catalog views) is 100% sufficient.** This ensures full enterprise security and compliance (LGPD / GDPR / SOC2) with zero risk of exposing confidential or sensitive business data.
 
 ---
 
