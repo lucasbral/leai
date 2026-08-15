@@ -97,7 +97,7 @@ def load_raw_schema(raw_path: Path, schema_name: str = "") -> SchemaMetadata:
             schema.mviews.append(MaterializedViewMeta.model_validate(raw_data))
 
     # 4. Code Objects
-    for folder_name in ["procedures", "functions", "packages", "package_bodys"]:
+    for folder_name in ["procedures", "functions", "packages", "package_bodys", "types", "type_bodys"]:
         code_dir = raw_path / folder_name
         if code_dir.exists():
             for p in sorted(code_dir.glob("*.json")):
@@ -141,7 +141,7 @@ def load_raw_schemas(raw_path: Path) -> list[SchemaMetadata]:
 
     # Verificar se raw_path contém subpastas que representam schemas
     subdirs = [d for d in raw_path.iterdir() if d.is_dir() and d.name not in {
-        "tables", "views", "mviews", "procedures", "functions", "packages", "package_bodys", "triggers", "sequences", "indexes", "synonyms"
+        "tables", "views", "mviews", "procedures", "functions", "packages", "package_bodys", "types", "type_bodys", "triggers", "sequences", "indexes", "synonyms"
     }]
 
     if subdirs:

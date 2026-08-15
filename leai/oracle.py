@@ -382,7 +382,8 @@ def _fetch_code_objects(cursor: oracledb.Cursor, config: LeaiConfig, target_type
     )
     raw_objs = cursor.fetchall()
 
-    pkg_bodies = {name for name, otype in raw_objs if otype in ("PACKAGE BODY", "TYPE BODY")}
+    pkg_bodies = {name for name, otype in raw_objs if otype == "PACKAGE BODY"}
+    type_bodies = {name for name, otype in raw_objs if otype == "TYPE BODY"}
 
     code_objs: list[CodeObjectMeta] = []
     seen = set()
@@ -392,7 +393,7 @@ def _fetch_code_objects(cursor: oracledb.Cursor, config: LeaiConfig, target_type
         # Se existe PACKAGE BODY ou TYPE BODY, priorizar o BODY para obter a implementação completa
         if obj_type == "PACKAGE" and obj_name in pkg_bodies and "PACKAGE BODY" in target_types:
             continue
-        if obj_type == "TYPE" and obj_name in pkg_bodies and "TYPE BODY" in target_types:
+        if obj_type == "TYPE" and obj_name in type_bodies and "TYPE BODY" in target_types:
             continue
         if (obj_name, obj_type) in seen:
             continue
@@ -683,24 +684,25 @@ def fetch_schema_metadata(
         # Enriquecer os objetos com os metadados de auditoria (CREATED, LAST_DDL_TIME, OWNER)
         try:
             timestamps = _fetch_object_timestamps(cursor, target_schema, prefix=prefix)
-            for category_list in [
-                schema_meta.tables,
-                schema_meta.views,
-                schema_meta.mviews,
-                schema_meta.code_objects,
-                schema_meta.triggers,
-                schema_meta.sequences,
-                schema_meta.indexes,
-                schema_meta.synonyms,
-            ]:
+            category_mapping = [
+                (schema_meta.tables, "TABLE"),
+                (schema_meta.views, "VIEW"),
+                (schema_meta.mviews, "MATERIALIZED VIEW"),
+                (schema_meta.code_objects, None),
+                (schema_meta.triggers, "TRIGGER"),
+                (schema_meta.sequences, "SEQUENCE"),
+                (schema_meta.indexes, "INDEX"),
+                (schema_meta.synonyms, "SYNONYM"),
+            ]
+            for category_list, default_type in category_mapping:
                 for item in category_list:
-                    otype = getattr(item, "object_type", "").upper() or "TABLE"
+                    otype = (getattr(item, "object_type", None) or default_type or "TABLE").upper()
                     key = (item.name.upper(), otype)
                     if key in timestamps:
                         item.created_at, item.last_ddl_time, item.last_modified_by = timestamps[key]
                     else:
-                        for (o_name, _), (c_at, l_ddl, l_by) in timestamps.items():
-                            if o_name == item.name.upper():
+                        for (o_name, t_type), (c_at, l_ddl, l_by) in timestamps.items():
+                            if o_name == item.name.upper() and (t_type == otype or not default_type):
                                 item.created_at = c_at
                                 item.last_ddl_time = l_ddl
                                 item.last_modified_by = l_by

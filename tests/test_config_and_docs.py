@@ -350,7 +350,51 @@ class ConfigAndDocsTests(unittest.TestCase):
             md = (docs_dir / "tables" / "AUDIT_TBL.md").read_text(encoding="utf-8")
             self.assertIn("**Última Modificação DDL:** 2026-08-13 14:30:00 (por `C_ERGON`)", md)
 
+    def test_raw_schema_type_and_type_body_loading(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            raw_dir = Path(tmp) / "raw"
+            type_obj = CodeObjectMeta(name="TP_PESSOA", object_type="TYPE", source="TYPE TP_PESSOA AS OBJECT (id NUMBER);")
+            type_body_obj = CodeObjectMeta(name="TP_PESSOA", object_type="TYPE BODY", source="TYPE BODY TP_PESSOA AS END;")
+            schema = SchemaMetadata(code_objects=[type_obj, type_body_obj])
+            save_raw_schema(schema, raw_dir)
+
+            loaded = load_raw_schema(raw_dir)
+            self.assertEqual(len(loaded.code_objects), 2)
+            types_found = {c.object_type for c in loaded.code_objects}
+            self.assertEqual(types_found, {"TYPE", "TYPE BODY"})
+
+    def test_write_schema_docs_object_types_filtering(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            docs_dir = root / "docs"
+            ann_dir = root / "annotations"
+
+            tbl = TableMeta(name="TBL1", columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)])
+            view = ViewMeta(name="VIEW1", text="SELECT 1 FROM DUAL")
+            schema = SchemaMetadata(tables=[tbl], views=[view])
+
+            # Filtrar apenas tabelas
+            gen_md, gen_ann = write_schema_docs(schema, docs_dir, annotations_path=ann_dir, object_types=["tables"])
+            self.assertTrue((docs_dir / "tables" / "TBL1.md").exists())
+            self.assertFalse((docs_dir / "views" / "VIEW1.md").exists())
+
+    def test_sync_schema_annotations_only_generates_annotations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            docs_dir = root / "docs"
+            ann_dir = root / "annotations"
+
+            tbl = TableMeta(name="TBL1", columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)])
+            schema = SchemaMetadata(tables=[tbl])
+
+            from leai.docs import sync_schema_annotations
+            gen_ann = sync_schema_annotations(schema, ann_dir)
+            self.assertEqual(len(gen_ann), 1)
+            self.assertTrue((ann_dir / "tables" / "TBL1.yml").exists())
+            self.assertFalse((docs_dir / "tables" / "TBL1.md").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

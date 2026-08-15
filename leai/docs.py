@@ -370,12 +370,34 @@ def _write_single_doc(file_path: Path, new_markdown: str) -> Path:
     return file_path
 
 
+def _is_category_allowed(category: str, allowed_types: set[str] | None) -> bool:
+    if not allowed_types:
+        return True
+    return category.lower() in allowed_types
+
+
+def _is_code_obj_allowed(code_obj: CodeObjectMeta, allowed_types: set[str] | None) -> bool:
+    if not allowed_types:
+        return True
+    otype = code_obj.object_type.upper()
+    if otype == "PROCEDURE" and "procedures" in allowed_types:
+        return True
+    if otype == "FUNCTION" and "functions" in allowed_types:
+        return True
+    if otype in ("PACKAGE", "PACKAGE BODY") and "packages" in allowed_types:
+        return True
+    if otype in ("TYPE", "TYPE BODY") and "types" in allowed_types:
+        return True
+    return False
+
+
 def write_schema_docs(
     schema: SchemaMetadata,
     doc_path: Path,
     annotations_path: Path | None = None,
     docs_overrides: dict[str, dict[str, str]] | None = None,
     multi_schema: bool = False,
+    object_types: list[str] | None = None,
 ) -> tuple[list[Path], list[Path]]:
     base_ann = annotations_path or (doc_path.parent / "annotations")
     target_doc_path = (doc_path / schema.schema_name) if (multi_schema and schema.schema_name) else doc_path
@@ -392,57 +414,63 @@ def write_schema_docs(
         table_name, column_name = key.split(".", maxsplit=1)
         normalized_column_overrides.setdefault(table_name.upper(), {})[column_name.upper()] = value
 
+    allowed_types = {t.lower() for t in object_types} if object_types else None
     generated_md: list[Path] = []
     generated_ann: list[Path] = []
 
     # 1. Tables
-    for table in schema.tables:
-        ann_path = target_ann_path / "tables" / f"{table.name}.yml"
-        annotation = ensure_annotation_stub(ann_path, db_comment=table.comment, column_names=[c.name for c in table.columns])
-        generated_ann.append(ann_path)
+    if _is_category_allowed("tables", allowed_types):
+        for table in schema.tables:
+            ann_path = target_ann_path / "tables" / f"{table.name}.yml"
+            annotation = ensure_annotation_stub(ann_path, db_comment=table.comment, column_names=[c.name for c in table.columns])
+            generated_ann.append(ann_path)
 
-        file_path = target_doc_path / "tables" / f"{table.name}.md"
-        existing = file_path.read_text(encoding="utf-8") if file_path.exists() else None
-        manual_doc = _extract_manual_section(existing) or table_overrides.get(table.name, "")
-        markdown = render_table_markdown(
-            table,
-            table_doc=manual_doc,
-            column_docs=normalized_column_overrides.get(table.name, {}),
-            annotation=annotation,
-        )
-        generated_md.append(_write_single_doc(file_path, markdown))
+            file_path = target_doc_path / "tables" / f"{table.name}.md"
+            existing = file_path.read_text(encoding="utf-8") if file_path.exists() else None
+            manual_doc = _extract_manual_section(existing) or table_overrides.get(table.name, "")
+            markdown = render_table_markdown(
+                table,
+                table_doc=manual_doc,
+                column_docs=normalized_column_overrides.get(table.name, {}),
+                annotation=annotation,
+            )
+            generated_md.append(_write_single_doc(file_path, markdown))
 
     # 2. Views
-    for view in schema.views:
-        ann_path = target_ann_path / "views" / f"{view.name}.yml"
-        annotation = ensure_annotation_stub(ann_path, db_comment=view.comment, column_names=[c.name for c in view.columns])
-        generated_ann.append(ann_path)
+    if _is_category_allowed("views", allowed_types):
+        for view in schema.views:
+            ann_path = target_ann_path / "views" / f"{view.name}.yml"
+            annotation = ensure_annotation_stub(ann_path, db_comment=view.comment, column_names=[c.name for c in view.columns])
+            generated_ann.append(ann_path)
 
-        file_path = target_doc_path / "views" / f"{view.name}.md"
-        existing = file_path.read_text(encoding="utf-8") if file_path.exists() else None
-        manual_doc = _extract_manual_section(existing)
-        markdown = render_view_markdown(
-            view,
-            view_doc=manual_doc,
-            column_docs=normalized_column_overrides.get(view.name, {}),
-            annotation=annotation,
-        )
-        generated_md.append(_write_single_doc(file_path, markdown))
+            file_path = target_doc_path / "views" / f"{view.name}.md"
+            existing = file_path.read_text(encoding="utf-8") if file_path.exists() else None
+            manual_doc = _extract_manual_section(existing)
+            markdown = render_view_markdown(
+                view,
+                view_doc=manual_doc,
+                column_docs=normalized_column_overrides.get(view.name, {}),
+                annotation=annotation,
+            )
+            generated_md.append(_write_single_doc(file_path, markdown))
 
     # 3. Materialized Views
-    for mview in schema.mviews:
-        ann_path = target_ann_path / "mviews" / f"{mview.name}.yml"
-        annotation = ensure_annotation_stub(ann_path, db_comment=mview.comment, column_names=[c.name for c in mview.columns])
-        generated_ann.append(ann_path)
+    if _is_category_allowed("mviews", allowed_types):
+        for mview in schema.mviews:
+            ann_path = target_ann_path / "mviews" / f"{mview.name}.yml"
+            annotation = ensure_annotation_stub(ann_path, db_comment=mview.comment, column_names=[c.name for c in mview.columns])
+            generated_ann.append(ann_path)
 
-        file_path = target_doc_path / "mviews" / f"{mview.name}.md"
-        existing = file_path.read_text(encoding="utf-8") if file_path.exists() else None
-        manual_doc = _extract_manual_section(existing)
-        markdown = render_mview_markdown(mview, mview_doc=manual_doc, annotation=annotation)
-        generated_md.append(_write_single_doc(file_path, markdown))
+            file_path = target_doc_path / "mviews" / f"{mview.name}.md"
+            existing = file_path.read_text(encoding="utf-8") if file_path.exists() else None
+            manual_doc = _extract_manual_section(existing)
+            markdown = render_mview_markdown(mview, mview_doc=manual_doc, annotation=annotation)
+            generated_md.append(_write_single_doc(file_path, markdown))
 
-    # 4. Code Objects (Procedures, Functions, Packages)
+    # 4. Code Objects (Procedures, Functions, Packages, Types)
     for code_obj in schema.code_objects:
+        if not _is_code_obj_allowed(code_obj, allowed_types):
+            continue
         obj_folder = code_obj.object_type.lower().replace(" ", "_") + "s"
         ann_path = target_ann_path / obj_folder / f"{code_obj.name}.yml"
         annotation = ensure_annotation_stub(ann_path, db_comment=code_obj.comment)
@@ -467,52 +495,56 @@ def write_schema_docs(
             generated_md.append(_write_single_doc(sub_file_path, sub_markdown))
 
     # 5. Triggers
-    for trigger in schema.triggers:
-        ann_path = target_ann_path / "triggers" / f"{trigger.name}.yml"
-        annotation = ensure_annotation_stub(ann_path)
-        generated_ann.append(ann_path)
+    if _is_category_allowed("triggers", allowed_types):
+        for trigger in schema.triggers:
+            ann_path = target_ann_path / "triggers" / f"{trigger.name}.yml"
+            annotation = ensure_annotation_stub(ann_path)
+            generated_ann.append(ann_path)
 
-        file_path = target_doc_path / "triggers" / f"{trigger.name}.md"
-        existing = file_path.read_text(encoding="utf-8") if file_path.exists() else None
-        manual_doc = _extract_manual_section(existing)
-        markdown = render_trigger_markdown(trigger, trigger_doc=manual_doc, annotation=annotation)
-        generated_md.append(_write_single_doc(file_path, markdown))
+            file_path = target_doc_path / "triggers" / f"{trigger.name}.md"
+            existing = file_path.read_text(encoding="utf-8") if file_path.exists() else None
+            manual_doc = _extract_manual_section(existing)
+            markdown = render_trigger_markdown(trigger, trigger_doc=manual_doc, annotation=annotation)
+            generated_md.append(_write_single_doc(file_path, markdown))
 
     # 6. Sequences
-    for sequence in schema.sequences:
-        ann_path = target_ann_path / "sequences" / f"{sequence.name}.yml"
-        annotation = ensure_annotation_stub(ann_path)
-        generated_ann.append(ann_path)
+    if _is_category_allowed("sequences", allowed_types):
+        for sequence in schema.sequences:
+            ann_path = target_ann_path / "sequences" / f"{sequence.name}.yml"
+            annotation = ensure_annotation_stub(ann_path)
+            generated_ann.append(ann_path)
 
-        file_path = target_doc_path / "sequences" / f"{sequence.name}.md"
-        existing = file_path.read_text(encoding="utf-8") if file_path.exists() else None
-        manual_doc = _extract_manual_section(existing)
-        markdown = render_sequence_markdown(sequence, seq_doc=manual_doc, annotation=annotation)
-        generated_md.append(_write_single_doc(file_path, markdown))
+            file_path = target_doc_path / "sequences" / f"{sequence.name}.md"
+            existing = file_path.read_text(encoding="utf-8") if file_path.exists() else None
+            manual_doc = _extract_manual_section(existing)
+            markdown = render_sequence_markdown(sequence, seq_doc=manual_doc, annotation=annotation)
+            generated_md.append(_write_single_doc(file_path, markdown))
 
     # 7. Indexes
-    for index in schema.indexes:
-        ann_path = target_ann_path / "indexes" / f"{index.name}.yml"
-        annotation = ensure_annotation_stub(ann_path)
-        generated_ann.append(ann_path)
+    if _is_category_allowed("indexes", allowed_types):
+        for index in schema.indexes:
+            ann_path = target_ann_path / "indexes" / f"{index.name}.yml"
+            annotation = ensure_annotation_stub(ann_path)
+            generated_ann.append(ann_path)
 
-        file_path = target_doc_path / "indexes" / f"{index.name}.md"
-        existing = file_path.read_text(encoding="utf-8") if file_path.exists() else None
-        manual_doc = _extract_manual_section(existing)
-        markdown = render_index_markdown(index, idx_doc=manual_doc, annotation=annotation)
-        generated_md.append(_write_single_doc(file_path, markdown))
+            file_path = target_doc_path / "indexes" / f"{index.name}.md"
+            existing = file_path.read_text(encoding="utf-8") if file_path.exists() else None
+            manual_doc = _extract_manual_section(existing)
+            markdown = render_index_markdown(index, idx_doc=manual_doc, annotation=annotation)
+            generated_md.append(_write_single_doc(file_path, markdown))
 
     # 8. Synonyms
-    for synonym in schema.synonyms:
-        ann_path = target_ann_path / "synonyms" / f"{synonym.name}.yml"
-        annotation = ensure_annotation_stub(ann_path)
-        generated_ann.append(ann_path)
+    if _is_category_allowed("synonyms", allowed_types):
+        for synonym in schema.synonyms:
+            ann_path = target_ann_path / "synonyms" / f"{synonym.name}.yml"
+            annotation = ensure_annotation_stub(ann_path)
+            generated_ann.append(ann_path)
 
-        file_path = target_doc_path / "synonyms" / f"{synonym.name}.md"
-        existing = file_path.read_text(encoding="utf-8") if file_path.exists() else None
-        manual_doc = _extract_manual_section(existing)
-        markdown = render_synonym_markdown(synonym, syn_doc=manual_doc, annotation=annotation)
-        generated_md.append(_write_single_doc(file_path, markdown))
+            file_path = target_doc_path / "synonyms" / f"{synonym.name}.md"
+            existing = file_path.read_text(encoding="utf-8") if file_path.exists() else None
+            manual_doc = _extract_manual_section(existing)
+            markdown = render_synonym_markdown(synonym, syn_doc=manual_doc, annotation=annotation)
+            generated_md.append(_write_single_doc(file_path, markdown))
 
     return generated_md, generated_ann
 
@@ -527,26 +559,33 @@ def sync_schema_annotations(
     schema: SchemaMetadata,
     annotations_path: Path,
     multi_schema: bool = False,
+    object_types: list[str] | None = None,
 ) -> list[Path]:
     target_ann_path = (annotations_path / schema.schema_name) if (multi_schema and schema.schema_name) else annotations_path
+    allowed_types = {t.lower() for t in object_types} if object_types else None
     generated_ann: list[Path] = []
 
-    for table in schema.tables:
-        ann_path = target_ann_path / "tables" / f"{table.name}.yml"
-        ensure_annotation_stub(ann_path, db_comment=table.comment, column_names=[c.name for c in table.columns])
-        generated_ann.append(ann_path)
+    if _is_category_allowed("tables", allowed_types):
+        for table in schema.tables:
+            ann_path = target_ann_path / "tables" / f"{table.name}.yml"
+            ensure_annotation_stub(ann_path, db_comment=table.comment, column_names=[c.name for c in table.columns])
+            generated_ann.append(ann_path)
 
-    for view in schema.views:
-        ann_path = target_ann_path / "views" / f"{view.name}.yml"
-        ensure_annotation_stub(ann_path, db_comment=view.comment, column_names=[c.name for c in view.columns])
-        generated_ann.append(ann_path)
+    if _is_category_allowed("views", allowed_types):
+        for view in schema.views:
+            ann_path = target_ann_path / "views" / f"{view.name}.yml"
+            ensure_annotation_stub(ann_path, db_comment=view.comment, column_names=[c.name for c in view.columns])
+            generated_ann.append(ann_path)
 
-    for mview in schema.mviews:
-        ann_path = target_ann_path / "mviews" / f"{mview.name}.yml"
-        ensure_annotation_stub(ann_path, db_comment=mview.comment, column_names=[c.name for c in mview.columns])
-        generated_ann.append(ann_path)
+    if _is_category_allowed("mviews", allowed_types):
+        for mview in schema.mviews:
+            ann_path = target_ann_path / "mviews" / f"{mview.name}.yml"
+            ensure_annotation_stub(ann_path, db_comment=mview.comment, column_names=[c.name for c in mview.columns])
+            generated_ann.append(ann_path)
 
     for code_obj in schema.code_objects:
+        if not _is_code_obj_allowed(code_obj, allowed_types):
+            continue
         obj_folder = code_obj.object_type.lower().replace(" ", "_") + "s"
         ann_path = target_ann_path / obj_folder / f"{code_obj.name}.yml"
         ensure_annotation_stub(ann_path, db_comment=code_obj.comment)
@@ -557,24 +596,28 @@ def sync_schema_annotations(
             ensure_annotation_stub(sub_ann_path, db_comment=sub.comment)
             generated_ann.append(sub_ann_path)
 
-    for trigger in schema.triggers:
-        ann_path = target_ann_path / "triggers" / f"{trigger.name}.yml"
-        ensure_annotation_stub(ann_path)
-        generated_ann.append(ann_path)
+    if _is_category_allowed("triggers", allowed_types):
+        for trigger in schema.triggers:
+            ann_path = target_ann_path / "triggers" / f"{trigger.name}.yml"
+            ensure_annotation_stub(ann_path)
+            generated_ann.append(ann_path)
 
-    for sequence in schema.sequences:
-        ann_path = target_ann_path / "sequences" / f"{sequence.name}.yml"
-        ensure_annotation_stub(ann_path)
-        generated_ann.append(ann_path)
+    if _is_category_allowed("sequences", allowed_types):
+        for sequence in schema.sequences:
+            ann_path = target_ann_path / "sequences" / f"{sequence.name}.yml"
+            ensure_annotation_stub(ann_path)
+            generated_ann.append(ann_path)
 
-    for index in schema.indexes:
-        ann_path = target_ann_path / "indexes" / f"{index.name}.yml"
-        ensure_annotation_stub(ann_path)
-        generated_ann.append(ann_path)
+    if _is_category_allowed("indexes", allowed_types):
+        for index in schema.indexes:
+            ann_path = target_ann_path / "indexes" / f"{index.name}.yml"
+            ensure_annotation_stub(ann_path)
+            generated_ann.append(ann_path)
 
-    for synonym in schema.synonyms:
-        ann_path = target_ann_path / "synonyms" / f"{synonym.name}.yml"
-        ensure_annotation_stub(ann_path)
-        generated_ann.append(ann_path)
+    if _is_category_allowed("synonyms", allowed_types):
+        for synonym in schema.synonyms:
+            ann_path = target_ann_path / "synonyms" / f"{synonym.name}.yml"
+            ensure_annotation_stub(ann_path)
+            generated_ann.append(ann_path)
 
     return generated_ann
