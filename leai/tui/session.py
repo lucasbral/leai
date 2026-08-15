@@ -110,7 +110,7 @@ class InteractiveTUISession:
             from leai import __version__
             return __version__
         except Exception:
-            return "0.1.2"
+            return "0.1.3"
 
     def handle_slash_command(self, cmd_line: str) -> bool:
         """Handles slash commands. Returns True if command was handled, False to continue."""
