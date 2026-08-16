@@ -233,14 +233,15 @@ class ConfigAndDocsTests(unittest.TestCase):
             schema = SchemaMetadata(code_objects=[code_pkg])
             generated_md, generated_ann = write_schema_docs(schema, docs_dir, annotations_path=ann_dir)
 
-            # 1 Global Pkg + 2 Subprograms = 3 generated files
-            self.assertEqual(len(generated_md), 3)
+            # 1 Global Pkg + 2 Subprograms + 1 INDEX.md = 4 generated files
+            self.assertEqual(len(generated_md), 4)
             self.assertEqual(len(generated_ann), 3)
 
             # Verify existence of sub-files
             self.assertTrue((docs_dir / "package_bodys" / "PKG_FOLHA.md").exists())
             self.assertTrue((docs_dir / "package_bodys" / "PKG_FOLHA" / "CALCULA_INSS.md").exists())
             self.assertTrue((docs_dir / "package_bodys" / "PKG_FOLHA" / "CALCULA_IRRF.md").exists())
+            self.assertTrue((docs_dir / "INDEX.md").exists())
 
             # Verify subprogram annotations
             self.assertTrue((ann_dir / "package_bodys" / "PKG_FOLHA" / "CALCULA_INSS.yml").exists())
@@ -564,6 +565,69 @@ class ConfigAndDocsTests(unittest.TestCase):
             self.assertIn("## Casos de uso e Consultas de Exemplo", md)
             self.assertIn("```sql\nSELECT id, nome FROM employees WHERE status = 'A';\n```", md)
             self.assertIn("- Relatório de folha de pagamento por departamento", md)
+
+    def test_write_schema_docs_with_traces_and_rag_chunks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            from leai.docs import write_schema_docs
+            from leai.models import ColumnMeta, ForeignKeyMeta, SchemaMetadata, TableMeta
+
+            root = Path(tmpdir)
+            docs_dir = root / "docs"
+            ann_dir = root / "annotations"
+
+            dept = TableMeta(
+                name="DEPARTMENTS",
+                columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)],
+                primary_keys=["ID"],
+            )
+            emp = TableMeta(
+                name="EMPLOYEES",
+                columns=[
+                    ColumnMeta(name="ID", data_type="NUMBER", nullable=False),
+                    ColumnMeta(name="DEPT_ID", data_type="NUMBER", nullable=False),
+                ],
+                primary_keys=["ID"],
+                foreign_keys=[
+                    ForeignKeyMeta(name="FK_EMP_DEPT", column="DEPT_ID", referenced_table="DEPARTMENTS", referenced_column="ID"),
+                ],
+            )
+            schema = SchemaMetadata(schema_name="HR", tables=[dept, emp])
+
+            gen_md, gen_ann = write_schema_docs(
+                schema,
+                doc_path=docs_dir,
+                annotations_path=ann_dir,
+                with_traces=True,
+                generate_rag_chunks=True,
+            )
+
+            # Check INDEX.md
+            index_file = docs_dir / "INDEX.md"
+            self.assertTrue(index_file.exists())
+            index_content = index_file.read_text(encoding="utf-8")
+            self.assertIn("Catálogo e Matriz de Governança", index_content)
+            self.assertIn("EMPLOYEES", index_content)
+            self.assertIn("DEPARTMENTS", index_content)
+
+            # Check EMPLOYEES.md contains unified trace and Mermaid
+            emp_md_file = docs_dir / "tables" / "EMPLOYEES.md"
+            self.assertTrue(emp_md_file.exists())
+            emp_content = emp_md_file.read_text(encoding="utf-8")
+            self.assertIn("rag_metadata:", emp_content)
+            self.assertIn("Raio-X de Impacto Técnico e Risco", emp_content)
+            self.assertIn("DEPARTMENTS", emp_content)
+            self.assertIn("```mermaid", emp_content)
+
+            # Check RAG chunks exported to docs/chunks/
+            chunks_dir = docs_dir / "chunks"
+            self.assertTrue(chunks_dir.exists())
+            self.assertTrue((chunks_dir / "EMPLOYEES.json").exists())
+            self.assertTrue((chunks_dir / "DEPARTMENTS.json").exists())
+
+            import json
+            emp_chunk = json.loads((chunks_dir / "EMPLOYEES.json").read_text(encoding="utf-8"))
+            self.assertEqual(emp_chunk["entity"], "EMPLOYEES")
+            self.assertIn("text_for_embedding", emp_chunk)
 
 
 if __name__ == "__main__":

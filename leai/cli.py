@@ -24,6 +24,7 @@ from leai.ask_rag import build_rag_context
 from leai.config import ConfigError, load_config
 from leai.docs import sync_schema_annotations, write_dossier_doc, write_rag_json_file, write_schema_docs
 from leai.enrich import enrich_schema_annotations
+from leai.models import SchemaMetadata
 from leai.oracle import _build_connect_kwargs, fetch_available_schemas, fetch_focal_trace, fetch_schema_metadata
 from leai.raw import load_raw_schemas, save_raw_schema, trace_raw_dependencies
 from leai.tui import InteractiveTUISession
@@ -310,6 +311,9 @@ def annotate(
 def compile(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to compile (e.g. tables, views, procedures)"),
+    with_traces: bool = typer.Option(True, "--with-traces/--no-traces", help="Include dependency lineage, risk analysis and Mermaid graph"),
+    rag_json: bool = typer.Option(False, "--rag-json", "--rag", help="Also export structured JSON chunks to docs/chunks/ for Vector DB"),
+    depth: int = typer.Option(1, "--depth", "-d", help="Max dependency graph traversal depth (default: 1)"),
 ) -> None:
     """Compiles Markdown docs in docPath merging rawPath + annotationsPath (Offline)."""
     start_time = time.perf_counter()
@@ -364,21 +368,28 @@ def compile(
                     docs_overrides=cfg.docs,
                     multi_schema=is_multi,
                     object_types=cfg.object_types,
+                    all_schemas=schemas_meta,
+                    with_traces=with_traces,
+                    max_depth=depth,
+                    generate_rag_chunks=rag_json,
                 )
                 total_md += len(generated_md)
                 total_ann += len(generated_ann)
                 progress.advance(task_id)
 
         elapsed = time.perf_counter() - start_time
+        out_paths = {
+            "Markdown Documents": cfg.docPath,
+            "Synchronized YAML Annotations": cfg.annotationsPath,
+        }
+        if rag_json:
+            out_paths["RAG Vector Chunks"] = cfg.docPath / "chunks"
         _print_final_summary_panel(
             title="Markdown Compilation Completed",
             total_schemas=len(schemas_meta),
             totals=totals,
             elapsed_seconds=elapsed,
-            output_paths={
-                "Markdown Documents": cfg.docPath,
-                "Synchronized YAML Annotations": cfg.annotationsPath,
-            },
+            output_paths=out_paths,
         )
     except Exception as exc:
         console.print(f"[red]Error during compilation:[/red] {exc}")
@@ -389,6 +400,9 @@ def compile(
 def generate(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to generate (e.g. tables, views, procedures)"),
+    with_traces: bool = typer.Option(True, "--with-traces/--no-traces", help="Include dependency lineage, risk analysis and Mermaid graph"),
+    rag_json: bool = typer.Option(False, "--rag-json", "--rag", help="Also export structured JSON chunks to docs/chunks/ for Vector DB"),
+    depth: int = typer.Option(1, "--depth", "-d", help="Max dependency graph traversal depth (default: 1)"),
 ) -> None:
     """Generates complete documentation (Extracts RAW -> Syncs Annotations -> Compiles Markdown)."""
     start_time = time.perf_counter()
@@ -418,6 +432,7 @@ def generate(
         }
         total_md = 0
         total_ann = 0
+        all_schemas_meta: list[SchemaMetadata] = []
 
         with Progress(
             SpinnerColumn(),
@@ -443,6 +458,7 @@ def generate(
 
                 progress.update(task_id, description=f"Processing [bold yellow]{schema_name}[/bold yellow]")
                 schema_meta = fetch_schema_metadata(cfg, schema_name=schema_name, callback=_cb)
+                all_schemas_meta.append(schema_meta)
 
                 totals["tables"] += len(schema_meta.tables)
                 totals["views"] += len(schema_meta.views)
@@ -464,22 +480,29 @@ def generate(
                     docs_overrides=cfg.docs,
                     multi_schema=is_multi,
                     object_types=cfg.object_types,
+                    all_schemas=all_schemas_meta,
+                    with_traces=with_traces,
+                    max_depth=depth,
+                    generate_rag_chunks=rag_json,
                 )
                 total_md += len(generated_md)
                 total_ann += len(generated_ann)
                 progress.advance(task_id)
 
         elapsed = time.perf_counter() - start_time
+        out_paths = {
+            "RAW Snapshot": cfg.rawPath,
+            "Markdown Documents": cfg.docPath,
+            "Synchronized YAML Annotations": cfg.annotationsPath,
+        }
+        if rag_json:
+            out_paths["RAG Vector Chunks"] = cfg.docPath / "chunks"
         _print_final_summary_panel(
             title="Documentation Generation Completed",
             total_schemas=len(target_schemas),
             totals=totals,
             elapsed_seconds=elapsed,
-            output_paths={
-                "RAW Snapshot": cfg.rawPath,
-                "Markdown Documents": cfg.docPath,
-                "Synchronized YAML Annotations": cfg.annotationsPath,
-            },
+            output_paths=out_paths,
         )
     except Exception as exc:
         console.print(f"[red]Error during execution:[/red] {exc}")
