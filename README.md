@@ -222,16 +222,22 @@ columns:
 ---
 
 ### 4. `leai compile`
-Recompiles the entire Markdown documentation in `docs/` by merging `raw/` and `annotations/` without connecting to the database.
+Recompiles the unified Markdown documentation in `docs/` (including dependency lineage, risk analysis, Mermaid.js diagrams, and `docs/INDEX.md`) by merging `raw/` and `annotations/` without connecting to the database.
 
 | Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
 | `-t`, `--object-type TEXT` | Option | Compile only specific object types. |
+| `--with-traces / --no-traces` | Flag | Include dependency lineage, risk analysis and Mermaid graph (Default: `True`). |
+| `--rag-json`, `--rag` | Flag | Also exports structured JSON chunks to `docs/chunks/` for Vector DB ingestion. |
+| `-d`, `--depth INT` | Option | Max graph traversal depth for lineage mapping (Default: `1`). |
 | `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash
+# Standard unified compilation (includes Mermaid graphs, risk analysis, and INDEX.md)
 leai compile
-leai compile -t views
+
+# Compile and export all RAG chunks for Vector DB in one step
+leai compile --rag-json --depth 2
 ```
 
 ---
