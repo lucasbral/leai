@@ -1,6 +1,6 @@
 # LEAI — Oracle Database Intelligence & Documentation Engine
 
-**LEAI** is a reverse engineering, impact analysis, and documentation engine for **Oracle Database**, specifically designed to power **Retrieval-Augmented Generation (RAG)**, **LLMs**, and software engineers maintaining complex enterprise database ecosystems.
+**LEAI**  (Lê - Aí in PT ) is a reverse engineering, impact analysis, and documentation engine for **Oracle Database**, specifically designed to power **Retrieval-Augmented Generation (RAG)**, **LLMs**, and software engineers maintaining complex enterprise database ecosystems.
 
 > [!IMPORTANT]
 > 🔒 **Security & Data Privacy Guarantee:**
