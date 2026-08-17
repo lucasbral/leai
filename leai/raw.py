@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import re
+from collections import defaultdict
 from pathlib import Path
+from typing import Any
 
 from leai.models import (
     CodeObjectMeta,
@@ -12,6 +14,7 @@ from leai.models import (
     ObjectTraceResult,
     SchemaMetadata,
     SequenceMeta,
+    SubprogramMeta,
     SynonymMeta,
     TableMeta,
     TriggerMeta,
@@ -138,22 +141,242 @@ def load_raw_schema(raw_path: Path, schema_name: str = "") -> SchemaMetadata:
     return schema
 
 
-def load_raw_schemas(raw_path: Path) -> list[SchemaMetadata]:
+def load_raw_schemas(raw_path: Path, target_schemas: list[str] | None = None) -> list[SchemaMetadata]:
     if not raw_path.exists():
         return []
 
     # Check if raw_path contains subdirectories representing multiple schemas
     subdirs = [d for d in raw_path.iterdir() if d.is_dir() and d.name not in {
-        "tables", "views", "mviews", "procedures", "functions", "packages", "package_bodys", "types", "type_bodys", "triggers", "sequences", "indexes", "synonyms"
+        "tables", "views", "mviews", "procedures", "functions", "packages", "package_bodys", "types", "type_bodys", "triggers", "sequences", "indexes", "synonyms", "chunks"
     }]
 
     if subdirs:
         schemas: list[SchemaMetadata] = []
+        target_set = {s.upper() for s in target_schemas} if target_schemas else None
         for d in sorted(subdirs, key=lambda x: x.name):
+            if target_set and d.name.upper() not in target_set:
+                continue
             schemas.append(load_raw_schema(d, schema_name=d.name))
         return schemas
 
     return [load_raw_schema(raw_path)]
+
+
+ORACLE_RESERVED_WORDS = {
+    "ACCESS", "ADD", "ALL", "ALTER", "AND", "ANY", "AS", "ASC", "AUDIT", "BETWEEN",
+    "BY", "CHAR", "CHECK", "CLUSTER", "COLUMN", "COMMENT", "COMPRESS", "CONNECT",
+    "CREATE", "CURRENT", "DATE", "DECIMAL", "DEFAULT", "DELETE", "DESC", "DISTINCT",
+    "DROP", "ELSE", "EXCLUSIVE", "EXISTS", "FILE", "FLOAT", "FOR", "FROM", "GRANT",
+    "GROUP", "HAVING", "IDENTIFIED", "IMMEDIATE", "IN", "INCREMENT", "INDEX", "INITIAL",
+    "INSERT", "INTEGER", "INTERSECT", "INTO", "IS", "LEVEL", "LIKE", "LOCK", "LONG",
+    "MAXEXTENTS", "MINUS", "MLSLABEL", "MODE", "MODIFY", "NOAUDIT", "NOCOMPRESS", "NOT",
+    "NOWAIT", "NULL", "NUMBER", "OF", "OFFLINE", "ON", "ONLINE", "OPTION", "OR", "ORDER",
+    "PCTFREE", "PRIOR", "PRIVILEGES", "PUBLIC", "RAW", "RENAME", "RESOURCE", "REVOKE",
+    "ROW", "ROWID", "ROWNUM", "ROWS", "SELECT", "SESSION", "SET", "SHARE", "SIZE",
+    "SMALLINT", "START", "SUCCESSFUL", "SYNONYM", "SYSDATE", "TABLE", "THEN", "TO",
+    "TRIGGER", "UID", "UNION", "UNIQUE", "UPDATE", "USER", "VALIDATE", "VALUES",
+    "VARCHAR", "VARCHAR2", "VIEW", "WHENEVER", "WHERE", "WITH",
+    # PL/SQL specific keywords
+    "BEGIN", "BODY", "BULK", "CALL", "CASE", "CLOSE", "COLLECT", "COMMIT", "CONSTANT",
+    "CONTINUE", "COUNT", "CURSOR", "DECLARE", "DO", "ELSIF", "END", "EXCEPTION", "EXECUTE",
+    "EXIT", "EXTEND", "FALSE", "FETCH", "FIRST", "FORALL", "FUNCTION", "GOTO", "IF",
+    "INDEXBY", "LAST", "LIMIT", "LOOP", "NEXT", "OPEN", "OTHERS", "OUT", "PACKAGE",
+    "PARTITION", "PRAGMA", "PROCEDURE", "RAISE", "RANGE", "RECORD", "REF",
+    "RETURN", "RETURNING", "REVERSE", "ROLLBACK", "ROWTYPE", "SAVEPOINT", "SUBTYPE",
+    "TRUNC", "TYPE", "TRUE", "WHEN", "WHILE", "MAX", "MIN", "SUM", "AVG", "NVL",
+    "TO_CHAR", "TO_DATE", "TO_NUMBER", "UPPER", "LOWER", "SUBSTR", "INSTR"
+}
+
+
+def strip_comments_and_hints(code: str) -> str:
+    """Removes block comments, hints (/*+ ... */), and line comments (-- ...) to isolate pure SQL/PLSQL code."""
+    if not code:
+        return ""
+    c1 = re.sub(r"/\*.*?\*/", " ", code, flags=re.DOTALL)
+    c2 = re.sub(r"--.*$", " ", c1, flags=re.MULTILINE)
+    return c2
+
+
+def extract_code_semantic_comments(code: str) -> tuple[list[str], list[str]]:
+    """Extracts meaningful business rules, engineering explanations, and task tickets from code comments."""
+    if not code:
+        return [], []
+
+    tasks: list[str] = []
+    task_seen: set[str] = set()
+    task_pattern = re.compile(r"\b((?:TAREFA|TASK|CHAMADO|BUG|JIRA|ISSUE|DEMANDA|CARD)[-:\s#]*[A-Za-z0-9_-]+)\b", re.IGNORECASE)
+
+    for match in task_pattern.finditer(code):
+        full_match = match.group(1).strip()
+        canonical = full_match.upper()
+        if canonical not in task_seen:
+            task_seen.add(canonical)
+            tasks.append(full_match)
+
+    notes: list[str] = []
+    lines = code.splitlines()
+    current_block: list[str] = []
+
+    for line in lines:
+        stripped = line.strip()
+        comment_text = None
+        if "--" in stripped:
+            idx = stripped.find("--")
+            comment_text = stripped[idx + 2:].strip()
+
+        if comment_text:
+            clean_comm = re.sub(r"^[-=*#/_\s]+|[-=*#/_\s]+$", "", comment_text).strip()
+            if len(clean_comm) > 3 and not re.fullmatch(r"(?:TAREFA|TASK|CHAMADO|BUG|JIRA|ISSUE|DEMANDA|CARD)[-:\s#]*[A-Za-z0-9_-]+", clean_comm, re.IGNORECASE):
+                current_block.append(clean_comm)
+            else:
+                if current_block:
+                    notes.append(" ".join(current_block))
+                    current_block = []
+        else:
+            if current_block:
+                notes.append(" ".join(current_block))
+                current_block = []
+
+    if current_block:
+        notes.append(" ".join(current_block))
+
+    unique_notes: list[str] = []
+    seen_notes: set[str] = set()
+    for n in notes:
+        n_clean = n.strip()
+        if n_clean and n_clean.lower() not in seen_notes:
+            seen_notes.add(n_clean.lower())
+            unique_notes.append(n_clean)
+
+    return unique_notes, tasks
+
+
+class RawDependencyIndex:
+    """Pre-computed inverted index of database objects and dependencies for O(1) fast lookups."""
+
+    def __init__(self, schemas: list[SchemaMetadata]) -> None:
+        self.schemas = schemas
+        self.raw_objects: dict[str, tuple[str, Any]] = {}
+        self.incoming_fks: dict[str, list[tuple[str, ForeignKeyMeta]]] = defaultdict(list)
+        self.table_triggers: dict[str, list[TriggerMeta]] = defaultdict(list)
+        self.synonyms_by_target: dict[str, list[SynonymMeta]] = defaultdict(list)
+        self.text_references: dict[str, list[tuple[str, str, str, str]]] = defaultdict(list)
+
+        self.tables_map: dict[str, TableMeta] = {}
+        self.views_map: dict[str, ViewMeta] = {}
+        self.mviews_map: dict[str, MaterializedViewMeta] = {}
+        self.code_map: dict[str, CodeObjectMeta] = {}
+        self.triggers_map: dict[str, TriggerMeta] = {}
+        self.synonyms_map: dict[str, SynonymMeta] = {}
+        self.sequences_map: dict[str, SequenceMeta] = {}
+        self.indexes_map: dict[str, IndexMeta] = {}
+        self.packages_set: set[str] = set()
+        self.subprograms_map: dict[str, SubprogramMeta] = {}
+
+        token_pattern = re.compile(r"\b[A-Za-z0-9_#$]+\b")
+
+        for s in schemas:
+            for t in s.tables:
+                t_up = t.name.upper()
+                self.raw_objects[t_up] = ("TABLE", t)
+                self.tables_map[t_up] = t
+                for fk in t.foreign_keys:
+                    if fk.referenced_table:
+                        self.incoming_fks[fk.referenced_table.upper()].append((t_up, fk))
+
+            for v in s.views:
+                v_up = v.name.upper()
+                self.raw_objects[v_up] = ("VIEW", v)
+                self.views_map[v_up] = v
+
+            for mv in s.mviews:
+                mv_up = mv.name.upper()
+                self.raw_objects[mv_up] = ("MATERIALIZED VIEW", mv)
+                self.mviews_map[mv_up] = mv
+
+            for co in s.code_objects:
+                co_up = co.name.upper()
+                self.raw_objects[co_up] = (co.object_type.upper(), co)
+                self.code_map[co_up] = co
+                if co.object_type.upper() in ("PACKAGE", "PACKAGE BODY"):
+                    self.packages_set.add(co_up)
+                    for sub in co.subprograms:
+                        sub_full = f"{co_up}.{sub.name.upper()}"
+                        self.subprograms_map[sub_full] = sub
+
+            for trg in s.triggers:
+                trg_up = trg.name.upper()
+                self.raw_objects[trg_up] = ("TRIGGER", trg)
+                self.triggers_map[trg_up] = trg
+                if trg.table_name:
+                    self.table_triggers[trg.table_name.upper()].append(trg)
+
+            for syn in s.synonyms:
+                syn_up = syn.name.upper()
+                self.raw_objects[syn_up] = ("SYNONYM", syn)
+                self.synonyms_map[syn_up] = syn
+                if syn.table_name:
+                    self.synonyms_by_target[syn.table_name.upper()].append(syn)
+                    if (syn.table_name or "").upper() in self.packages_set:
+                        self.packages_set.add(syn_up)
+
+            for seq in s.sequences:
+                seq_up = seq.name.upper()
+                self.raw_objects[seq_up] = ("SEQUENCE", seq)
+                self.sequences_map[seq_up] = seq
+
+            for idx in s.indexes:
+                idx_up = idx.name.upper()
+                self.raw_objects[idx_up] = ("INDEX", idx)
+                self.indexes_map[idx_up] = idx
+
+        all_names = set(self.raw_objects.keys()) - ORACLE_RESERVED_WORDS
+        self.all_names = all_names
+
+        for s in schemas:
+            for v in s.views:
+                if v.text:
+                    clean_code = strip_comments_and_hints(v.text)
+                    words = {w.upper() for w in token_pattern.findall(clean_code)} - ORACLE_RESERVED_WORDS
+                    v_name = v.name.upper()
+                    for w in words & all_names:
+                        if w != v_name:
+                            self.text_references[w].append(
+                                (v_name, "VIEW", "READS/SELECTS", "View realiza consulta SQL sobre o objeto")
+                            )
+
+            for mv in s.mviews:
+                if mv.query:
+                    clean_code = strip_comments_and_hints(mv.query)
+                    words = {w.upper() for w in token_pattern.findall(clean_code)} - ORACLE_RESERVED_WORDS
+                    mv_name = mv.name.upper()
+                    for w in words & all_names:
+                        if w != mv_name:
+                            self.text_references[w].append(
+                                (mv_name, "MATERIALIZED VIEW", "READS/SELECTS", "Materialized View baseada no objeto")
+                            )
+
+            for co in s.code_objects:
+                if co.source:
+                    clean_code = strip_comments_and_hints(co.source)
+                    words = {w.upper() for w in token_pattern.findall(clean_code)} - ORACLE_RESERVED_WORDS
+                    co_name = co.name.upper()
+                    for w in words & all_names:
+                        if w != co_name:
+                            self.text_references[w].append(
+                                (co_name, co.object_type.upper(), "PLSQL_DEPENDENCY", f"Objeto {co.object_type} manipula ou referencia {w} no código-fonte")
+                            )
+
+            for trg in s.triggers:
+                if trg.trigger_body:
+                    clean_code = strip_comments_and_hints(trg.trigger_body)
+                    words = {w.upper() for w in token_pattern.findall(clean_code)} - ORACLE_RESERVED_WORDS
+                    trg_name = trg.name.upper()
+                    for w in words & all_names:
+                        if w != trg_name and w != (trg.table_name or "").upper():
+                            self.text_references[w].append(
+                                (trg_name, "TRIGGER", "PLSQL_DEPENDENCY", f"Trigger {trg.name} manipula ou referencia {w} no corpo")
+                            )
 
 
 def _find_raw_object(schemas: list[SchemaMetadata], name: str):
@@ -180,42 +403,61 @@ def _find_raw_object(schemas: list[SchemaMetadata], name: str):
     return "UNKNOWN", None
 
 
-def trace_raw_dependencies(schemas: list[SchemaMetadata], target_object_name: str, max_depth: int = 1) -> ObjectTraceResult:
+def trace_raw_dependencies(
+    schemas: list[SchemaMetadata],
+    target_object_name: str,
+    max_depth: int = 1,
+    index: RawDependencyIndex | None = None,
+) -> ObjectTraceResult:
+    try:
+        max_depth = int(getattr(max_depth, "default", max_depth))
+    except Exception:
+        max_depth = 1
+
+    idx = index or RawDependencyIndex(schemas)
     target_upper = target_object_name.strip().upper()
-    focal_type, focal_obj = _find_raw_object(schemas, target_upper)
+    focal_type, focal_obj = idx.raw_objects.get(target_upper, ("UNKNOWN", None))
+
+    notes: list[str] = []
+    tasks: list[str] = []
+    source_to_scan = getattr(focal_obj, "source", None) or getattr(focal_obj, "trigger_body", None) or getattr(focal_obj, "text", None) or getattr(focal_obj, "query", None)
+    if source_to_scan:
+        notes, tasks = extract_code_semantic_comments(source_to_scan)
 
     result = ObjectTraceResult(
         focal_name=target_upper,
         focal_type=focal_type,
         focal_object=focal_obj,
+        extracted_notes=notes,
+        extracted_tasks=tasks,
     )
 
     all_related_names = set()
     visited_nodes = {target_upper}
     seen_links = set()
-
     current_layer = {target_upper}
 
     # If initial object is a Synonym, resolve to the actual target
-    if focal_type == "SYNONYM" and focal_obj and focal_obj.table_name:
+    if focal_type == "SYNONYM" and focal_obj and getattr(focal_obj, "table_name", None):
         real_target = focal_obj.table_name.upper()
-        details_str = f"Sinônimo aponta para {focal_obj.table_owner or ''}.{focal_obj.table_name}"
-        if focal_obj.db_link:
-            details_str += f"@{focal_obj.db_link}"
-        result.dependencies.append(
-            DependencyLink(
-                source_name=target_upper,
-                source_type="SYNONYM",
-                target_name=real_target,
-                target_type="TARGET",
-                relation_type="SYNONYM_FOR",
-                details=details_str,
-                depth=1,
+        if real_target != target_upper and real_target not in ORACLE_RESERVED_WORDS:
+            details_str = f"Sinônimo aponta para {focal_obj.table_owner or ''}.{focal_obj.table_name}"
+            if focal_obj.db_link:
+                details_str += f"@{focal_obj.db_link}"
+            result.dependencies.append(
+                DependencyLink(
+                    source_name=target_upper,
+                    source_type="SYNONYM",
+                    target_name=real_target,
+                    target_type="TARGET",
+                    relation_type="SYNONYM_FOR",
+                    details=details_str,
+                    depth=1,
+                )
             )
-        )
-        visited_nodes.add(real_target)
-        current_layer.add(real_target)
-        all_related_names.add(real_target)
+            visited_nodes.add(real_target)
+            current_layer.add(real_target)
+            all_related_names.add(real_target)
 
     for current_depth in range(1, max(1, max_depth) + 1):
         if not current_layer:
@@ -223,39 +465,39 @@ def trace_raw_dependencies(schemas: list[SchemaMetadata], target_object_name: st
         next_layer = set()
 
         for curr_name in current_layer:
-            curr_type, curr_obj = _find_raw_object(schemas, curr_name)
-            word_pattern = re.compile(rf"\b{re.escape(curr_name)}\b", re.IGNORECASE)
+            curr_type, curr_obj = idx.raw_objects.get(curr_name, ("UNKNOWN", None))
 
-            for schema in schemas:
-                # 0) Synonyms pointing to current object
-                for syn in schema.synonyms:
-                    if syn.table_name and syn.table_name.upper() == curr_name:
-                        syn_name = syn.name.upper()
-                        link_key = ("SYNONYM", syn_name, curr_name)
-                        if link_key not in seen_links:
-                            seen_links.add(link_key)
-                            result.dependencies.append(
-                                DependencyLink(
-                                    source_name=syn_name,
-                                    source_type="SYNONYM",
-                                    target_name=curr_name,
-                                    target_type=curr_type,
-                                    relation_type="SYNONYM_FOR",
-                                    details=f"Sinônimo {syn_name} aponta para {curr_name}",
-                                    depth=current_depth,
-                                )
-                            )
-                        if syn_name not in visited_nodes:
-                            visited_nodes.add(syn_name)
-                            next_layer.add(syn_name)
-                            all_related_names.add(syn_name)
+            # 0) Synonyms pointing to current object
+            for syn in idx.synonyms_by_target.get(curr_name, []):
+                syn_name = syn.name.upper()
+                if syn_name == curr_name or syn_name in ORACLE_RESERVED_WORDS:
+                    continue
+                link_key = ("SYNONYM", syn_name, curr_name)
+                if link_key not in seen_links:
+                    seen_links.add(link_key)
+                    result.dependencies.append(
+                        DependencyLink(
+                            source_name=syn_name,
+                            source_type="SYNONYM",
+                            target_name=curr_name,
+                            target_type=curr_type,
+                            relation_type="SYNONYM_FOR",
+                            details=f"Sinônimo {syn_name} aponta para {curr_name}",
+                            depth=current_depth,
+                        )
+                    )
+                if syn_name not in visited_nodes:
+                    visited_nodes.add(syn_name)
+                    next_layer.add(syn_name)
+                    all_related_names.add(syn_name)
 
-
-            for schema in schemas:
-                # A) Outgoing Foreign Keys
-                if isinstance(curr_obj, TableMeta):
-                    for fk in curr_obj.foreign_keys:
+            # A) Outgoing Foreign Keys (if curr_obj is a Table)
+            if isinstance(curr_obj, TableMeta):
+                for fk in curr_obj.foreign_keys:
+                    if fk.referenced_table:
                         ref_tbl = fk.referenced_table.upper()
+                        if ref_tbl == curr_name or ref_tbl in ORACLE_RESERVED_WORDS:
+                            continue
                         fk_key = ("FK", curr_name, ref_tbl, (fk.column or "").upper())
                         if fk_key not in seen_links:
                             seen_links.add(fk_key)
@@ -275,147 +517,227 @@ def trace_raw_dependencies(schemas: list[SchemaMetadata], target_object_name: st
                             next_layer.add(ref_tbl)
                             all_related_names.add(ref_tbl)
 
-                # B) Incoming Foreign Keys
-                for t in schema.tables:
-                    if t.name.upper() == curr_name:
-                        continue
-                    for fk in t.foreign_keys:
-                        if fk.referenced_table.upper() == curr_name:
-                            child_name = t.name.upper()
-                            fk_key = ("FK", child_name, curr_name, (fk.column or "").upper())
-                            if fk_key not in seen_links:
-                                seen_links.add(fk_key)
-                                result.dependencies.append(
-                                    DependencyLink(
-                                        source_name=child_name,
-                                        source_type="TABLE",
-                                        target_name=curr_name,
-                                        target_type=curr_type,
-                                        relation_type="FK_REFERENCED_BY",
-                                        details=f"Tabela filha {t.name}.{fk.column} referencia {curr_name}.{fk.referenced_column}",
-                                        depth=current_depth,
-                                    )
-                                )
-                            if child_name not in visited_nodes:
-                                visited_nodes.add(child_name)
-                                next_layer.add(child_name)
-                                all_related_names.add(child_name)
+            # B) Incoming Foreign Keys
+            for child_name, fk in idx.incoming_fks.get(curr_name, []):
+                if child_name == curr_name or child_name in ORACLE_RESERVED_WORDS:
+                    continue
+                fk_key = ("FK", child_name, curr_name, (fk.column or "").upper())
+                if fk_key not in seen_links:
+                    seen_links.add(fk_key)
+                    result.dependencies.append(
+                        DependencyLink(
+                            source_name=child_name,
+                            source_type="TABLE",
+                            target_name=curr_name,
+                            target_type=curr_type,
+                            relation_type="FK_REFERENCED_BY",
+                            details=f"Tabela filha {child_name}.{fk.column} referencia {curr_name}.{fk.referenced_column}",
+                            depth=current_depth,
+                        )
+                    )
+                if child_name not in visited_nodes:
+                    visited_nodes.add(child_name)
+                    next_layer.add(child_name)
+                    all_related_names.add(child_name)
 
-                # C) Attached Triggers
-                for trg in schema.triggers:
-                    trg_tbl = (trg.table_name or "").upper()
-                    if trg_tbl == curr_name:
-                        trg_name = trg.name.upper()
-                        link_key = (trg_name, curr_name, "TRIGGER_ON")
-                        if link_key not in seen_links:
-                            seen_links.add(link_key)
-                            result.dependencies.append(
-                                DependencyLink(
-                                    source_name=trg_name,
-                                    source_type="TRIGGER",
-                                    target_name=curr_name,
-                                    target_type=curr_type,
-                                    relation_type="TRIGGER_ON",
-                                    details=f"Evento {trg.trigger_type} {trg.triggering_event}",
-                                    depth=current_depth,
-                                )
-                            )
-                        if trg_name not in visited_nodes:
-                            visited_nodes.add(trg_name)
-                            next_layer.add(trg_name)
-                            all_related_names.add(trg_name)
+            # C) Attached Triggers
+            for trg in idx.table_triggers.get(curr_name, []):
+                trg_name = trg.name.upper()
+                if trg_name == curr_name or trg_name in ORACLE_RESERVED_WORDS:
+                    continue
+                link_key = (trg_name, curr_name, "TRIGGER_ON")
+                if link_key not in seen_links:
+                    seen_links.add(link_key)
+                    result.dependencies.append(
+                        DependencyLink(
+                            source_name=trg_name,
+                            source_type="TRIGGER",
+                            target_name=curr_name,
+                            target_type=curr_type,
+                            relation_type="TRIGGER_ON",
+                            details=f"Evento {trg.trigger_type} {trg.triggering_event}",
+                            depth=current_depth,
+                        )
+                    )
+                if trg_name not in visited_nodes:
+                    visited_nodes.add(trg_name)
+                    next_layer.add(trg_name)
+                    all_related_names.add(trg_name)
 
-                # D) Views querying this object
-                for v in schema.views:
-                    if v.name.upper() == curr_name:
-                        continue
-                    if v.text and word_pattern.search(v.text):
-                        v_name = v.name.upper()
-                        link_key = (v_name, curr_name, "READS/SELECTS")
-                        if link_key not in seen_links:
-                            seen_links.add(link_key)
-                            result.dependencies.append(
-                                DependencyLink(
-                                    source_name=v_name,
-                                    source_type="VIEW",
-                                    target_name=curr_name,
-                                    target_type=curr_type,
-                                    relation_type="READS/SELECTS",
-                                    details="View realiza consulta SQL sobre o objeto",
-                                    depth=current_depth,
-                                )
-                            )
-                        if v_name not in visited_nodes:
-                            visited_nodes.add(v_name)
-                            next_layer.add(v_name)
-                            all_related_names.add(v_name)
-
-                # E) Materialized Views
-                for mv in schema.mviews:
-                    if mv.name.upper() == curr_name:
-                        continue
-                    if mv.query and word_pattern.search(mv.query):
-                        mv_name = mv.name.upper()
-                        link_key = (mv_name, curr_name, "READS/SELECTS")
-                        if link_key not in seen_links:
-                            seen_links.add(link_key)
-                            result.dependencies.append(
-                                DependencyLink(
-                                    source_name=mv_name,
-                                    source_type="MATERIALIZED VIEW",
-                                    target_name=curr_name,
-                                    target_type=curr_type,
-                                    relation_type="READS/SELECTS",
-                                    details="Materialized View baseada no objeto",
-                                    depth=current_depth,
-                                )
-                            )
-                        if mv_name not in visited_nodes:
-                            visited_nodes.add(mv_name)
-                            next_layer.add(mv_name)
-                            all_related_names.add(mv_name)
-
-                # F) Code Objects (Procedures, Functions, Packages)
-                for co in schema.code_objects:
-                    if co.name.upper() == curr_name:
-                        continue
-                    if co.source and word_pattern.search(co.source):
-                        co_name = co.name.upper()
-                        link_key = (co_name, curr_name, "PLSQL_DEPENDENCY")
-                        if link_key not in seen_links:
-                            seen_links.add(link_key)
-                            result.dependencies.append(
-                                DependencyLink(
-                                    source_name=co_name,
-                                    source_type=co.object_type.upper(),
-                                    target_name=curr_name,
-                                    target_type=curr_type,
-                                    relation_type="PLSQL_DEPENDENCY",
-                                    details=f"Objeto {co.object_type} manipula ou referencia {curr_name} no código-fonte",
-                                    depth=current_depth,
-                                )
-                            )
-                        if co_name not in visited_nodes:
-                            visited_nodes.add(co_name)
-                            next_layer.add(co_name)
-                            all_related_names.add(co_name)
+            # D, E, F) Text References (Views, MViews, Code Objects, Triggers)
+            for ref_name, ref_type, rel_type, details in idx.text_references.get(curr_name, []):
+                if ref_name == curr_name or ref_name in ORACLE_RESERVED_WORDS:
+                    continue
+                link_key = (ref_name, curr_name, rel_type)
+                if link_key not in seen_links:
+                    seen_links.add(link_key)
+                    result.dependencies.append(
+                        DependencyLink(
+                            source_name=ref_name,
+                            source_type=ref_type,
+                            target_name=curr_name,
+                            target_type=curr_type,
+                            relation_type=rel_type,
+                            details=details,
+                            depth=current_depth,
+                        )
+                    )
+                if ref_name not in visited_nodes:
+                    visited_nodes.add(ref_name)
+                    next_layer.add(ref_name)
+                    all_related_names.add(ref_name)
 
         current_layer = next_layer
 
-    # Attach metadata of related objects
-    for schema in schemas:
-        for t in schema.tables:
-            if t.name.upper() in all_related_names and t.name.upper() != target_upper:
-                result.related_tables.append(t)
-        for v in schema.views:
-            if v.name.upper() in all_related_names and v.name.upper() != target_upper:
-                result.related_views.append(v)
-        for co in schema.code_objects:
-            if co.name.upper() in all_related_names and co.name.upper() != target_upper:
-                result.related_code_objects.append(co)
-        for trg in schema.triggers:
-            if trg.name.upper() in all_related_names and trg.name.upper() != target_upper:
-                result.related_triggers.append(trg)
+    # Attach metadata of related objects in O(1) lookups
+    for name in all_related_names:
+        if name == target_upper:
+            continue
+        if name in idx.tables_map:
+            result.related_tables.append(idx.tables_map[name])
+        if name in idx.views_map:
+            result.related_views.append(idx.views_map[name])
+        if name in idx.code_map:
+            result.related_code_objects.append(idx.code_map[name])
+        if name in idx.triggers_map:
+            result.related_triggers.append(idx.triggers_map[name])
+
+    return result
+
+
+QUALIFIED_CALL_PATTERN = re.compile(r"\b([A-Za-z0-9_#$]+)\.([A-Za-z0-9_#$]+)\b")
+
+
+def trace_subprogram_dependencies(
+    schemas: list[SchemaMetadata],
+    sub: SubprogramMeta,
+    index: RawDependencyIndex | None = None,
+) -> ObjectTraceResult:
+    idx = index or RawDependencyIndex(schemas)
+    focal_name = f"{sub.package_name}.{sub.name}".upper()
+    focal_type = sub.subprogram_type.upper()
+
+    notes, tasks = extract_code_semantic_comments(sub.source or "")
+
+    result = ObjectTraceResult(
+        focal_name=focal_name,
+        focal_type=focal_type,
+        focal_object=sub,
+        extracted_notes=notes,
+        extracted_tasks=tasks,
+    )
+
+    token_pattern = re.compile(r"\b[A-Za-z0-9_#$]+\b")
+    all_related_names = set()
+    seen_links = set()
+    resolved_packages = set()
+
+    # 1. Outgoing dependencies from sub.source (without comments/hints)
+    if sub.source:
+        clean_code = strip_comments_and_hints(sub.source)
+        pkg_upper = (sub.package_name or "").upper()
+
+        # A) Extract qualified member calls: PACKAGE.ROUTINE
+        for prefix, member in QUALIFIED_CALL_PATTERN.findall(clean_code):
+            p_up = prefix.upper()
+            m_up = member.upper()
+            if m_up in ORACLE_RESERVED_WORDS:
+                continue
+
+            is_pkg = (
+                p_up in idx.packages_set
+                or p_up in idx.synonyms_map
+                or p_up == pkg_upper
+                or (p_up in idx.code_map and idx.code_map[p_up].object_type.upper() in ("PACKAGE", "PACKAGE BODY"))
+            )
+
+            if is_pkg:
+                call_name = f"{p_up}.{m_up}"
+                if call_name != focal_name:
+                    link_key = (focal_name, call_name, "EXECUTES/CALLS")
+                    if link_key not in seen_links:
+                        seen_links.add(link_key)
+                        result.dependencies.append(
+                            DependencyLink(
+                                source_name=focal_name,
+                                source_type=focal_type,
+                                target_name=call_name,
+                                target_type="SUBPROGRAM",
+                                relation_type="EXECUTES/CALLS",
+                                details=f"Sub-rotina invoca {call_name}",
+                                depth=1,
+                            )
+                        )
+                        resolved_packages.add(p_up)
+
+        # B) Extract standalone identifiers (tables, views, standalone procedures, remaining packages)
+        words = {w.upper() for w in token_pattern.findall(clean_code)} - ORACLE_RESERVED_WORDS
+        for w in words & idx.all_names:
+            if w == pkg_upper or w == sub.name.upper() or w in ORACLE_RESERVED_WORDS or w in resolved_packages:
+                continue
+            target_type, target_obj = idx.raw_objects.get(w, ("UNKNOWN", None))
+
+            if target_type == "SYNONYM" and target_obj and getattr(target_obj, "table_name", None):
+                syn_target = (target_obj.table_name or "").upper()
+                if syn_target in idx.tables_map or syn_target in idx.views_map or syn_target in idx.mviews_map:
+                    rel_type = "READS/SELECTS"
+                elif syn_target in idx.packages_set or syn_target in idx.code_map:
+                    rel_type = "EXECUTES/CALLS"
+                else:
+                    rel_type = "DEPENDS_ON"
+            else:
+                rel_type = (
+                    "READS/SELECTS"
+                    if target_type in ("TABLE", "VIEW", "MATERIALIZED VIEW")
+                    else ("EXECUTES/CALLS" if target_type in ("PROCEDURE", "FUNCTION", "PACKAGE", "PACKAGE BODY") else "DEPENDS_ON")
+                )
+
+            link_key = (focal_name, w, rel_type)
+            if link_key not in seen_links:
+                seen_links.add(link_key)
+                result.dependencies.append(
+                    DependencyLink(
+                        source_name=focal_name,
+                        source_type=focal_type,
+                        target_name=w,
+                        target_type=target_type,
+                        relation_type=rel_type,
+                        details=f"Sub-rotina manipula/executa {w}",
+                        depth=1,
+                    )
+                )
+                all_related_names.add(w)
+
+    # 2. Incoming callers that reference this subprogram specifically
+    for ref_name, ref_type, rel_type, details in idx.text_references.get(sub.name.upper(), []):
+        if ref_name == (sub.package_name or "").upper() or ref_name == focal_name or ref_name in ORACLE_RESERVED_WORDS:
+            continue
+        link_key = (ref_name, focal_name, "CALLS_SUBPROGRAM")
+        if link_key not in seen_links:
+            seen_links.add(link_key)
+            result.dependencies.append(
+                DependencyLink(
+                    source_name=ref_name,
+                    source_type=ref_type,
+                    target_name=focal_name,
+                    target_type=focal_type,
+                    relation_type="CALLS_SUBPROGRAM",
+                    details=f"Objeto {ref_name} invoca a sub-rotina {focal_name}",
+                    depth=1,
+                )
+            )
+            all_related_names.add(ref_name)
+
+    # Attach related objects in O(1)
+    for name in all_related_names:
+        if name in idx.tables_map:
+            result.related_tables.append(idx.tables_map[name])
+        if name in idx.views_map:
+            result.related_views.append(idx.views_map[name])
+        if name in idx.code_map:
+            result.related_code_objects.append(idx.code_map[name])
+        if name in idx.triggers_map:
+            result.related_triggers.append(idx.triggers_map[name])
 
     return result
 

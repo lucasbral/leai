@@ -641,48 +641,64 @@ def fetch_schema_metadata(
         current_step = 0
 
         if "tables" in types:
+            if callback:
+                callback("Tables (querying...)", 0, current_step, total_steps)
             schema_meta.tables = _fetch_tables(cursor, temp_config, prefix=prefix)
             current_step += 1
             if callback:
                 callback("Tables", len(schema_meta.tables), current_step, total_steps)
 
         if "views" in types:
+            if callback:
+                callback("Views (querying...)", 0, current_step, total_steps)
             schema_meta.views = _fetch_views(cursor, temp_config, prefix=prefix)
             current_step += 1
             if callback:
                 callback("Views", len(schema_meta.views), current_step, total_steps)
 
         if "mviews" in types:
+            if callback:
+                callback("Materialized Views (querying...)", 0, current_step, total_steps)
             schema_meta.mviews = _fetch_mviews(cursor, temp_config, prefix=prefix)
             current_step += 1
             if callback:
                 callback("Materialized Views", len(schema_meta.mviews), current_step, total_steps)
 
         if code_target_types:
+            if callback:
+                callback("Code Objects (querying...)", 0, current_step, total_steps)
             schema_meta.code_objects = _fetch_code_objects(cursor, temp_config, code_target_types, prefix=prefix)
             current_step += 1
             if callback:
                 callback("Code Objects", len(schema_meta.code_objects), current_step, total_steps)
 
         if "triggers" in types:
+            if callback:
+                callback("Triggers (querying...)", 0, current_step, total_steps)
             schema_meta.triggers = _fetch_triggers(cursor, temp_config, prefix=prefix)
             current_step += 1
             if callback:
                 callback("Triggers", len(schema_meta.triggers), current_step, total_steps)
 
         if "sequences" in types:
+            if callback:
+                callback("Sequences (querying...)", 0, current_step, total_steps)
             schema_meta.sequences = _fetch_sequences(cursor, temp_config, prefix=prefix)
             current_step += 1
             if callback:
                 callback("Sequences", len(schema_meta.sequences), current_step, total_steps)
 
         if "indexes" in types:
+            if callback:
+                callback("Indexes (querying...)", 0, current_step, total_steps)
             schema_meta.indexes = _fetch_indexes(cursor, temp_config, prefix=prefix)
             current_step += 1
             if callback:
                 callback("Indexes", len(schema_meta.indexes), current_step, total_steps)
 
         if "synonyms" in types:
+            if callback:
+                callback("Synonyms (querying...)", 0, current_step, total_steps)
             schema_meta.synonyms = _fetch_synonyms(cursor, temp_config, prefix=prefix)
             current_step += 1
             if callback:
@@ -728,6 +744,10 @@ def fetch_focal_trace(
     schema_name: str | None = None,
     max_depth: int = 1,
 ) -> ObjectTraceResult:
+    try:
+        max_depth = int(getattr(max_depth, "default", max_depth))
+    except Exception:
+        max_depth = 1
     target_schema = (schema_name or config.schema_name).upper()
     target_upper = object_name.strip().upper()
     connection = oracledb.connect(**_build_connect_kwargs(config.dsn))

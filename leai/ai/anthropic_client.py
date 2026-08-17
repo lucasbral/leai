@@ -129,3 +129,43 @@ class AnthropicClient(BaseLLMClient):
         except urllib.error.URLError as exc:
             raise RuntimeError(f"Erro de conexão com a Anthropic: {exc.reason}") from exc
 
+    def list_models(self) -> list[dict[str, str]]:
+        if not self.api_key:
+            return [
+                {"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet (Latest)", "description": "State of the art intelligence & coding"},
+                {"id": "claude-3-5-haiku-20241022", "name": "Claude 3.5 Haiku", "description": "High speed and low latency"},
+                {"id": "claude-3-opus-20240229", "name": "Claude 3 Opus", "description": "Deep complex analysis"},
+            ]
+
+        url = f"{self.base_url}/models"
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "User-Agent": "LEAI-CLI",
+        }
+        req = urllib.request.Request(url, headers=headers, method="GET")
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                resp_data = json.loads(resp.read().decode("utf-8"))
+                models = []
+                for item in resp_data.get("data", []):
+                    m_id = item.get("id", "")
+                    if m_id:
+                        models.append({
+                            "id": m_id,
+                            "name": item.get("display_name", m_id),
+                            "description": f"Created: {item.get('created_at', '')[:10]}" if item.get("created_at") else "",
+                        })
+                if models:
+                    models.sort(key=lambda x: x["id"])
+                    return models
+        except Exception:
+            pass
+
+        return [
+            {"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet (Latest)", "description": "State of the art intelligence & coding"},
+            {"id": "claude-3-5-haiku-20241022", "name": "Claude 3.5 Haiku", "description": "High speed and low latency"},
+            {"id": "claude-3-opus-20240229", "name": "Claude 3 Opus", "description": "Deep complex analysis"},
+        ]
+
