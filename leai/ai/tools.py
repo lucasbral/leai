@@ -5,11 +5,10 @@ import re
 from typing import Any
 
 from leai.annotations import load_annotation
-from leai.compression import extract_subprogram_block, minify_plsql_source
+from leai.compression import extract_subprogram_block
 from leai.config import LeaiConfig
-from leai.models import CodeObjectMeta, SchemaMetadata, TableMeta
-from leai.raw import RawDependencyIndex, trace_raw_dependencies
-
+from leai.models import SchemaMetadata
+from leai.raw import trace_raw_dependencies
 
 DATABASE_TOOLS_DEFINITIONS = [
     {

@@ -38,8 +38,6 @@ from rich.progress import (
 from rich.table import Column, Table
 
 from leai.ai import get_llm_client
-from leai.ai.prompts import ASK_SYSTEM_PROMPT
-from leai.ask_rag import build_rag_context
 from leai.chat_session import ChatSession
 from leai.config import ConfigError, load_config
 from leai.docs import count_schema_objects, sync_schema_annotations, write_dossier_doc, write_rag_json_file, write_schema_docs
@@ -1130,33 +1128,3 @@ def enrich(
     except Exception as exc:
         console.print(f"[red]Error during enrichment:[/red] {exc}")
         raise typer.Exit(code=1)
-
-
-@app.callback(invoke_without_command=True)
-def default(
-    ctx: typer.Context,
-    version: bool = typer.Option(
-        False,
-        "--version",
-        "-v",
-        callback=_version_callback,
-        is_eager=True,
-        help="Show LEAI version and exit.",
-    ),
-    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
-    schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to generate (overrides leai.yml)"),
-    object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to generate (e.g. tables, views, procedures)"),
-    with_traces: bool = typer.Option(True, "--with-traces/--no-traces", help="Include dependency lineage, risk analysis and Mermaid graph"),
-    rag_json: bool = typer.Option(False, "--rag-json", "--rag", help="Also export structured JSON chunks to docs/chunks/ for Vector DB"),
-    depth: int = typer.Option(1, "--depth", "-d", help="Max dependency graph traversal depth (default: 1)"),
-) -> None:
-    if ctx.invoked_subcommand is None:
-        ctx.invoke(
-            generate,
-            config=config,
-            schemas=schemas,
-            object_types=object_types,
-            with_traces=with_traces,
-            rag_json=rag_json,
-            depth=depth,
-        )

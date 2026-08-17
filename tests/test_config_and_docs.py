@@ -648,12 +648,12 @@ FUNCTION get_setor_func (p_numfunc IN NUMBER, p_numvinc IN NUMBER, p_data IN DAT
   BEGIN
     v_setor :=pack_cergon.ep__get_setor_func (p_numfunc, p_numvinc, v_data);
     IF (v_setor IS NOT NULL) THEN
-	  IF v_setor = PACK_ERGON.C_RETORNA_NULO THEN
-	    -- Se o EP retornar a constante PACK_ERGON.C_RETORNA_NULO, indica que o setor deve ser nulo.
-	    RETURN NULL;
-	  ELSE
-        RETURN (v_setor);
-	  END IF;
+        IF v_setor = PACK_ERGON.C_RETORNA_NULO THEN
+            -- Se o EP retornar a constante PACK_ERGON.C_RETORNA_NULO, indica que o setor deve ser nulo.
+            RETURN NULL;
+        ELSE
+            RETURN (v_setor);
+        END IF;
     END IF;
     IF (PACK_HADES.GET_OPCAO('Ergon','EVENTOS', 'EVENTOS') = 'N') THEN -- sem eventos
       RETURN v_setor;
