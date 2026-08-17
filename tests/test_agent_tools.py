@@ -2,12 +2,10 @@ from __future__ import annotations
 
 import json
 import unittest
-from pathlib import Path
 
-from leai.ai.agent import AgentExecutionEngine, MAX_AGENT_ITERATIONS
+from leai.ai.agent import MAX_AGENT_ITERATIONS, AgentExecutionEngine
 from leai.ai.base import BaseLLMClient
 from leai.ai.tools import (
-    DATABASE_TOOLS_DEFINITIONS,
     execute_tool_call,
     get_subprogram_source,
     get_table_schema,

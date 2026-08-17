@@ -8,7 +8,6 @@ from leai.ai.tools import DATABASE_TOOLS_DEFINITIONS, execute_tool_call
 from leai.config import LeaiConfig
 from leai.models import SchemaMetadata
 
-
 # ==============================================================================
 # CONFIGURAÇÃO DE SEGURANÇA E EXECUÇÃO DO AGENTE
 # ==============================================================================

@@ -9,6 +9,7 @@ from typing import Any
 from leai.models import (
     CodeObjectMeta,
     DependencyLink,
+    ForeignKeyMeta,
     IndexMeta,
     MaterializedViewMeta,
     ObjectTraceResult,
