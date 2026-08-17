@@ -19,12 +19,12 @@ class CliIntegrationTests(unittest.TestCase):
     def test_version_option(self):
         result = self.runner.invoke(app, ["--version"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("LEAI CLI version 0.1.6", result.output)
+        self.assertIn("LEAI CLI version 0.2.0", result.output)
 
     def test_version_short_option(self):
         result = self.runner.invoke(app, ["-v"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("LEAI CLI version 0.1.6", result.output)
+        self.assertIn("LEAI CLI version 0.2.0", result.output)
 
     def test_help_command(self):
         result = self.runner.invoke(app, ["--help"])
@@ -54,7 +54,7 @@ class CliIntegrationTests(unittest.TestCase):
             # 2. Attempt without --force (must fail)
             result_again = self.runner.invoke(app, ["init", "--output", str(out_file)])
             self.assertEqual(result_again.exit_code, 1)
-            self.assertIn("already exists", result_again.output)
+            self.assertIn("already exists", " ".join(result_again.output.split()))
 
             # 3. With --force (must overwrite)
             result_force = self.runner.invoke(app, ["init", "--output", str(out_file), "--force"])
@@ -112,9 +112,9 @@ ai:
                 f"""
 schemas:
   - HR
-rawPath: "{raw_dir}"
-annotationsPath: "{ann_dir}"
-docPath: "{doc_dir}"
+rawPath: "{raw_dir.as_posix()}"
+annotationsPath: "{ann_dir.as_posix()}"
+docPath: "{doc_dir.as_posix()}"
                 """,
                 encoding="utf-8",
             )
@@ -160,9 +160,9 @@ docPath: "{doc_dir}"
                 f"""
 schemas:
   - HR
-rawPath: "{raw_dir}"
-annotationsPath: "{base / 'annotations'}"
-docPath: "{base / 'docs'}"
+rawPath: "{raw_dir.as_posix()}"
+annotationsPath: "{(base / 'annotations').as_posix()}"
+docPath: "{(base / 'docs').as_posix()}"
                 """,
                 encoding="utf-8",
             )
@@ -209,9 +209,9 @@ docPath: "{base / 'docs'}"
                 f"""
 schemas:
   - HR
-rawPath: "{raw_dir}"
-annotationsPath: "{base / 'annotations'}"
-docPath: "{doc_dir}"
+rawPath: "{raw_dir.as_posix()}"
+annotationsPath: "{(base / 'annotations').as_posix()}"
+docPath: "{doc_dir.as_posix()}"
                 """,
                 encoding="utf-8",
             )
@@ -230,6 +230,8 @@ docPath: "{doc_dir}"
         mock_client = MagicMock()
         mock_client.model = "mock-gpt-4o"
         mock_client.generate_text.return_value = "The EMPLOYEES table stores employee records."
+        mock_client.generate_chat.return_value = "The EMPLOYEES table stores employee records."
+        mock_client.generate_chat_with_tools.return_value = ("The EMPLOYEES table stores employee records.", [])
         mock_get_client.return_value = mock_client
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -252,9 +254,9 @@ docPath: "{doc_dir}"
                 f"""
 schemas:
   - HR
-rawPath: "{raw_dir}"
-annotationsPath: "{base / 'annotations'}"
-docPath: "{base / 'docs'}"
+rawPath: "{raw_dir.as_posix()}"
+annotationsPath: "{(base / 'annotations').as_posix()}"
+docPath: "{(base / 'docs').as_posix()}"
 ai:
   default_provider: "openai"
                 """,
@@ -302,9 +304,9 @@ ai:
                 f"""
 schemas:
   - HR
-rawPath: "{raw_dir}"
-annotationsPath: "{ann_dir}"
-docPath: "{base / 'docs'}"
+rawPath: "{raw_dir.as_posix()}"
+annotationsPath: "{ann_dir.as_posix()}"
+docPath: "{(base / 'docs').as_posix()}"
 ai:
   default_provider: "openai"
                 """,
@@ -353,9 +355,9 @@ ai:
 dsn: "oracle://user:pass@localhost:1521/ORCL"
 schemas:
   - HR
-rawPath: "{base / 'raw'}"
-annotationsPath: "{base / 'annotations'}"
-docPath: "{base / 'docs'}"
+rawPath: "{(base / 'raw').as_posix()}"
+annotationsPath: "{(base / 'annotations').as_posix()}"
+docPath: "{(base / 'docs').as_posix()}"
                 """,
                 encoding="utf-8",
             )
@@ -369,6 +371,56 @@ docPath: "{base / 'docs'}"
             result_gen = self.runner.invoke(app, ["generate", "--config", str(cfg_file)])
             self.assertEqual(result_gen.exit_code, 0, msg=result_gen.output)
             self.assertIn("Documentation Generation Completed", result_gen.output)
+
+            # Test default invocation (calling bare `leai` without subcommand)
+            result_default = self.runner.invoke(app, ["--config", str(cfg_file)])
+            self.assertEqual(result_default.exit_code, 0, msg=result_default.output)
+            self.assertIn("Documentation Generation Completed", result_default.output)
+
+    @patch("leai.cli.oracledb.connect")
+    @patch("leai.cli.fetch_available_schemas")
+    @patch("leai.cli.fetch_schema_metadata")
+    def test_schema_short_flag_and_subfolder_creation(self, mock_fetch_meta, mock_fetch_schemas, mock_connect):
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
+        mock_fetch_schemas.return_value = ["HADES"]
+
+        fake_schema = SchemaMetadata(
+            schema_name="HADES",
+            tables=[
+                TableMeta(
+                    name="T_LOG",
+                    columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)],
+                )
+            ],
+        )
+        mock_fetch_meta.return_value = fake_schema
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            cfg_file = base / "leai.yml"
+            cfg_file.write_text(
+                f"""
+dsn: "oracle://user:pass@localhost:1521/ORCL"
+schemas:
+  - C_ERGON
+rawPath: "{(base / 'raw').as_posix()}"
+annotationsPath: "{(base / 'annotations').as_posix()}"
+docPath: "{(base / 'docs').as_posix()}"
+                """,
+                encoding="utf-8",
+            )
+
+            # Test extract with -s HADES override
+            result_ext = self.runner.invoke(app, ["extract", "-c", str(cfg_file), "-s", "HADES"])
+            self.assertEqual(result_ext.exit_code, 0, msg=result_ext.output)
+            self.assertTrue((base / "raw" / "HADES" / "tables" / "T_LOG.json").exists())
+
+            # Test compile with -s HADES override
+            result_comp = self.runner.invoke(app, ["compile", "-c", str(cfg_file), "-s", "HADES"])
+            self.assertEqual(result_comp.exit_code, 0, msg=result_comp.output)
+            self.assertTrue((base / "docs" / "HADES" / "tables" / "T_LOG.md").exists())
+            self.assertTrue((base / "annotations" / "HADES" / "tables" / "T_LOG.yml").exists())
 
 
 if __name__ == "__main__":

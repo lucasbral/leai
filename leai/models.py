@@ -153,10 +153,12 @@ class DependencyLink(BaseModel):
 class ObjectTraceResult(BaseModel):
     focal_name: str
     focal_type: str
-    focal_object: TableMeta | ViewMeta | MaterializedViewMeta | CodeObjectMeta | TriggerMeta | SequenceMeta | IndexMeta | SynonymMeta | None = None
+    focal_object: TableMeta | ViewMeta | MaterializedViewMeta | CodeObjectMeta | TriggerMeta | SequenceMeta | IndexMeta | SynonymMeta | SubprogramMeta | None = None
     dependencies: list[DependencyLink] = Field(default_factory=list)
     related_tables: list[TableMeta] = Field(default_factory=list)
     related_views: list[ViewMeta] = Field(default_factory=list)
     related_code_objects: list[CodeObjectMeta] = Field(default_factory=list)
     related_triggers: list[TriggerMeta] = Field(default_factory=list)
+    extracted_notes: list[str] = Field(default_factory=list)
+    extracted_tasks: list[str] = Field(default_factory=list)
 

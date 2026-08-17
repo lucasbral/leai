@@ -1,28 +1,48 @@
 from __future__ import annotations
 
+import sys
 import time
 from pathlib import Path
 
+if sys.platform == "win32":
+    try:
+        if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8")
+        if sys.stderr and hasattr(sys.stderr, "reconfigure"):
+            sys.stderr.reconfigure(encoding="utf-8")
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        for std_handle_id in (-11, -12):
+            handle = kernel32.GetStdHandle(std_handle_id)
+            mode = ctypes.c_ulong()
+            if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+                # ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+                mode.value |= 0x0004
+                kernel32.SetConsoleMode(handle, mode)
+    except Exception:
+        pass
+
 import oracledb
 import typer
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import (
     BarColumn,
-    MofNCompleteColumn,
     Progress,
     SpinnerColumn,
     TaskProgressColumn,
     TextColumn,
     TimeElapsedColumn,
 )
-from rich.table import Table
+from rich.table import Column, Table
 
 from leai.ai import get_llm_client
 from leai.ai.prompts import ASK_SYSTEM_PROMPT
 from leai.ask_rag import build_rag_context
+from leai.chat_session import ChatSession
 from leai.config import ConfigError, load_config
-from leai.docs import sync_schema_annotations, write_dossier_doc, write_rag_json_file, write_schema_docs
+from leai.docs import count_schema_objects, sync_schema_annotations, write_dossier_doc, write_rag_json_file, write_schema_docs
 from leai.enrich import enrich_schema_annotations
 from leai.models import SchemaMetadata
 from leai.oracle import _build_connect_kwargs, fetch_available_schemas, fetch_focal_trace, fetch_schema_metadata
@@ -30,7 +50,29 @@ from leai.raw import load_raw_schemas, save_raw_schema, trace_raw_dependencies
 from leai.tui import InteractiveTUISession
 
 app = typer.Typer(help="CLI for Oracle Database Intelligence & Documentation.")
-console = Console()
+console = Console(legacy_windows=False)
+
+
+def _create_progress_bar() -> Progress:
+    """Creates a fully responsive progress bar that gracefully handles terminal resizing without wrapping or ghost lines."""
+    return Progress(
+        SpinnerColumn(spinner_name="dots", style="bold cyan", finished_text="[bold green]✓[/bold green]"),
+        TextColumn(
+            "{task.description}",
+            table_column=Column(no_wrap=True, overflow="ellipsis"),
+        ),
+        BarColumn(
+            bar_width=20,
+            table_column=Column(no_wrap=True),
+        ),
+        TaskProgressColumn(table_column=Column(no_wrap=True)),
+        TimeElapsedColumn(table_column=Column(no_wrap=True)),
+        console=console,
+        expand=False,
+        auto_refresh=True,
+        refresh_per_second=6,
+        transient=False,
+    )
 
 
 def _version_callback(value: bool) -> None:
@@ -154,12 +196,15 @@ def check(
 @app.command()
 def extract(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to extract (overrides leai.yml)"),
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to extract (e.g. tables, views, procedures)"),
 ) -> None:
     """Extracts raw technical snapshot from Oracle database into rawPath."""
     start_time = time.perf_counter()
     try:
         cfg = load_config(config)
+        if schemas:
+            cfg.schemas = [s.strip().upper() for s in schemas]
         if object_types:
             cfg.object_types = [t.lower() for t in object_types]
     except ConfigError as exc:
@@ -183,29 +228,38 @@ def extract(
             "triggers": 0, "sequences": 0, "indexes": 0, "synonyms": 0,
         }
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[bold cyan]{task.description}[/bold cyan]"),
-            BarColumn(),
-            MofNCompleteColumn(),
-            TaskProgressColumn(),
-            TimeElapsedColumn(),
-            console=console,
-        ) as progress:
-            task_id = progress.add_task("Extracting Schemas...", total=len(target_schemas))
+        with _create_progress_bar() as progress:
+            overall_task = (
+                progress.add_task(
+                    f"[bold cyan]Overall Extraction[/bold cyan] (0/{len(target_schemas)} schemas)",
+                    total=len(target_schemas),
+                )
+                if is_multi
+                else None
+            )
+            schema_task = progress.add_task("Extracting...", total=100)
 
-            for schema_name in target_schemas:
+            for s_idx, schema_name in enumerate(target_schemas, 1):
                 schema_obj_count = [0]
+                progress.reset(
+                    schema_task,
+                    total=100,
+                    description=f"Extracting [bold yellow]{schema_name}[/bold yellow]",
+                )
+                progress.refresh()
 
                 def _cb(cat: str, count: int, step_idx: int, total_steps: int, s_name=schema_name) -> None:
-                    schema_obj_count[0] += count
+                    if count > 0:
+                        schema_obj_count[0] += count
                     pct = int((step_idx / total_steps) * 100) if total_steps else 100
                     progress.update(
-                        task_id,
-                        description=f"Extracting [bold yellow]{s_name}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ([bold green]{schema_obj_count[0]:,} objects[/bold green])",
+                        schema_task,
+                        completed=pct,
+                        total=100,
+                        description=f"Extracting [bold yellow]{s_name}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({schema_obj_count[0]:,} objects) [dim]│ {cat}[/dim]",
                     )
+                    progress.refresh()
 
-                progress.update(task_id, description=f"Extracting [bold yellow]{schema_name}[/bold yellow]")
                 schema_meta = fetch_schema_metadata(cfg, schema_name=schema_name, callback=_cb)
 
                 totals["tables"] += len(schema_meta.tables)
@@ -217,8 +271,14 @@ def extract(
                 totals["indexes"] += len(schema_meta.indexes)
                 totals["synonyms"] += len(schema_meta.synonyms)
 
-                save_raw_schema(schema_meta, cfg.rawPath, multi_schema=is_multi)
-                progress.advance(task_id)
+                save_raw_schema(schema_meta, cfg.rawPath, multi_schema=True)
+
+                if overall_task is not None:
+                    progress.advance(overall_task, 1)
+                    progress.update(
+                        overall_task,
+                        description=f"[bold cyan]Overall Extraction[/bold cyan] ({s_idx}/{len(target_schemas)} schemas)",
+                    )
 
         elapsed = time.perf_counter() - start_time
         _print_final_summary_panel(
@@ -236,12 +296,15 @@ def extract(
 @app.command()
 def annotate(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to sync (overrides leai.yml)"),
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to sync (e.g. tables, views, procedures)"),
 ) -> None:
     """Generates/synchronizes YAML annotation stubs in annotationsPath from rawPath (Offline)."""
     start_time = time.perf_counter()
     try:
         cfg = load_config(config)
+        if schemas:
+            cfg.schemas = [s.strip().upper() for s in schemas]
         if object_types:
             cfg.object_types = [t.lower() for t in object_types]
     except ConfigError as exc:
@@ -250,7 +313,7 @@ def annotate(
 
     try:
         console.print(f"[cyan]Loading snapshots from[/cyan] [bold]{cfg.rawPath}[/bold]...\n")
-        schemas_meta = load_raw_schemas(cfg.rawPath)
+        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=cfg.schemas if schemas else None)
         is_multi = len(schemas_meta) > 1
 
         totals = {
@@ -258,21 +321,27 @@ def annotate(
             "triggers": 0, "sequences": 0, "indexes": 0, "synonyms": 0,
         }
         total_ann = 0
+        total_objects_all = sum(count_schema_objects(s, cfg.object_types) for s in schemas_meta)
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[bold cyan]{task.description}[/bold cyan]"),
-            BarColumn(),
-            MofNCompleteColumn(),
-            TaskProgressColumn(),
-            TimeElapsedColumn(),
-            console=console,
-        ) as progress:
-            task_id = progress.add_task("Synchronizing Annotations...", total=len(schemas_meta))
+        with _create_progress_bar() as progress:
+            overall_task = (
+                progress.add_task(
+                    f"[bold cyan]Overall Synchronization[/bold cyan] (0/{len(schemas_meta)} schemas)",
+                    total=max(1, total_objects_all),
+                )
+                if is_multi
+                else None
+            )
+            schema_task = progress.add_task("Synchronizing...", total=100)
 
-            for schema_meta in schemas_meta:
+            for s_idx, schema_meta in enumerate(schemas_meta, 1):
                 s_name = schema_meta.schema_name or cfg.schema_name
-                progress.update(task_id, description=f"Synchronizing [bold yellow]{s_name}[/bold yellow]")
+                schema_total_objs = count_schema_objects(schema_meta, cfg.object_types)
+                progress.reset(
+                    schema_task,
+                    total=schema_total_objs,
+                    description=f"Synchronizing [bold yellow]{s_name}[/bold yellow]",
+                )
 
                 totals["tables"] += len(schema_meta.tables)
                 totals["views"] += len(schema_meta.views)
@@ -283,14 +352,32 @@ def annotate(
                 totals["indexes"] += len(schema_meta.indexes)
                 totals["synonyms"] += len(schema_meta.synonyms)
 
+                def _on_ann_progress(cat: str, name: str, current: int, total: int, s_title=s_name) -> None:
+                    pct = int((current / total) * 100) if total else 100
+                    progress.update(
+                        schema_task,
+                        completed=current,
+                        total=total,
+                        description=f"Synchronizing [bold yellow]{s_title}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({current:,}/{total:,} objs) [dim]│ {cat} {name}[/dim]",
+                    )
+                    if overall_task is not None:
+                        progress.advance(overall_task, 1)
+                    progress.refresh()
+
                 generated_ann = sync_schema_annotations(
                     schema_meta,
                     annotations_path=cfg.annotationsPath,
-                    multi_schema=is_multi,
+                    multi_schema=True,
                     object_types=cfg.object_types,
+                    progress_callback=_on_ann_progress,
                 )
                 total_ann += len(generated_ann)
-                progress.advance(task_id)
+
+                if overall_task is not None:
+                    progress.update(
+                        overall_task,
+                        description=f"[bold cyan]Overall Synchronization[/bold cyan] ({s_idx}/{len(schemas_meta)} schemas)",
+                    )
 
         elapsed = time.perf_counter() - start_time
         _print_final_summary_panel(
@@ -308,17 +395,193 @@ def annotate(
 
 
 @app.command()
+def ask(
+    question: str = typer.Argument(..., help="Natural language question about the database"),
+    provider: str = typer.Option(None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, deepseek, qwen, kimi, ollama)"),
+    model: str = typer.Option(None, "--model", "-m", help="AI model name"),
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+) -> None:
+    """Interactive AI assistant to answer technical and business questions about the database."""
+    from rich.markdown import Markdown
+
+    start_time = time.perf_counter()
+    try:
+        cfg = load_config(config)
+    except ConfigError as exc:
+        console.print(f"[red]Config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    schemas = load_raw_schemas(cfg.rawPath)
+    if not schemas:
+        console.print(f"[red]No snapshot found in '{cfg.rawPath}'. Run 'leai extract' first.[/red]")
+        raise typer.Exit(code=1)
+
+    try:
+        client = get_llm_client(cfg, provider_override=provider, model_override=model)
+    except Exception as exc:
+        console.print(f"[red]Error initializing AI client:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    session = ChatSession(schemas=schemas, config=cfg, client=client)
+    provider_name = (provider or cfg.ai.default_provider or "openai").upper()
+    tools_used = []
+
+    def _on_tool_start(t_name: str, t_args: dict) -> None:
+        tools_used.append(t_name)
+        args_str = ", ".join(f"{k}={v}" for k, v in t_args.items())
+        console.print(f"[dim cyan]  ⚙️ Investigating:[/dim cyan] [bold yellow]{t_name}[/bold yellow]({args_str})")
+
+    try:
+        with console.status(f"[cyan]Agent analyzing database ([bold yellow]{provider_name}[/bold yellow] • [bold green]{client.model}[/bold green])...[/cyan]", spinner="dots"):
+            answer, detected_entities = session.send(question, on_tool_start=_on_tool_start)
+
+        elapsed = time.perf_counter() - start_time
+        meta_parts = [f"⚡ {elapsed:.2f}s", f"Provider: {provider_name} ({client.model})"]
+        if tools_used:
+            meta_parts.append(f"Tools: {', '.join(tools_used)}")
+        elif detected_entities:
+            meta_parts.append(f"RAG: {', '.join(detected_entities)}")
+
+        subtitle_text = f"[dim]{' • '.join(meta_parts)}[/dim]"
+        console.print(Panel(Markdown(answer), title="[bold green]🤖 LEAI Assistant[/bold green]", subtitle=subtitle_text, border_style="cyan"))
+    except Exception as exc:
+        console.print(f"[red]Error querying AI:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def chat(
+    provider: str = typer.Option(None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, deepseek, qwen, kimi, ollama)"),
+    model: str = typer.Option(None, "--model", "-m", help="AI model name"),
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+) -> None:
+    """Starts an interactive OpenCode-style TUI copilot with RAG, slash commands and @ mentions."""
+    try:
+        cfg = load_config(config)
+    except ConfigError as exc:
+        console.print(f"[red]Config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    schemas = load_raw_schemas(cfg.rawPath)
+    if not schemas:
+        console.print(f"[red]No snapshot found in '{cfg.rawPath}'. Run 'leai extract' first.[/red]")
+        raise typer.Exit(code=1)
+
+    try:
+        client = get_llm_client(cfg, provider_override=provider, model_override=model)
+    except Exception as exc:
+        console.print(f"[red]Error initializing AI client:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    session = InteractiveTUISession(
+        schemas=schemas,
+        config=cfg,
+        client=client,
+        provider_name=provider,
+    )
+    session.run()
+
+
+@app.command()
+def models(
+    provider: str = typer.Option(None, "--provider", "-p", help="AI provider to query (openai, gemini, anthropic, deepseek, qwen, kimi, ollama)"),
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+) -> None:
+    """Lists available AI models returned by the provider API for the configured API key."""
+    try:
+        cfg = load_config(config)
+    except ConfigError as exc:
+        console.print(f"[red]Config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    target_prov = (provider or cfg.ai.default_provider or "openai").lower()
+    try:
+        client = get_llm_client(cfg, provider_override=target_prov)
+        with console.status(f"[cyan]Querying [bold yellow]{target_prov.upper()}[/bold yellow] API for available models...[/cyan]", spinner="dots"):
+            models_list = client.list_models()
+    except Exception as exc:
+        console.print(f"[red]Error fetching models for {target_prov.upper()}:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    table = Table(show_header=True, header_style="bold cyan", box=box.ROUNDED)
+    table.add_column("Status", justify="center", width=8)
+    table.add_column("Model ID", style="bold yellow")
+    table.add_column("Display Name", style="white")
+    table.add_column("Description / Notes", style="dim")
+
+    for m in models_list:
+        m_id = m.get("id", "")
+        is_active = (m_id == client.model)
+        status_badge = "[bold green]ACTIVE[/bold green]" if is_active else "[dim]-[/dim]"
+        table.add_row(status_badge, m_id, m.get("name", m_id), m.get("description", m.get("note", "")))
+
+    console.print()
+    console.print(Panel(table, title=f"[bold cyan]✦ Available Models for {target_prov.upper()} ({len(models_list)} Total)[/bold cyan]", box=box.ROUNDED, border_style="cyan"))
+    console.print(f"[dim]Tip: Use in chat with [bold cyan]/model {target_prov} <model_id>[/bold cyan] or CLI with [bold cyan]-p {target_prov} -m <model_id>[/bold cyan][/dim]\n")
+
+
+@app.callback(invoke_without_command=True)
+def default(
+    ctx: typer.Context,
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-v",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show LEAI version and exit.",
+    ),
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to generate (overrides leai.yml)"),
+    object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to generate (e.g. tables, views, procedures)"),
+    with_traces: bool = typer.Option(True, "--with-traces/--no-traces", help="Include dependency lineage, risk analysis and Mermaid graph"),
+    rag_json: bool = typer.Option(False, "--rag-json", "--rag", help="Also export structured JSON chunks to docs/chunks/ for Vector DB"),
+    depth: int = typer.Option(1, "--depth", "-d", help="Max dependency graph traversal depth (default: 1)"),
+) -> None:
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(
+            generate,
+            config=config,
+            schemas=schemas,
+            object_types=object_types,
+            with_traces=with_traces,
+            rag_json=rag_json,
+            depth=depth,
+        )
+
+
+@app.command()
 def compile(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to compile (overrides leai.yml)"),
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to compile (e.g. tables, views, procedures)"),
     with_traces: bool = typer.Option(True, "--with-traces/--no-traces", help="Include dependency lineage, risk analysis and Mermaid graph"),
     rag_json: bool = typer.Option(False, "--rag-json", "--rag", help="Also export structured JSON chunks to docs/chunks/ for Vector DB"),
     depth: int = typer.Option(1, "--depth", "-d", help="Max dependency graph traversal depth (default: 1)"),
 ) -> None:
     """Compiles Markdown docs in docPath merging rawPath + annotationsPath (Offline)."""
+    try:
+        depth = int(getattr(depth, "default", depth))
+    except Exception:
+        depth = 1
+    if hasattr(with_traces, "default"):
+        with_traces = bool(getattr(with_traces, "default", True))
+    if hasattr(rag_json, "default"):
+        rag_json = bool(getattr(rag_json, "default", False))
+    if hasattr(config, "default") or not isinstance(config, (str, Path)):
+        config = getattr(config, "default", Path("leai.yml")) or Path("leai.yml")
+    if not isinstance(config, Path):
+        config = Path(config)
+    if hasattr(object_types, "default"):
+        object_types = getattr(object_types, "default", None)
+    if hasattr(schemas, "default"):
+        schemas = getattr(schemas, "default", None)
+
     start_time = time.perf_counter()
     try:
         cfg = load_config(config)
+        if schemas:
+            cfg.schemas = [s.strip().upper() for s in schemas]
         if object_types:
             cfg.object_types = [t.lower() for t in object_types]
     except ConfigError as exc:
@@ -327,7 +590,7 @@ def compile(
 
     try:
         console.print(f"[cyan]Loading snapshots from[/cyan] [bold]{cfg.rawPath}[/bold]...\n")
-        schemas_meta = load_raw_schemas(cfg.rawPath)
+        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=cfg.schemas if schemas else None)
         is_multi = len(schemas_meta) > 1
 
         totals = {
@@ -336,21 +599,27 @@ def compile(
         }
         total_md = 0
         total_ann = 0
+        total_objects_all = sum(count_schema_objects(s, cfg.object_types) for s in schemas_meta)
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[bold cyan]{task.description}[/bold cyan]"),
-            BarColumn(),
-            MofNCompleteColumn(),
-            TaskProgressColumn(),
-            TimeElapsedColumn(),
-            console=console,
-        ) as progress:
-            task_id = progress.add_task("Compiling Schemas...", total=len(schemas_meta))
+        with _create_progress_bar() as progress:
+            overall_task = (
+                progress.add_task(
+                    f"[bold cyan]Overall Compilation[/bold cyan] (0/{len(schemas_meta)} schemas)",
+                    total=max(1, total_objects_all),
+                )
+                if is_multi
+                else None
+            )
+            schema_task = progress.add_task("Compiling...", total=100)
 
-            for schema_meta in schemas_meta:
+            for s_idx, schema_meta in enumerate(schemas_meta, 1):
                 s_name = schema_meta.schema_name or cfg.schema_name
-                progress.update(task_id, description=f"Compiling [bold yellow]{s_name}[/bold yellow]")
+                schema_total_objs = count_schema_objects(schema_meta, cfg.object_types)
+                progress.reset(
+                    schema_task,
+                    total=schema_total_objs,
+                    description=f"Compiling [bold yellow]{s_name}[/bold yellow]",
+                )
 
                 totals["tables"] += len(schema_meta.tables)
                 totals["views"] += len(schema_meta.views)
@@ -361,21 +630,39 @@ def compile(
                 totals["indexes"] += len(schema_meta.indexes)
                 totals["synonyms"] += len(schema_meta.synonyms)
 
+                def _on_comp_progress(cat: str, name: str, current: int, total: int, s_title=s_name) -> None:
+                    pct = int((current / total) * 100) if total else 100
+                    progress.update(
+                        schema_task,
+                        completed=current,
+                        total=total,
+                        description=f"Compiling [bold yellow]{s_title}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({current:,}/{total:,} objs) [dim]│ {cat} {name}[/dim]",
+                    )
+                    if overall_task is not None:
+                        progress.advance(overall_task, 1)
+                    progress.refresh()
+
                 generated_md, generated_ann = write_schema_docs(
                     schema_meta,
                     doc_path=cfg.docPath,
                     annotations_path=cfg.annotationsPath,
                     docs_overrides=cfg.docs,
-                    multi_schema=is_multi,
+                    multi_schema=True,
                     object_types=cfg.object_types,
                     all_schemas=schemas_meta,
                     with_traces=with_traces,
                     max_depth=depth,
                     generate_rag_chunks=rag_json,
+                    progress_callback=_on_comp_progress,
                 )
                 total_md += len(generated_md)
                 total_ann += len(generated_ann)
-                progress.advance(task_id)
+
+                if overall_task is not None:
+                    progress.update(
+                        overall_task,
+                        description=f"[bold cyan]Overall Compilation[/bold cyan] ({s_idx}/{len(schemas_meta)} schemas)",
+                    )
 
         elapsed = time.perf_counter() - start_time
         out_paths = {
@@ -399,15 +686,35 @@ def compile(
 @app.command()
 def generate(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to generate (overrides leai.yml)"),
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to generate (e.g. tables, views, procedures)"),
     with_traces: bool = typer.Option(True, "--with-traces/--no-traces", help="Include dependency lineage, risk analysis and Mermaid graph"),
     rag_json: bool = typer.Option(False, "--rag-json", "--rag", help="Also export structured JSON chunks to docs/chunks/ for Vector DB"),
     depth: int = typer.Option(1, "--depth", "-d", help="Max dependency graph traversal depth (default: 1)"),
 ) -> None:
     """Generates complete documentation (Extracts RAW -> Syncs Annotations -> Compiles Markdown)."""
+    try:
+        depth = int(getattr(depth, "default", depth))
+    except Exception:
+        depth = 1
+    if hasattr(with_traces, "default"):
+        with_traces = bool(getattr(with_traces, "default", True))
+    if hasattr(rag_json, "default"):
+        rag_json = bool(getattr(rag_json, "default", False))
+    if hasattr(config, "default") or not isinstance(config, (str, Path)):
+        config = getattr(config, "default", Path("leai.yml")) or Path("leai.yml")
+    if not isinstance(config, Path):
+        config = Path(config)
+    if hasattr(object_types, "default"):
+        object_types = getattr(object_types, "default", None)
+    if hasattr(schemas, "default"):
+        schemas = getattr(schemas, "default", None)
+
     start_time = time.perf_counter()
     try:
         cfg = load_config(config)
+        if schemas:
+            cfg.schemas = [s.strip().upper() for s in schemas]
         if object_types:
             cfg.object_types = [t.lower() for t in object_types]
     except ConfigError as exc:
@@ -434,29 +741,38 @@ def generate(
         total_ann = 0
         all_schemas_meta: list[SchemaMetadata] = []
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[bold cyan]{task.description}[/bold cyan]"),
-            BarColumn(),
-            MofNCompleteColumn(),
-            TaskProgressColumn(),
-            TimeElapsedColumn(),
-            console=console,
-        ) as progress:
-            task_id = progress.add_task("Processing Pipeline...", total=len(target_schemas))
+        with _create_progress_bar() as progress:
+            overall_task = (
+                progress.add_task(
+                    f"[bold cyan]Overall Pipeline[/bold cyan] (0/{len(target_schemas)} schemas)",
+                    total=len(target_schemas),
+                )
+                if is_multi
+                else None
+            )
+            schema_task = progress.add_task("Processing...", total=100)
 
-            for schema_name in target_schemas:
+            for s_idx, schema_name in enumerate(target_schemas, 1):
                 schema_obj_count = [0]
+                progress.reset(
+                    schema_task,
+                    total=100,
+                    description=f"Processing [bold yellow]{schema_name}[/bold yellow]",
+                )
+                progress.refresh()
 
                 def _cb(cat: str, count: int, step_idx: int, total_steps: int, s_name=schema_name) -> None:
-                    schema_obj_count[0] += count
+                    if count > 0:
+                        schema_obj_count[0] += count
                     pct = int((step_idx / total_steps) * 100) if total_steps else 100
                     progress.update(
-                        task_id,
-                        description=f"Processing [bold yellow]{s_name}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ([bold green]{schema_obj_count[0]:,} objects[/bold green])",
+                        schema_task,
+                        completed=pct,
+                        total=100,
+                        description=f"Extracting [bold yellow]{s_name}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({schema_obj_count[0]:,} objects) [dim]│ {cat}[/dim]",
                     )
+                    progress.refresh()
 
-                progress.update(task_id, description=f"Processing [bold yellow]{schema_name}[/bold yellow]")
                 schema_meta = fetch_schema_metadata(cfg, schema_name=schema_name, callback=_cb)
                 all_schemas_meta.append(schema_meta)
 
@@ -470,24 +786,48 @@ def generate(
                 totals["synonyms"] += len(schema_meta.synonyms)
 
                 # 1. Save RAW Snapshot
-                save_raw_schema(schema_meta, cfg.rawPath, multi_schema=is_multi)
+                save_raw_schema(schema_meta, cfg.rawPath, multi_schema=True)
 
-                # 2 & 3. Sync Annotations and Compile Docs
+                # 2 & 3. Sync Annotations and Compile Docs with granular object progress
+                schema_total_objs = count_schema_objects(schema_meta, cfg.object_types)
+                progress.reset(
+                    schema_task,
+                    total=schema_total_objs,
+                    description=f"Compiling [bold yellow]{schema_name}[/bold yellow]",
+                )
+
+                def _on_gen_progress(cat: str, name: str, current: int, total: int, s_title=schema_name) -> None:
+                    pct = int((current / total) * 100) if total else 100
+                    progress.update(
+                        schema_task,
+                        completed=current,
+                        total=total,
+                        description=f"Compiling [bold yellow]{s_title}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({current:,}/{total:,} objs) [dim]│ {cat} {name}[/dim]",
+                    )
+                    progress.refresh()
+
                 generated_md, generated_ann = write_schema_docs(
                     schema_meta,
                     doc_path=cfg.docPath,
                     annotations_path=cfg.annotationsPath,
                     docs_overrides=cfg.docs,
-                    multi_schema=is_multi,
+                    multi_schema=True,
                     object_types=cfg.object_types,
                     all_schemas=all_schemas_meta,
                     with_traces=with_traces,
                     max_depth=depth,
                     generate_rag_chunks=rag_json,
+                    progress_callback=_on_gen_progress,
                 )
                 total_md += len(generated_md)
                 total_ann += len(generated_ann)
-                progress.advance(task_id)
+
+                if overall_task is not None:
+                    progress.advance(overall_task, 1)
+                    progress.update(
+                        overall_task,
+                        description=f"[bold cyan]Overall Pipeline[/bold cyan] ({s_idx}/{len(target_schemas)} schemas)",
+                    )
 
         elapsed = time.perf_counter() - start_time
         out_paths = {
@@ -607,6 +947,19 @@ def trace(
 
     from leai.docs import _calculate_risk_level
 
+    try:
+        depth = int(getattr(depth, "default", depth))
+    except Exception:
+        depth = 1
+    if hasattr(offline, "default"):
+        offline = bool(getattr(offline, "default", False))
+    if hasattr(rag_json, "default"):
+        rag_json = bool(getattr(rag_json, "default", False))
+    if hasattr(config, "default") or not isinstance(config, (str, Path)):
+        config = getattr(config, "default", Path("leai.yml")) or Path("leai.yml")
+    if not isinstance(config, Path):
+        config = Path(config)
+
     start_time = time.perf_counter()
     try:
         cfg = load_config(config)
@@ -698,6 +1051,7 @@ def enrich(
     provider: str = typer.Option(None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, deepseek, qwen, kimi, ollama)"),
     model: str = typer.Option(None, "--model", "-m", help="AI model name (e.g. gpt-4o, gemini-1.5-flash, claude-3-5-sonnet)"),
     overwrite: bool = typer.Option(False, "--overwrite", help="Force overwrite existing descriptions and comments"),
+    schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to enrich (overrides leai.yml)"),
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to enrich (e.g. tables, packages)"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
 ) -> None:
@@ -705,12 +1059,14 @@ def enrich(
     start_time = time.perf_counter()
     try:
         cfg = load_config(config)
+        if schemas:
+            cfg.schemas = [s.strip().upper() for s in schemas]
     except ConfigError as exc:
         console.print(f"[red]Config error:[/red] {exc}")
         raise typer.Exit(code=1)
 
-    schemas = load_raw_schemas(cfg.rawPath)
-    if not schemas:
+    schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=cfg.schemas if schemas else None)
+    if not schemas_meta:
         console.print(f"[red]No snapshot found in '{cfg.rawPath}'. Run 'leai extract' first.[/red]")
         raise typer.Exit(code=1)
 
@@ -727,7 +1083,7 @@ def enrich(
     target_upper = object_name.strip().upper() if object_name else None
     total_eligible = 0
 
-    for s in schemas:
+    for s in schemas_meta:
         if "table" in types_filter or not object_types:
             total_eligible += sum(1 for t in s.tables if not target_upper or t.name.upper() == target_upper)
         if any(t in types_filter for t in ("procedure", "function", "package", "type", "code_object")) or not object_types:
@@ -744,21 +1100,14 @@ def enrich(
     )
 
     try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[bold cyan]{task.description}[/bold cyan]"),
-            BarColumn(bar_width=35),
-            TaskProgressColumn(),
-            TimeElapsedColumn(),
-            console=console,
-        ) as progress:
+        with _create_progress_bar() as progress:
             task = progress.add_task("[cyan]Enriching metadata...", total=total_eligible)
 
             def _on_progress(obj_type: str, obj_name: str):
                 progress.update(task, advance=1, description=f"[cyan]Analyzing {obj_type} [bold yellow]{obj_name}[/bold yellow]...")
 
             tables_done, code_done = enrich_schema_annotations(
-                schemas=schemas,
+                schemas=schemas_meta,
                 config=cfg,
                 client=client,
                 overwrite=overwrite,
@@ -783,88 +1132,6 @@ def enrich(
         raise typer.Exit(code=1)
 
 
-@app.command()
-def ask(
-    question: str = typer.Argument(..., help="Natural language question about the database"),
-    provider: str = typer.Option(None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, deepseek, qwen, kimi, ollama)"),
-    model: str = typer.Option(None, "--model", "-m", help="AI model name"),
-    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
-) -> None:
-    """Interactive AI assistant to answer technical and business questions about the database."""
-    from rich.markdown import Markdown
-
-    start_time = time.perf_counter()
-    try:
-        cfg = load_config(config)
-    except ConfigError as exc:
-        console.print(f"[red]Config error:[/red] {exc}")
-        raise typer.Exit(code=1)
-
-    schemas = load_raw_schemas(cfg.rawPath)
-    if not schemas:
-        console.print(f"[red]No snapshot found in '{cfg.rawPath}'. Run 'leai extract' first.[/red]")
-        raise typer.Exit(code=1)
-
-    try:
-        client = get_llm_client(cfg, provider_override=provider, model_override=model)
-    except Exception as exc:
-        console.print(f"[red]Error initializing AI client:[/red] {exc}")
-        raise typer.Exit(code=1)
-
-    # Build RAG context with dynamic lineage trace
-    rag_context, detected_entities = build_rag_context(question, schemas, cfg)
-
-    if detected_entities:
-        console.print(f"[dim]🔍 [bold cyan]Active RAG Context:[/bold cyan] Tracing graph and impact for: [bold yellow]{', '.join(detected_entities)}[/bold yellow][/dim]")
-
-    user_prompt = f"Oracle Database Context (with Lineage and Impact RAG):\n{rag_context}\n\nUser Question: {question}"
-    provider_name = (provider or cfg.ai.default_provider or "openai").upper()
-
-    try:
-        with console.status(f"[cyan]Querying AI ([bold yellow]{provider_name}[/bold yellow] • [bold green]{client.model}[/bold green])...[/cyan]", spinner="dots"):
-            answer = client.generate_text(user_prompt, system_prompt=ASK_SYSTEM_PROMPT)
-
-        elapsed = time.perf_counter() - start_time
-        subtitle_text = f"[dim]⚡ {elapsed:.2f}s • Provider: {provider_name} ({client.model}){' • RAG: ' + ', '.join(detected_entities) if detected_entities else ''}[/dim]"
-        console.print(Panel(Markdown(answer), title="[bold green]🤖 LEAI Assistant[/bold green]", subtitle=subtitle_text, border_style="cyan"))
-    except Exception as exc:
-        console.print(f"[red]Error querying AI:[/red] {exc}")
-        raise typer.Exit(code=1)
-
-
-@app.command()
-def chat(
-    provider: str = typer.Option(None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, deepseek, qwen, kimi, ollama)"),
-    model: str = typer.Option(None, "--model", "-m", help="AI model name"),
-    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
-) -> None:
-    """Starts an interactive OpenCode-style TUI copilot with RAG, slash commands and @ mentions."""
-    try:
-        cfg = load_config(config)
-    except ConfigError as exc:
-        console.print(f"[red]Config error:[/red] {exc}")
-        raise typer.Exit(code=1)
-
-    schemas = load_raw_schemas(cfg.rawPath)
-    if not schemas:
-        console.print(f"[red]No snapshot found in '{cfg.rawPath}'. Run 'leai extract' first.[/red]")
-        raise typer.Exit(code=1)
-
-    try:
-        client = get_llm_client(cfg, provider_override=provider, model_override=model)
-    except Exception as exc:
-        console.print(f"[red]Error initializing AI client:[/red] {exc}")
-        raise typer.Exit(code=1)
-
-    session = InteractiveTUISession(
-        schemas=schemas,
-        config=cfg,
-        client=client,
-        provider_name=provider,
-    )
-    session.run()
-
-
 @app.callback(invoke_without_command=True)
 def default(
     ctx: typer.Context,
@@ -877,7 +1144,19 @@ def default(
         help="Show LEAI version and exit.",
     ),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to generate (overrides leai.yml)"),
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to generate (e.g. tables, views, procedures)"),
+    with_traces: bool = typer.Option(True, "--with-traces/--no-traces", help="Include dependency lineage, risk analysis and Mermaid graph"),
+    rag_json: bool = typer.Option(False, "--rag-json", "--rag", help="Also export structured JSON chunks to docs/chunks/ for Vector DB"),
+    depth: int = typer.Option(1, "--depth", "-d", help="Max dependency graph traversal depth (default: 1)"),
 ) -> None:
     if ctx.invoked_subcommand is None:
-        ctx.invoke(generate, config=config, object_types=object_types)
+        ctx.invoke(
+            generate,
+            config=config,
+            schemas=schemas,
+            object_types=object_types,
+            with_traces=with_traces,
+            rag_json=rag_json,
+            depth=depth,
+        )

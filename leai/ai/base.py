@@ -25,3 +25,17 @@ class BaseLLMClient(ABC):
     def generate_chat(self, messages: list[dict[str, str]], system_prompt: str | None = None) -> str:
         """Generates a response considering the full multi-turn message history."""
 
+    def generate_chat_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        system_prompt: str | None = None,
+    ) -> tuple[str | None, list[dict[str, Any]]]:
+        """Generates a chat turn supporting tool calls (Function Calling). Default fallback invokes generate_chat."""
+        res = self.generate_chat(messages, system_prompt=system_prompt)
+        return res, []
+
+    def list_models(self) -> list[dict[str, str]]:
+        """Queries the provider API and returns the list of available models for the configured API key."""
+        return [{"id": self.model or "default", "name": self.model or "default"}]
+

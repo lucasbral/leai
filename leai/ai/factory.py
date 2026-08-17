@@ -17,7 +17,7 @@ PROVIDER_DEFAULTS = {
     "gemini": {
         "env_key": "GEMINI_API_KEY",
         "base_url": "https://generativelanguage.googleapis.com/v1beta",
-        "default_model": "gemini-1.5-flash",
+        "default_model": "gemini-2.5-flash",
     },
     "anthropic": {
         "env_key": "ANTHROPIC_API_KEY",

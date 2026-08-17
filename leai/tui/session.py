@@ -13,6 +13,7 @@ from rich import box
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.prompt import Prompt
 from rich.table import Table
 from rich.tree import Tree
 
@@ -55,13 +56,24 @@ class InteractiveTUISession:
         except Exception:
             self.history = InMemoryHistory()
 
-        self.prompt_session = PromptSession(
-            history=self.history,
-            completer=self.completer,
-            style=PT_STYLE,
-            auto_suggest=AutoSuggestFromHistory(),
-            complete_while_typing=True,
-        )
+        try:
+            self.prompt_session = PromptSession(
+                history=self.history,
+                completer=self.completer,
+                style=PT_STYLE,
+                auto_suggest=AutoSuggestFromHistory(),
+                complete_while_typing=True,
+            )
+        except Exception:
+            from prompt_toolkit.output import DummyOutput
+            self.prompt_session = PromptSession(
+                history=self.history,
+                completer=self.completer,
+                style=PT_STYLE,
+                auto_suggest=AutoSuggestFromHistory(),
+                complete_while_typing=True,
+                output=DummyOutput(),
+            )
 
     def _get_bottom_toolbar(self) -> HTML:
         """Renders dynamic OpenCode bottom status bar."""
@@ -155,13 +167,25 @@ class InteractiveTUISession:
                 self._render_trace(parts[1].lstrip("@"))
             return True
 
-        if cmd == "/model":
+        if cmd in ("/model", "/models"):
             if len(parts) < 2:
-                console.print(f"[yellow]Current AI Provider: [bold]{self.provider_name}[/bold] | Model: [bold]{self.client.model}[/bold][/yellow]")
-                console.print("[dim]Usage: /model <openai|gemini|anthropic|deepseek|ollama> [model_name][/dim]")
+                # List models for current provider
+                self._render_models_table(self.provider_name)
+            elif len(parts) == 2 and parts[1].lower() in ("openai", "gemini", "anthropic", "deepseek", "qwen", "kimi", "ollama"):
+                # List models for specified provider
+                self._render_models_table(parts[1].lower())
             else:
-                new_prov = parts[1].lower()
-                new_model = parts[2] if len(parts) > 2 else None
+                # Switch provider and/or model
+                if len(parts) >= 3:
+                    new_prov = parts[1].lower()
+                    new_model = parts[2]
+                elif parts[1].lower() in ("openai", "gemini", "anthropic", "deepseek", "qwen", "kimi", "ollama"):
+                    new_prov = parts[1].lower()
+                    new_model = None
+                else:
+                    new_prov = self.provider_name
+                    new_model = parts[1]
+
                 try:
                     self.client = get_llm_client(self.config, provider_override=new_prov, model_override=new_model)
                     self.provider_name = new_prov
@@ -180,6 +204,62 @@ class InteractiveTUISession:
         console.print(f"[yellow]Unknown command '{cmd}'. Type [bold cyan]/help[/bold cyan] for available commands.[/yellow]")
         return True
 
+    def _render_models_table(self, provider_name: str | None = None, interactive: bool = True) -> None:
+        target_prov = (provider_name or self.provider_name or "openai").lower()
+        try:
+            temp_client = self.client if target_prov == (self.provider_name or "").lower() else get_llm_client(self.config, provider_override=target_prov)
+            with console.status(f"[cyan]Fetching available models from [bold yellow]{target_prov.upper()}[/bold yellow] API...[/cyan]", spinner="dots"):
+                models_list = temp_client.list_models()
+        except Exception as exc:
+            console.print(f"[red]Could not fetch models for {target_prov.upper()}:[/red] {exc}\n")
+            return
+
+        if not models_list:
+            console.print(f"[yellow]No models returned for {target_prov.upper()}.[/yellow]\n")
+            return
+
+        table = Table(show_header=True, header_style="bold cyan", box=box.ROUNDED)
+        table.add_column("#", justify="right", style="cyan", width=4)
+        table.add_column("Status", justify="center", width=8)
+        table.add_column("Model ID", style="bold yellow")
+        table.add_column("Display Name", style="white")
+        table.add_column("Description / Notes", style="dim")
+
+        for idx, m in enumerate(models_list, 1):
+            m_id = m.get("id", "")
+            is_active = (target_prov == (self.provider_name or "").lower() and m_id == self.client.model)
+            status_badge = "[bold green]ACTIVE[/bold green]" if is_active else "[dim]-[/dim]"
+            table.add_row(f"[{idx}]", status_badge, m_id, m.get("name", m_id), m.get("description", m.get("note", "")))
+
+        console.print()
+        console.print(Panel(table, title=f"[bold cyan]✦ Available Models for {target_prov.upper()} ({len(models_list)} Total)[/bold cyan]", box=box.ROUNDED, border_style="cyan"))
+
+        if interactive:
+            console.print(f"[dim]Type a number (1-{len(models_list)}) or Model ID to switch, or press Enter to keep current:[/dim]")
+            try:
+                choice = Prompt.ask("[cyan]👉 Select model[/cyan]", default="")
+                choice = choice.strip()
+                if choice:
+                    selected_model = None
+                    if choice.isdigit():
+                        c_idx = int(choice) - 1
+                        if 0 <= c_idx < len(models_list):
+                            selected_model = models_list[c_idx]["id"]
+                    else:
+                        selected_model = choice
+
+                    if selected_model:
+                        self.client = get_llm_client(self.config, provider_override=target_prov, model_override=selected_model)
+                        self.provider_name = target_prov
+                        self.session.client = self.client
+                        console.print(f"[green]✓ Switched AI client to [bold]{target_prov.upper()}[/bold] (Model: [bold cyan]{self.client.model}[/bold cyan])[/green]\n")
+                    else:
+                        console.print(f"[red]Invalid selection: '{choice}'[/red]\n")
+            except (KeyboardInterrupt, EOFError):
+                console.print()
+        else:
+            console.print(f"[dim]To switch model, type: [bold cyan]/model {target_prov} <model_id>[/bold cyan][/dim]\n")
+
     def _render_help(self) -> None:
         table = Table(show_header=True, header_style="bold cyan", box=box.ROUNDED)
         table.add_column("Command", style="bold yellow", width=18)
@@ -188,7 +268,8 @@ class InteractiveTUISession:
         table.add_row("/tables", "List all tables with column counts and primary keys")
         table.add_row("/schema", "Show comprehensive overview of all catalog objects")
         table.add_row("/changes [days]", "Inspect database objects modified in last N days (default: 7)")
-        table.add_row("/model <prov> [m]", "Switch AI provider (openai, gemini, anthropic, etc.) on the fly")
+        table.add_row("/models [prov]", "List all available AI models returned by the API key")
+        table.add_row("/model <p> [m]", "Switch AI provider and/or model on the fly")
         table.add_row("/save [file.md]", "Export current session conversation to Markdown")
         table.add_row("/clear", "Clear session context memory and reset screen")
         table.add_row("/help", "Show this interactive command guide")
@@ -355,17 +436,29 @@ class InteractiveTUISession:
                         break
                     continue
 
-                # Query AI Assistant with animated status spinner
+                # Query AI Assistant with animated status spinner and live tool execution display
                 start_t = time.perf_counter()
+                tool_calls_executed = []
+
+                def _on_tool_start(t_name: str, t_args: dict) -> None:
+                    tool_calls_executed.append(t_name)
+                    args_str = ", ".join(f"{k}={v}" for k, v in t_args.items())
+                    console.print(f"[dim cyan]  ⚙️ Investigating:[/dim cyan] [bold yellow]{t_name}[/bold yellow]({args_str})")
+
                 with console.status(
                     f"[cyan]Thinking with [bold yellow]{self.provider_name.upper()}[/bold yellow] ([bold green]{self.client.model}[/bold green])...[/cyan]",
                     spinner="dots",
                 ):
-                    reply, detected = self.session.send(user_input)
+                    reply, detected = self.session.send(
+                        user_input,
+                        on_tool_start=_on_tool_start,
+                    )
                 self.last_latency = time.perf_counter() - start_t
 
-                # Display detected entities in RAG context
-                if detected:
+                # Display detected entities in RAG context or tools executed
+                if tool_calls_executed:
+                    console.print(f"[dim]🛠️ Tools Executed: [bold yellow]{', '.join(tool_calls_executed)}[/bold yellow][/dim]")
+                elif detected:
                     console.print(f"[dim]🔍 Active RAG Context: [bold yellow]{', '.join(detected)}[/bold yellow][/dim]")
 
                 subtitle_str = (

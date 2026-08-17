@@ -14,6 +14,7 @@ from leai.models import (
     CodeObjectMeta,
     ColumnMeta,
     ForeignKeyMeta,
+    IndexMeta,
     SchemaMetadata,
     SubprogramMeta,
     TableMeta,
@@ -629,9 +630,89 @@ class ConfigAndDocsTests(unittest.TestCase):
             self.assertEqual(emp_chunk["entity"], "EMPLOYEES")
             self.assertIn("text_for_embedding", emp_chunk)
 
+    def test_semantic_comments_extraction_and_hint_filtering(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            docs_dir = root / "docs"
+
+            routine_code = """
+FUNCTION get_setor_func (p_numfunc IN NUMBER, p_numvinc IN NUMBER, p_data IN DATE)
+    RETURN VARCHAR2 IS
+    v_setor VARCHAR2(2000);
+    cursor c_setor is
+         select /*+ INDEX (ef EV_FUNC_DTINI_I) */ ef.setor
+           from evento_func ef, tipo_evento te
+          where ef.numfunc = P_NUMFUNC
+            and ef.emp_codigo = flag_pack.get_empresa -- TAREFA 29136
+         order by nvl(v_data,dtfim) desc, prioridade_exerc desc, dtini desc; -- Tarefa 40650
+  BEGIN
+    v_setor :=pack_cergon.ep__get_setor_func (p_numfunc, p_numvinc, v_data);
+    IF (v_setor IS NOT NULL) THEN
+	  IF v_setor = PACK_ERGON.C_RETORNA_NULO THEN
+	    -- Se o EP retornar a constante PACK_ERGON.C_RETORNA_NULO, indica que o setor deve ser nulo.
+	    RETURN NULL;
+	  ELSE
+        RETURN (v_setor);
+	  END IF;
+    END IF;
+    IF (PACK_HADES.GET_OPCAO('Ergon','EVENTOS', 'EVENTOS') = 'N') THEN -- sem eventos
+      RETURN v_setor;
+    END IF;
+    RETURN (v_setor);
+  END;
+"""
+            pkg = CodeObjectMeta(
+                name="PACK_ERGON",
+                object_type="PACKAGE BODY",
+                subprograms=[
+                    SubprogramMeta(
+                        package_name="PACK_ERGON",
+                        name="GET_SETOR_FUNC",
+                        subprogram_type="FUNCTION",
+                        source=routine_code,
+                    )
+                ],
+            )
+            tbl_evento = TableMeta(name="EVENTO_FUNC", columns=[ColumnMeta(name="NUMFUNC", data_type="NUMBER", nullable=False)])
+            tbl_tipo = TableMeta(name="TIPO_EVENTO", columns=[ColumnMeta(name="TIPOEVENTO", data_type="NUMBER", nullable=False)])
+            pkg_cergon = CodeObjectMeta(name="PACK_CERGON", object_type="PACKAGE")
+            pkg_hades = CodeObjectMeta(name="PACK_HADES", object_type="PACKAGE")
+            pkg_flag = CodeObjectMeta(name="FLAG_PACK", object_type="PACKAGE")
+            idx_hint = IndexMeta(name="EV_FUNC_DTINI_I", table_name="EVENTO_FUNC", uniqueness="NONUNIQUE")
+
+            schema = SchemaMetadata(
+                tables=[tbl_evento, tbl_tipo],
+                code_objects=[pkg, pkg_cergon, pkg_hades, pkg_flag],
+                indexes=[idx_hint],
+            )
+
+            write_schema_docs(schema, docs_dir, with_traces=True)
+
+            sub_md_file = docs_dir / "package_bodys" / "PACK_ERGON" / "GET_SETOR_FUNC.md"
+            self.assertTrue(sub_md_file.exists())
+            content = sub_md_file.read_text(encoding="utf-8")
+
+            # Check semantic notes section
+            self.assertIn("Notas e Regras Extraídas do Código", content)
+            self.assertIn("Se o EP retornar a constante PACK_ERGON.C_RETORNA_NULO", content)
+            self.assertIn("TAREFA 29136", content)
+            self.assertIn("Tarefa 40650", content)
+
+            # Check that granular calls are present in Mermaid graph
+            self.assertIn("PACK_ERGON_GET_SETOR_FUNC -->|READS/SELECTS| EVENTO_FUNC", content)
+            self.assertIn("PACK_ERGON_GET_SETOR_FUNC -->|READS/SELECTS| TIPO_EVENTO", content)
+            self.assertIn("PACK_ERGON_GET_SETOR_FUNC -->|EXECUTES/CALLS| PACK_CERGON_EP__GET_SETOR_FUNC", content)
+            self.assertIn("PACK_ERGON_GET_SETOR_FUNC -->|EXECUTES/CALLS| PACK_HADES_GET_OPCAO", content)
+            self.assertIn("PACK_ERGON_GET_SETOR_FUNC -->|EXECUTES/CALLS| FLAG_PACK_GET_EMPRESA", content)
+
+            self.assertNotIn("EV_FUNC_DTINI_I", content.split("```mermaid")[1].split("```")[0])
+            self.assertNotIn("PACK_ERGON_GET_SETOR_FUNC -->|DEPENDS ON| TYPE", content)
+            self.assertNotIn("PACK_ERGON_GET_SETOR_FUNC -->|DEPENDS ON| FUNCTION", content)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

@@ -126,12 +126,12 @@ def generate_mermaid_graph(focal_name: str, dependencies: list[DependencyLink]) 
 
         if dep.source_name not in nodes:
             nodes[dep.source_name] = s_id
-            icon = "📊" if dep.source_type == "TABLE" else ("👁️" if "VIEW" in dep.source_type else ("⚡" if dep.source_type == "TRIGGER" else "⚙️"))
+            icon = "📊" if dep.source_type == "TABLE" else ("👁️" if "VIEW" in dep.source_type else ("⚡" if dep.source_type in ("TRIGGER", "SUBPROGRAM", "PROCEDURE", "FUNCTION") else "⚙️"))
             lines.append(f'    {s_id}["{icon} {dep.source_name} (L{dep.depth})"]')
 
         if dep.target_name not in nodes:
             nodes[dep.target_name] = t_id
-            icon = "📊" if dep.target_type == "TABLE" else ("👁️" if "VIEW" in dep.target_type else ("⚡" if dep.target_type == "TRIGGER" else "⚙️"))
+            icon = "📊" if dep.target_type == "TABLE" else ("👁️" if "VIEW" in dep.target_type else ("⚡" if dep.target_type in ("TRIGGER", "SUBPROGRAM", "PROCEDURE", "FUNCTION") else "⚙️"))
             lines.append(f'    {t_id}["{icon} {dep.target_name} (L{dep.depth})"]')
 
         label = dep.relation_type.replace("_", " ")
@@ -160,6 +160,14 @@ def generate_semantic_rag_text(trace_result: ObjectTraceResult, annotation: Obje
         use_cases_str = " Casos de uso e consultas de referência: " + " | ".join(annotation.use_cases) + "."
         parts.append(use_cases_str)
 
+    if trace_result.extracted_notes:
+        notes_str = " Notas e regras extraídas do código: " + " | ".join(trace_result.extracted_notes[:5]) + "."
+        parts.append(notes_str)
+
+    if trace_result.extracted_tasks:
+        tasks_str = " Rastreabilidade de tarefas/demandas: " + ", ".join(trace_result.extracted_tasks) + "."
+        parts.append(tasks_str)
+
     if isinstance(focal_obj, TableMeta):
         cols_summary = ", ".join([f"{c.name} ({c.data_type})" for c in focal_obj.columns[:15]])
         parts.append(f" Estrutura de colunas principais: {cols_summary}.")
@@ -167,12 +175,18 @@ def generate_semantic_rag_text(trace_result: ObjectTraceResult, annotation: Obje
     if trace_result.dependencies:
         dep_descriptions = []
         for dep in trace_result.dependencies:
+            if dep.target_name == focal_name and dep.source_name == focal_name:
+                continue
             if dep.relation_type == "FK_REFERENCES":
                 dep_descriptions.append(f"possui chave estrangeira para a tabela {dep.target_name}")
             elif dep.relation_type == "FK_REFERENCED_BY":
                 dep_descriptions.append(f"é referenciada pela tabela filha {dep.source_name}")
             elif dep.relation_type == "READS/SELECTS":
-                dep_descriptions.append(f"é lida pela {dep.source_type.lower()} {dep.source_name}")
+                dep_descriptions.append(f"consulta o objeto {dep.target_name}")
+            elif dep.relation_type == "EXECUTES/CALLS":
+                dep_descriptions.append(f"invoca o pacote/rotina {dep.target_name}")
+            elif dep.relation_type == "CALLS_SUBPROGRAM":
+                dep_descriptions.append(f"é invocada por {dep.source_name}")
             elif dep.relation_type == "TRIGGER_ON":
                 dep_descriptions.append(f"possui a trigger {dep.source_name}")
             elif dep.relation_type == "PLSQL_DEPENDENCY":
@@ -203,12 +217,12 @@ def _build_rag_frontmatter(
     dep_count = len(trace_result.dependencies)
     risk_level = _calculate_risk_level(dep_count)
 
-    parents = [d.target_name for d in trace_result.dependencies if d.relation_type in ("FK_REFERENCES", "DEPENDS_ON")]
-    children = [d.source_name for d in trace_result.dependencies if d.relation_type == "FK_REFERENCED_BY"]
+    parents = [d.target_name for d in trace_result.dependencies if d.target_name != focal_name and d.relation_type in ("FK_REFERENCES", "DEPENDS_ON", "READS/SELECTS", "EXECUTES/CALLS")]
+    children = [d.source_name for d in trace_result.dependencies if d.source_name != focal_name and d.relation_type in ("FK_REFERENCED_BY",)]
     consumers = [
         d.source_name
         for d in trace_result.dependencies
-        if d.relation_type in ("READS/SELECTS", "PLSQL_DEPENDENCY", "TRIGGER_ON", "REFERENCED_BY")
+        if d.source_name != focal_name and d.relation_type in ("PLSQL_DEPENDENCY", "TRIGGER_ON", "REFERENCED_BY", "CALLS_SUBPROGRAM")
     ]
 
     rag_meta = {
@@ -218,11 +232,13 @@ def _build_rag_frontmatter(
             "risk_level": risk_level,
             "tags": annotation.tags if annotation else [],
             "use_cases": annotation.use_cases if annotation else [],
+            "tasks": trace_result.extracted_tasks,
+            "engineering_notes": trace_result.extracted_notes[:5] if trace_result.extracted_notes else [],
             "impact_summary": {
                 "total_connections": dep_count,
-                "upstream_parents": list(set(parents)),
-                "downstream_children": list(set(children)),
-                "consumers": list(set(consumers)),
+                "upstream_parents": sorted(set(parents)),
+                "downstream_children": sorted(set(children)),
+                "consumers": sorted(set(consumers)),
             },
         }
     }
@@ -241,12 +257,12 @@ def _render_trace_xray_and_graph(
     dep_count = len(trace_result.dependencies)
     risk_level = _calculate_risk_level(dep_count)
 
-    parents = [d.target_name for d in trace_result.dependencies if d.relation_type in ("FK_REFERENCES", "DEPENDS_ON")]
-    children = [d.source_name for d in trace_result.dependencies if d.relation_type == "FK_REFERENCED_BY"]
+    parents = [d.target_name for d in trace_result.dependencies if d.target_name != focal_name and d.relation_type in ("FK_REFERENCES", "DEPENDS_ON", "READS/SELECTS", "EXECUTES/CALLS")]
+    children = [d.source_name for d in trace_result.dependencies if d.source_name != focal_name and d.relation_type in ("FK_REFERENCED_BY",)]
     consumers = [
         d.source_name
         for d in trace_result.dependencies
-        if d.relation_type in ("READS/SELECTS", "PLSQL_DEPENDENCY", "TRIGGER_ON", "REFERENCED_BY")
+        if d.source_name != focal_name and d.relation_type in ("PLSQL_DEPENDENCY", "TRIGGER_ON", "REFERENCED_BY", "CALLS_SUBPROGRAM")
     ]
 
     risk_badge_color = "CRITICAL" if risk_level == "CRITICAL" else ("WARNING" if risk_level in ("HIGH", "MEDIUM") else "NOTE")
@@ -258,12 +274,23 @@ def _render_trace_xray_and_graph(
             f"> [!{risk_badge_color}]",
             "> **Análise de Risco de Alteração:**",
             f"> - **Nível de Risco:** `{risk_level}` ({dep_count} conexões mapeadas no grafo)",
-            f"> - **Tabelas Pais (Upstream):** `{len(set(parents))}` ({', '.join(sorted(set(parents))) if parents else 'Nenhuma'})",
+            f"> - **Objetos Consumidos (Upstream):** `{len(set(parents))}` ({', '.join(sorted(set(parents))) if parents else 'Nenhum'})",
             f"> - **Tabelas Filhas (Downstream):** `{len(set(children))}` ({', '.join(sorted(set(children))) if children else 'Nenhuma'})",
-            f"> - **Consumidores Ativos (Views/Procs/Triggers):** `{len(set(consumers))}` ({', '.join(sorted(set(consumers))) if consumers else 'Nenhum'})",
+            f"> - **Consumidores Ativos (Chamadores):** `{len(set(consumers))}` ({', '.join(sorted(set(consumers))) if consumers else 'Nenhum'})",
             "",
         ]
     )
+
+    if trace_result.extracted_notes or trace_result.extracted_tasks:
+        lines.extend(["## 💡 Notas e Regras Extraídas do Código (Engenharia)", "", "> [!NOTE]", "> **Rastreabilidade e Regras Internas:**"])
+        if trace_result.extracted_notes:
+            lines.append("> - **Regras do Código:**")
+            for note in trace_result.extracted_notes:
+                lines.append(f">   - {note}")
+        if trace_result.extracted_tasks:
+            tasks_str = ", ".join([f"`{t}`" for t in trace_result.extracted_tasks])
+            lines.append(f"> - **Tarefas / Demandas Vinculadas:** {tasks_str}")
+        lines.append("")
 
     if trace_result.dependencies:
         lines.extend(["## Grafo de Linhagem e Relacionamentos", ""])
@@ -696,6 +723,29 @@ def render_schema_index_markdown(
     return "\n".join(lines)
 
 
+def count_schema_objects(schema: SchemaMetadata, object_types: list[str] | None = None) -> int:
+    allowed_types = {t.lower() for t in object_types} if object_types else None
+    total = 0
+    if _is_category_allowed("tables", allowed_types):
+        total += len(schema.tables)
+    if _is_category_allowed("views", allowed_types):
+        total += len(schema.views)
+    if _is_category_allowed("mviews", allowed_types):
+        total += len(schema.mviews)
+    if _is_category_allowed("triggers", allowed_types):
+        total += len(schema.triggers)
+    if _is_category_allowed("sequences", allowed_types):
+        total += len(schema.sequences)
+    if _is_category_allowed("indexes", allowed_types):
+        total += len(schema.indexes)
+    if _is_category_allowed("synonyms", allowed_types):
+        total += len(schema.synonyms)
+    for code_obj in schema.code_objects:
+        if _is_code_obj_allowed(code_obj, allowed_types):
+            total += 1 + len(code_obj.subprograms)
+    return max(1, total)
+
+
 def write_schema_docs(
     schema: SchemaMetadata,
     doc_path: Path,
@@ -707,13 +757,24 @@ def write_schema_docs(
     with_traces: bool = True,
     max_depth: int = 1,
     generate_rag_chunks: bool = False,
+    progress_callback: Callable[[str, str, int, int], None] | None = None,
 ) -> tuple[list[Path], list[Path]]:
-    from leai.raw import trace_raw_dependencies
+    try:
+        max_depth = int(getattr(max_depth, "default", max_depth))
+    except Exception:
+        max_depth = 1
+    if hasattr(with_traces, "default"):
+        with_traces = bool(getattr(with_traces, "default", True))
+    if hasattr(generate_rag_chunks, "default"):
+        generate_rag_chunks = bool(getattr(generate_rag_chunks, "default", False))
+
+    from leai.raw import RawDependencyIndex, trace_raw_dependencies, trace_subprogram_dependencies
 
     target_doc_path = (doc_path / schema.schema_name) if (multi_schema and schema.schema_name) else doc_path
     base_ann = annotations_path or (doc_path.parent / "annotations")
     target_ann_path = (base_ann / schema.schema_name) if (multi_schema and schema.schema_name) else base_ann
     schemas_context = all_schemas or [schema]
+    dep_index = RawDependencyIndex(schemas_context) if with_traces else None
 
     docs_overrides = docs_overrides or {}
     table_overrides = docs_overrides.get("tables", {})
@@ -731,15 +792,22 @@ def write_schema_docs(
     trace_map: dict[str, ObjectTraceResult] = {}
     annotations_map: dict[str, ObjectAnnotation] = {}
 
+    total_objects = count_schema_objects(schema, object_types)
+    processed_count = 0
+
     # 1. Tables
     if _is_category_allowed("tables", allowed_types):
         for table in schema.tables:
+            processed_count += 1
+            if progress_callback:
+                progress_callback("Table", table.name, processed_count, total_objects)
+
             ann_path = target_ann_path / "tables" / f"{table.name}.yml"
             annotation = ensure_annotation_stub(ann_path, db_comment=table.comment, column_names=[c.name for c in table.columns])
             generated_ann.append(ann_path)
             annotations_map[table.name.upper()] = annotation
 
-            tr = trace_raw_dependencies(schemas_context, table.name, max_depth=max_depth) if with_traces else None
+            tr = trace_raw_dependencies(schemas_context, table.name, max_depth=max_depth, index=dep_index) if with_traces else None
             if tr:
                 trace_map[table.name.upper()] = tr
 
@@ -762,12 +830,16 @@ def write_schema_docs(
     # 2. Views
     if _is_category_allowed("views", allowed_types):
         for view in schema.views:
+            processed_count += 1
+            if progress_callback:
+                progress_callback("View", view.name, processed_count, total_objects)
+
             ann_path = target_ann_path / "views" / f"{view.name}.yml"
             annotation = ensure_annotation_stub(ann_path, db_comment=view.comment, column_names=[c.name for c in view.columns])
             generated_ann.append(ann_path)
             annotations_map[view.name.upper()] = annotation
 
-            tr = trace_raw_dependencies(schemas_context, view.name, max_depth=max_depth) if with_traces else None
+            tr = trace_raw_dependencies(schemas_context, view.name, max_depth=max_depth, index=dep_index) if with_traces else None
             if tr:
                 trace_map[view.name.upper()] = tr
 
@@ -790,12 +862,16 @@ def write_schema_docs(
     # 3. Materialized Views
     if _is_category_allowed("mviews", allowed_types):
         for mview in schema.mviews:
+            processed_count += 1
+            if progress_callback:
+                progress_callback("MView", mview.name, processed_count, total_objects)
+
             ann_path = target_ann_path / "mviews" / f"{mview.name}.yml"
             annotation = ensure_annotation_stub(ann_path, db_comment=mview.comment, column_names=[c.name for c in mview.columns])
             generated_ann.append(ann_path)
             annotations_map[mview.name.upper()] = annotation
 
-            tr = trace_raw_dependencies(schemas_context, mview.name, max_depth=max_depth) if with_traces else None
+            tr = trace_raw_dependencies(schemas_context, mview.name, max_depth=max_depth, index=dep_index) if with_traces else None
             if tr:
                 trace_map[mview.name.upper()] = tr
 
@@ -813,13 +889,17 @@ def write_schema_docs(
     for code_obj in schema.code_objects:
         if not _is_code_obj_allowed(code_obj, allowed_types):
             continue
+        processed_count += 1
+        if progress_callback:
+            progress_callback(code_obj.object_type.title(), code_obj.name, processed_count, total_objects)
+
         obj_folder = code_obj.object_type.lower().replace(" ", "_") + "s"
         ann_path = target_ann_path / obj_folder / f"{code_obj.name}.yml"
         annotation = ensure_annotation_stub(ann_path, db_comment=code_obj.comment)
         generated_ann.append(ann_path)
         annotations_map[code_obj.name.upper()] = annotation
 
-        tr = trace_raw_dependencies(schemas_context, code_obj.name, max_depth=max_depth) if with_traces else None
+        tr = trace_raw_dependencies(schemas_context, code_obj.name, max_depth=max_depth, index=dep_index) if with_traces else None
         if tr:
             trace_map[code_obj.name.upper()] = tr
 
@@ -835,25 +915,35 @@ def write_schema_docs(
 
         # Package Splitting (Subprogram disassembly)
         for sub in code_obj.subprograms:
+            processed_count += 1
+            if progress_callback:
+                progress_callback("Routine", f"{code_obj.name}.{sub.name}", processed_count, total_objects)
+
             sub_ann_path = target_ann_path / obj_folder / code_obj.name / f"{sub.name}.yml"
             sub_annotation = ensure_annotation_stub(sub_ann_path, db_comment=sub.comment)
             generated_ann.append(sub_ann_path)
 
+            sub_tr = trace_subprogram_dependencies(schemas_context, sub, index=dep_index) if with_traces else None
+
             sub_file_path = target_doc_path / obj_folder / code_obj.name / f"{sub.name}.md"
             sub_existing = sub_file_path.read_text(encoding="utf-8") if sub_file_path.exists() else None
             sub_manual = _extract_manual_section(sub_existing)
-            sub_markdown = render_subprogram_markdown(sub, sub_doc=sub_manual, annotation=sub_annotation)
+            sub_markdown = render_subprogram_markdown(sub, sub_doc=sub_manual, annotation=sub_annotation, trace_result=sub_tr)
             generated_md.append(_write_single_doc(sub_file_path, sub_markdown))
 
     # 5. Triggers
     if _is_category_allowed("triggers", allowed_types):
         for trigger in schema.triggers:
+            processed_count += 1
+            if progress_callback:
+                progress_callback("Trigger", trigger.name, processed_count, total_objects)
+
             ann_path = target_ann_path / "triggers" / f"{trigger.name}.yml"
             annotation = ensure_annotation_stub(ann_path)
             generated_ann.append(ann_path)
             annotations_map[trigger.name.upper()] = annotation
 
-            tr = trace_raw_dependencies(schemas_context, trigger.name, max_depth=max_depth) if with_traces else None
+            tr = trace_raw_dependencies(schemas_context, trigger.name, max_depth=max_depth, index=dep_index) if with_traces else None
             if tr:
                 trace_map[trigger.name.upper()] = tr
 
@@ -870,6 +960,10 @@ def write_schema_docs(
     # 6. Sequences
     if _is_category_allowed("sequences", allowed_types):
         for sequence in schema.sequences:
+            processed_count += 1
+            if progress_callback:
+                progress_callback("Sequence", sequence.name, processed_count, total_objects)
+
             ann_path = target_ann_path / "sequences" / f"{sequence.name}.yml"
             annotation = ensure_annotation_stub(ann_path)
             generated_ann.append(ann_path)
@@ -883,6 +977,10 @@ def write_schema_docs(
     # 7. Indexes
     if _is_category_allowed("indexes", allowed_types):
         for index in schema.indexes:
+            processed_count += 1
+            if progress_callback:
+                progress_callback("Index", index.name, processed_count, total_objects)
+
             ann_path = target_ann_path / "indexes" / f"{index.name}.yml"
             annotation = ensure_annotation_stub(ann_path)
             generated_ann.append(ann_path)
@@ -896,6 +994,10 @@ def write_schema_docs(
     # 8. Synonyms
     if _is_category_allowed("synonyms", allowed_types):
         for synonym in schema.synonyms:
+            processed_count += 1
+            if progress_callback:
+                progress_callback("Synonym", synonym.name, processed_count, total_objects)
+
             ann_path = target_ann_path / "synonyms" / f"{synonym.name}.yml"
             annotation = ensure_annotation_stub(ann_path)
             generated_ann.append(ann_path)
@@ -925,25 +1027,41 @@ def sync_schema_annotations(
     annotations_path: Path,
     multi_schema: bool = False,
     object_types: list[str] | None = None,
+    progress_callback: Callable[[str, str, int, int], None] | None = None,
 ) -> list[Path]:
     target_ann_path = (annotations_path / schema.schema_name) if (multi_schema and schema.schema_name) else annotations_path
     allowed_types = {t.lower() for t in object_types} if object_types else None
     generated_ann: list[Path] = []
 
+    total_objects = count_schema_objects(schema, object_types)
+    processed_count = 0
+
     if _is_category_allowed("tables", allowed_types):
         for table in schema.tables:
+            processed_count += 1
+            if progress_callback:
+                progress_callback("Table", table.name, processed_count, total_objects)
+
             ann_path = target_ann_path / "tables" / f"{table.name}.yml"
             ensure_annotation_stub(ann_path, db_comment=table.comment, column_names=[c.name for c in table.columns])
             generated_ann.append(ann_path)
 
     if _is_category_allowed("views", allowed_types):
         for view in schema.views:
+            processed_count += 1
+            if progress_callback:
+                progress_callback("View", view.name, processed_count, total_objects)
+
             ann_path = target_ann_path / "views" / f"{view.name}.yml"
             ensure_annotation_stub(ann_path, db_comment=view.comment, column_names=[c.name for c in view.columns])
             generated_ann.append(ann_path)
 
     if _is_category_allowed("mviews", allowed_types):
         for mview in schema.mviews:
+            processed_count += 1
+            if progress_callback:
+                progress_callback("MView", mview.name, processed_count, total_objects)
+
             ann_path = target_ann_path / "mviews" / f"{mview.name}.yml"
             ensure_annotation_stub(ann_path, db_comment=mview.comment, column_names=[c.name for c in mview.columns])
             generated_ann.append(ann_path)
@@ -951,36 +1069,60 @@ def sync_schema_annotations(
     for code_obj in schema.code_objects:
         if not _is_code_obj_allowed(code_obj, allowed_types):
             continue
+        processed_count += 1
+        if progress_callback:
+            progress_callback(code_obj.object_type.title(), code_obj.name, processed_count, total_objects)
+
         obj_folder = code_obj.object_type.lower().replace(" ", "_") + "s"
         ann_path = target_ann_path / obj_folder / f"{code_obj.name}.yml"
         ensure_annotation_stub(ann_path, db_comment=code_obj.comment)
         generated_ann.append(ann_path)
 
         for sub in code_obj.subprograms:
+            processed_count += 1
+            if progress_callback:
+                progress_callback("Routine", f"{code_obj.name}.{sub.name}", processed_count, total_objects)
+
             sub_ann_path = target_ann_path / obj_folder / code_obj.name / f"{sub.name}.yml"
             ensure_annotation_stub(sub_ann_path, db_comment=sub.comment)
             generated_ann.append(sub_ann_path)
 
     if _is_category_allowed("triggers", allowed_types):
         for trigger in schema.triggers:
+            processed_count += 1
+            if progress_callback:
+                progress_callback("Trigger", trigger.name, processed_count, total_objects)
+
             ann_path = target_ann_path / "triggers" / f"{trigger.name}.yml"
             ensure_annotation_stub(ann_path)
             generated_ann.append(ann_path)
 
     if _is_category_allowed("sequences", allowed_types):
         for sequence in schema.sequences:
+            processed_count += 1
+            if progress_callback:
+                progress_callback("Sequence", sequence.name, processed_count, total_objects)
+
             ann_path = target_ann_path / "sequences" / f"{sequence.name}.yml"
             ensure_annotation_stub(ann_path)
             generated_ann.append(ann_path)
 
     if _is_category_allowed("indexes", allowed_types):
         for index in schema.indexes:
+            processed_count += 1
+            if progress_callback:
+                progress_callback("Index", index.name, processed_count, total_objects)
+
             ann_path = target_ann_path / "indexes" / f"{index.name}.yml"
             ensure_annotation_stub(ann_path)
             generated_ann.append(ann_path)
 
     if _is_category_allowed("synonyms", allowed_types):
         for synonym in schema.synonyms:
+            processed_count += 1
+            if progress_callback:
+                progress_callback("Synonym", synonym.name, processed_count, total_objects)
+
             ann_path = target_ann_path / "synonyms" / f"{synonym.name}.yml"
             ensure_annotation_stub(ann_path)
             generated_ann.append(ann_path)
