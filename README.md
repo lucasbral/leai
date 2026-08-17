@@ -1,6 +1,6 @@
 # LEAI — Oracle Database Intelligence & Documentation Engine
 
-**LEAI**  (Lê - Aí in PT ) is a reverse engineering, impact analysis, and documentation engine for **Oracle Database**, specifically designed to power **Retrieval-Augmented Generation (RAG)**, **LLMs**, and software engineers maintaining complex enterprise database ecosystems.
+**LEAI** (*Lê - Aí* in PT-BR) is an enterprise reverse engineering, impact analysis, and autonomous AI copilot engine for **Oracle Database**, specifically designed to power **Retrieval-Augmented Generation (RAG)**, **LLMs**, and software engineers maintaining complex database ecosystems.
 
 > [!IMPORTANT]
 > 🔒 **Security & Data Privacy Guarantee:**
@@ -9,6 +9,34 @@
 > It strictly reads **data dictionary metadata and DDL definitions**: tables, column types, primary/foreign keys, views, materialized views, stored procedures, packages, triggers, indexes, and synonyms.
 >
 > 💡 **A database user with metadata-only / audit permissions (such as `SELECT ANY DICTIONARY` or read access to `ALL_*` catalog views) is 100% sufficient.** This ensures full enterprise security and compliance (LGPD / GDPR / SOC2) with zero risk of exposing confidential or sensitive business data.
+
+---
+
+## 📑 Table of Contents / Índice
+
+- [📌 What Is It?](#-what-is-it)
+- [⚙️ How It Works (Pipeline)](#️-how-it-works)
+- [🤖 Autonomous Agent & Tool Calling Engine](#-autonomous-agent--tool-calling-engine)
+- [🔗 Transparent Synonym Resolution](#-transparent-synonym-resolution)
+- [🚀 Quickstart: Using LEAI in Any Project](#-quickstart-using-leai-in-any-project)
+  - [Step 1: Install LEAI](#step-1-install-leai-via-pip-or-uv)
+  - [Step 2: Initialize Configuration](#step-2-initialize-your-project-directory)
+  - [Step 3: Run and Explore](#step-3-run-and-explore)
+- [📖 CLI Command Reference](#-cli-command-reference)
+  - [1. `leai` (or `leai generate`)](#1-leai-or-leai-generate)
+  - [2. `leai extract`](#2-leai-extract)
+  - [3. `leai annotate`](#3-leai-annotate)
+  - [4. `leai compile`](#4-leai-compile)
+  - [5. `leai trace <OBJECT>`](#5-leai-trace-object)
+  - [6. `leai enrich`](#6-leai-enrich)
+  - [7. `leai ask <QUESTION>`](#7-leai-ask-question)
+  - [8. `leai chat`](#8-leai-chat)
+  - [9. `leai models`](#9-leai-models)
+  - [10. `leai changes`](#10-leai-changes)
+  - [11. `leai init`](#11-leai-init)
+  - [12. `leai check` (or `doctor`)](#12-leai-check-or-doctor)
+- [📁 Directory Structure](#-directory-structure)
+- [🧪 Automated Testing](#-automated-testing)
 
 ---
 
@@ -21,7 +49,7 @@ Enabling developers or AI assistants to reliably understand such environments is
 2. **Hidden Dependencies:** Altering a single column can silently break triggers, views, and procedures across multiple schemas.
 3. **Synonyms and Aliases:** Stored procedures frequently access tables via private or public synonyms (`PUBLIC SYNONYM`), creating the false impression that referenced objects do not exist or belong elsewhere.
 
-LEAI solves this by extracting the Oracle data dictionary, constructing a cross-schema dependency graph, and formatting the technical context specifically for humans and LLMs.
+LEAI solves this by extracting the Oracle data dictionary, constructing a cross-schema dependency graph, and providing an autonomous multi-step reasoning agent with offline database tools.
 
 ---
 
@@ -52,14 +80,45 @@ LEAI operates via a **3-stage decoupled pipeline**:
 
 - **Multi-Level Lineage Tracing (`trace`):**
   Identifies upstream dependencies and downstream consumers with configurable depth (`--depth N`), automatically computing change risk levels (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
-- **Transparent Synonym & Dblink Resolution:**
-  Resolves `ALL_SYNONYMS` and `PUBLIC SYNONYMS` directly to their underlying physical target objects, including remote database links (`@dblink`).
+- **Transparent Synonym Dereferencing:**
+  Resolves `ALL_SYNONYMS` and `PUBLIC SYNONYMS` directly to their underlying physical target objects, procedures, and remote database links (`@dblink`).
 - **PL/SQL Semantic Compression:**
-  When querying a specific procedure (`TEST_PROC`) inside a 10,000-line package, LEAI surgically extracts only the requested subprogram body and produces a lightweight signature skeleton of the rest of the package, **reducing token consumption by up to 95%**.
+  When querying a specific procedure inside a 10,000-line package, LEAI surgically extracts only the requested subprogram body and produces a lightweight signature skeleton of the rest of the package, **reducing token consumption by up to 95%**.
 - **Dynamic Contextual RAG (`ask` & `chat`):**
   Automatically detects database entities mentioned in user prompts, executes on-the-fly dependency tracing, and delivers a surgical, noise-free context payload to the LLM.
 - **Native Multi-Provider AI Support:**
   Direct HTTPS REST integration with **OpenAI (ChatGPT)**, **Google Gemini**, **Anthropic Claude**, **DeepSeek**, **Qwen**, **Kimi**, and **Ollama (local & free)** without heavy external dependencies.
+
+---
+
+## 🤖 Autonomous Agent & Tool Calling Engine
+
+When running `leai chat` or `leai ask`, the assistant uses an autonomous **Tool-Calling Reasoning Loop** (`AgentExecutionEngine`) with up to 10 iterations per turn. Instead of guessing or hallucinating, the model invokes specialized in-memory database tools to inspect real metadata:
+
+| Tool Name | Parameters | Purpose |
+| :--- | :--- | :--- |
+| **`search_database_objects`** | `query`, `object_type` | Global catalog search across tables, views, packages, procedures, functions, triggers, and synonyms. |
+| **`get_table_schema`** | `table_name` | Deep structural inspection: column names, data types, nullability, PK flags, descriptions, and foreign keys. |
+| **`get_subprogram_source`** | `subprogram_name`, `package_name` | Extracts exact PL/SQL source code of procedures, functions, or package routines. |
+| **`trace_object_lineage`** | `object_name`, `depth` | Multi-level X-ray of upstream consumed tables/packages, downstream children, and PL/SQL callers. |
+| **`grep_plsql_code`** | `pattern`, `max_results` | Global regex and text occurrence scanner across all PL/SQL packages, procedures, and trigger bodies. |
+
+> [!NOTE]
+> All agent tools operate **100% offline in-memory** on top of the extracted `raw/` snapshot. This ensures sub-millisecond responses with zero network latency and zero load on the production Oracle database.
+
+---
+
+## 🔗 Transparent Synonym Resolution
+
+In Oracle enterprise environments, procedures, packages, tables, and views are heavily shared across schemas via Synonyms. LEAI transparently dereferences synonyms throughout all tools:
+
+```text
+User asks: "Explain the procedure TGOVPE_RMS_ENVIA_ARQ_CREDITO"
+  │
+  ├──> LEAI detects object is a SYNONYM pointing to HADES.TGOVPE_RMS_ENVIA_ARQ_CREDITO
+  ├──> get_subprogram_source automatically dereferences to the HADES schema
+  └──> Extracts real PL/SQL code (8,000+ chars) and synthesizes business explanation
+```
 
 ---
 
@@ -81,20 +140,19 @@ uv tool install leai
 
 ### Step 2: Initialize your project directory
 
-Create a working directory for your database documentation and enter it:
-
 ```bash
 mkdir my-database-docs
 cd my-database-docs
+leai init
 ```
 
-Create a `leai.yml` file in that folder:
+Configure your `leai.yml` file:
 
 ```yaml
 # Oracle connection string (supports environment variables ${VAR})
 dsn: "oracle://${DB_USER}:${DB_PASS}@${DB_HOST}:1521/${DB_SERVICE}"
 
-# Schemas integrated into your ecosystem graph
+# Schemas integrated into your ecosystem graph (or schemas: "ALL")
 schemas:
   - HR
   - FINANCE
@@ -105,7 +163,7 @@ rawPath: "./raw"                  # Raw JSON technical snapshots
 annotationsPath: "./annotations"  # Business annotations in YAML
 docPath: "./docs"                  # Final Markdown docs for RAG
 
-# AI Provider Configuration (Optional - for enrich, ask, and chat)
+# AI Provider Configuration
 ai:
   default_provider: "openai"      # openai, gemini, anthropic, deepseek, qwen, kimi, ollama
   temperature: 0.2
@@ -115,7 +173,7 @@ ai:
       model: "gpt-4o-mini"
     gemini:
       api_key: "${GEMINI_API_KEY}"
-      model: "gemini-1.5-flash"
+      model: "gemini-2.5-flash"
     anthropic:
       api_key: "${ANTHROPIC_API_KEY}"
       model: "claude-3-5-sonnet-20241022"
@@ -127,8 +185,6 @@ ai:
 ---
 
 ### Step 3: Run and Explore!
-
-That's it! You can now run LEAI commands directly in your folder:
 
 ```bash
 # 1. Extract technical metadata from Oracle into raw/
@@ -156,12 +212,17 @@ Executes the full pipeline: extracts technical snapshots from Oracle, synchroniz
 
 | Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-c`, `--config PATH` | Option | Path to the configuration file (Default: `leai.yml`). |
+| `-c`, `--config PATH` | Option | Path to configuration file (Default: `leai.yml`). |
+| `-s`, `--schema TEXT` | Option | Target schema(s) to process. |
 | `-t`, `--object-type TEXT` | Option | Filter specific object types (e.g., `-t tables -t views -t packages`). |
+| `--with-traces / --no-traces` | Flag | Include dependency lineage, risk analysis and Mermaid graph (Default: `True`). |
+| `--rag-json`, `--rag` | Flag | Also exports structured JSON chunks to `docs/chunks/` for Vector DB ingestion. |
+| `-d`, `--depth INT` | Option | Max graph traversal depth for lineage mapping (Default: `1`). |
+| `-v`, `--version` | Flag | Show LEAI version and exit. |
 
 ```bash
 leai
-leai generate -t tables -t packages --config prod.yml
+leai -s HR -t tables -t packages --depth 2
 ```
 
 ---
@@ -171,9 +232,9 @@ Connects to Oracle and extracts raw JSON technical snapshots into the `raw/` dir
 
 | Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-s`, `--schema TEXT` | Option | Extract only a specific schema. |
-| `-t`, `--object-type TEXT` | Option | Filter object types to extract. |
 | `-c`, `--config PATH` | Option | Path to `leai.yml`. |
+| `-s`, `--schema TEXT` | Option | Extract only specific schema(s). |
+| `-t`, `--object-type TEXT` | Option | Filter object types to extract. |
 
 ```bash
 leai extract
@@ -187,36 +248,13 @@ Reads JSON snapshots from `raw/` and generates/synchronizes YAML stubs in `annot
 
 | Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-t`, `--object-type TEXT` | Option | Synchronize only specific object types. |
 | `-c`, `--config PATH` | Option | Path to `leai.yml`. |
+| `-s`, `--schema TEXT` | Option | Synchronize specific schema(s). |
+| `-t`, `--object-type TEXT` | Option | Synchronize only specific object types. |
 
 ```bash
 leai annotate
 leai annotate -t tables
-```
-
-#### 📝 Annotation Schema Layout (`annotations/tables/EMPLOYEES.yml`):
-```yaml
-description: "Core employees and contractors table."
-tags:
-  - HR
-  - Payroll
-business_rules:
-  - "Rule 1: Salary cannot be negative."
-  - "Rule 2: Status 'A' indicates active employee, 'I' inactive."
-use_cases:
-  - "Active employees payroll query:"
-  - |
-    SELECT id, name, salary 
-    FROM employees 
-    WHERE status = 'A' AND salary > 0;
-related_objects:
-  - DEPARTMENTS
-warnings:
-  - "Modifying employee status triggers TRG_AUDIT_EMP."
-columns:
-  ID: "Primary key identifier."
-  NAME: "Full legal name."
 ```
 
 ---
@@ -226,17 +264,15 @@ Recompiles the unified Markdown documentation in `docs/` (including dependency l
 
 | Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
+| `-c`, `--config PATH` | Option | Path to `leai.yml`. |
+| `-s`, `--schema TEXT` | Option | Compile specific schema(s). |
 | `-t`, `--object-type TEXT` | Option | Compile only specific object types. |
 | `--with-traces / --no-traces` | Flag | Include dependency lineage, risk analysis and Mermaid graph (Default: `True`). |
 | `--rag-json`, `--rag` | Flag | Also exports structured JSON chunks to `docs/chunks/` for Vector DB ingestion. |
 | `-d`, `--depth INT` | Option | Max graph traversal depth for lineage mapping (Default: `1`). |
-| `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash
-# Standard unified compilation (includes Mermaid graphs, risk analysis, and INDEX.md)
 leai compile
-
-# Compile and export all RAG chunks for Vector DB in one step
 leai compile --rag-json --depth 2
 ```
 
@@ -247,7 +283,7 @@ Generates deep impact analysis, terminal hierarchical trees, change risk calcula
 
 | Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
-| `OBJECT` | **Required Argument** | Name of the table, view, procedure, or synonym to trace (e.g., `EMPLOYEES`). |
+| `OBJECT` | **Required Argument** | Name of the table, view, procedure, package, or synonym to trace. |
 | `-d`, `--depth INT` | Option | Max graph traversal depth (Default: `1` for direct, `2+` for multi-level). |
 | `--rag-json`, `--rag` | Flag | Also exports structured JSON chunks for Vector DB ingestion. |
 | `--offline` | Flag | Resolves dependencies locally from `raw/` snapshots without connecting to Oracle. |
@@ -256,11 +292,8 @@ Generates deep impact analysis, terminal hierarchical trees, change risk calcula
 | `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash
-# Multi-level lineage trace (Depth 2)
 leai trace EMPLOYEES --depth 2
-
-# Offline mode with RAG JSON chunk export
-leai trace EMPLOYEES --offline --depth 2 --rag-json
+leai trace TGOVPE_RMS_ENVIA_ARQ_CREDITO --offline --depth 2
 ```
 
 ---
@@ -270,29 +303,24 @@ Uses AI (LLMs) to analyze DDLs and PL/SQL code, automatically generating busines
 
 | Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-o`, `--object-name TEXT` | Option | Specific object name to enrich (e.g., `-o EMPLOYEES`). |
-| `-p`, `--provider TEXT` | Option | AI provider (`openai`, `gemini`, `anthropic`, `deepseek`, `qwen`, `kimi`, `ollama`). |
-| `-m`, `--model TEXT` | Option | Model identifier (e.g., `gpt-4o-mini`, `gemini-1.5-flash`, `claude-3-5-sonnet-20241022`). |
-| `--overwrite` | Flag | Forces regeneration of existing descriptions and comments. |
-| `-t`, `--object-type TEXT` | Option | Filter object types to enrich (e.g., `-t tables -t packages`). |
 | `-c`, `--config PATH` | Option | Path to `leai.yml`. |
+| `-p`, `--provider TEXT` | Option | AI provider (`openai`, `gemini`, `anthropic`, `deepseek`, `qwen`, `kimi`, `ollama`). |
+| `-m`, `--model TEXT` | Option | Model identifier (e.g., `gpt-4o-mini`, `gemini-2.5-flash`, `claude-3-5-sonnet-20241022`). |
+| `-w`, `--overwrite` | Flag | Forces regeneration of existing descriptions and comments. |
+| `-s`, `--schema TEXT` | Option | Filter by specific schema. |
+| `-t`, `--object-type TEXT` | Option | Filter object types to enrich (e.g., `-t tables -t packages`). |
+| `-o`, `--object-name TEXT` | Option | Specific object name to enrich (e.g., `-o EMPLOYEES`). |
 
 ```bash
-# Enrich using default provider
 leai enrich
-
-# Enrich using Google Gemini or Anthropic Claude
-leai enrich --provider gemini --model gemini-1.5-flash
-leai enrich --provider anthropic --model claude-3-5-sonnet-20241022
-
-# Enrich a single table with forced overwrite
+leai enrich -p gemini -m gemini-2.5-flash
 leai enrich -o EMPLOYEES --overwrite
 ```
 
 ---
 
 ### 7. `leai ask <QUESTION>`
-Asks one-off natural language questions answered with dynamic RAG context directly in your terminal.
+Asks one-off natural language questions answered with dynamic RAG context and agent tool execution directly in your terminal.
 
 | Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
@@ -303,13 +331,13 @@ Asks one-off natural language questions answered with dynamic RAG context direct
 
 ```bash
 leai ask "Which views or stored procedures query the EMPLOYEES table?"
-leai ask "How does the payroll calculation workflow operate?" --provider gemini
+leai ask "How does the payroll calculation workflow operate?" -p gemini
 ```
 
 ---
 
 ### 8. `leai chat`
-Launches an interactive multi-turn terminal chat session with persistent conversation memory and cumulative graph context.
+Launches an interactive multi-turn terminal chat session with persistent conversation memory, cumulative graph context, and live tool calling.
 
 | Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
@@ -319,8 +347,8 @@ Launches an interactive multi-turn terminal chat session with persistent convers
 
 ```bash
 leai chat
-leai chat --provider anthropic --model claude-3-5-sonnet-20241022
-leai chat --provider ollama --model llama3.1
+leai chat -p gemini -m gemini-2.5-flash
+leai chat -p ollama -m qwen2.5-coder:14b
 ```
 
 #### 🎮 Interactive In-Session Features (OpenCode Style):
@@ -329,7 +357,8 @@ leai chat --provider ollama --model llama3.1
 - `/tables`: Renders formatted table list with column counts and primary keys.
 - `/schema`: Shows catalog overview and object counts.
 - `/changes [days]`: Audits recent database modifications without leaving chat.
-- `/model <provider> [model]`: Switches AI provider (OpenAI, Gemini, Claude, DeepSeek, Ollama) on the fly.
+- `/models [prov]`: Lists all available AI models returned by the provider API with interactive selection by number (`1`, `2`, `3...`).
+- `/model <prov> [m]`: Switches AI provider and model on the fly.
 - `/save [file.md]`: Exports the complete transcript into a Markdown file.
 - `/clear`: Clears conversation history, context memory, and resets the terminal screen.
 - `/help`: Displays interactive command guide.
@@ -337,7 +366,23 @@ leai chat --provider ollama --model llama3.1
 
 ---
 
-### 9. `leai changes`
+### 9. `leai models`
+Queries the AI provider API and displays a formatted table of all available models for the configured API key.
+
+| Parameter / Flag | Type | Description |
+| :--- | :--- | :--- |
+| `-p`, `--provider TEXT` | Option | AI provider to query (`openai`, `gemini`, `anthropic`, `deepseek`, `qwen`, `kimi`, `ollama`). |
+| `-c`, `--config PATH` | Option | Path to `leai.yml`. |
+
+```bash
+leai models -p gemini
+leai models -p openai
+leai models -p ollama
+```
+
+---
+
+### 10. `leai changes`
 Audits and lists recently created or modified database objects (via Oracle's `LAST_DDL_TIME`).
 
 | Parameter / Flag | Type | Description |
@@ -349,11 +394,38 @@ Audits and lists recently created or modified database objects (via Oracle's `LA
 | `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash
-# Objects altered in the last 15 days
 leai changes -d 15
-
-# Filter by schema
 leai changes -d 30 -u HR
+```
+
+---
+
+### 11. `leai init`
+Creates a clean initial `leai.yml` template in the current directory.
+
+| Parameter / Flag | Type | Description |
+| :--- | :--- | :--- |
+| `-f`, `--force` | Flag | Overwrites existing `leai.yml` without confirmation. |
+| `-e`, `--example` | Flag | Generates fully commented `leai.example.yml`. |
+| `-c`, `--config PATH` | Option | Custom configuration file path. |
+
+```bash
+leai init
+leai init --example
+```
+
+---
+
+### 12. `leai check` (or `doctor`)
+Performs a comprehensive diagnostic healthcheck of the Oracle connection, credentials, privileges, directories, and configured AI models.
+
+| Parameter / Flag | Type | Description |
+| :--- | :--- | :--- |
+| `-c`, `--config PATH` | Option | Path to `leai.yml`. |
+
+```bash
+leai check
+leai doctor
 ```
 
 ---
@@ -375,6 +447,7 @@ my_project/
 │       └── code_objects/
 └── docs/                     <-- Final compiled Markdown for LLMs, RAG, and humans
     └── HR/
+        ├── INDEX.md          <-- Master navigation catalog
         ├── tables/
         ├── dossiers/         <-- Impact dossiers generated by leai trace
         └── code_objects/
@@ -387,5 +460,5 @@ my_project/
 To run the complete automated test suite:
 
 ```bash
-python -m unittest discover tests
+pytest
 ```
