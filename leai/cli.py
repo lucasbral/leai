@@ -39,7 +39,7 @@ from rich.table import Column, Table
 
 from leai.ai import get_llm_client
 from leai.chat_session import ChatSession
-from leai.config import ConfigError, load_config
+from leai.config import ConfigError, LeaiConfig, load_config
 from leai.docs import count_schema_objects, sync_schema_annotations, write_dossier_doc, write_rag_json_file, write_schema_docs
 from leai.enrich import enrich_schema_annotations
 from leai.models import SchemaMetadata

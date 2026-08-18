@@ -408,7 +408,7 @@ def search_database_objects(
                     if ann_file.exists():
                         ann = load_annotation(ann_file)
                         ann_desc = ann.description or ""
-                
+
                 haystack = f"{t.name} {t.comment or ''} {ann_desc}"
                 if q_norm in _normalize_text(haystack):
                     results.append({

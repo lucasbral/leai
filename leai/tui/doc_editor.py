@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Callable
 
 from prompt_toolkit import prompt
-from prompt_toolkit.completion import WordCompleter
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
