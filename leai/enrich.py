@@ -64,6 +64,39 @@ def enrich_table_annotation(
                 if r_clean and r_clean not in existing_rules:
                     annotation.business_rules.append(r_clean)
 
+    # Update use cases
+    if ai_data.get("use_cases") and isinstance(ai_data["use_cases"], list):
+        if overwrite:
+            annotation.use_cases = [str(u).strip() for u in ai_data["use_cases"]]
+        else:
+            existing_uc = set(annotation.use_cases)
+            for u in ai_data["use_cases"]:
+                u_clean = str(u).strip()
+                if u_clean and u_clean not in existing_uc:
+                    annotation.use_cases.append(u_clean)
+
+    # Update warnings
+    if ai_data.get("warnings") and isinstance(ai_data["warnings"], list):
+        if overwrite:
+            annotation.warnings = [str(w).strip() for w in ai_data["warnings"]]
+        else:
+            existing_w = set(annotation.warnings)
+            for w in ai_data["warnings"]:
+                w_clean = str(w).strip()
+                if w_clean and w_clean not in existing_w:
+                    annotation.warnings.append(w_clean)
+
+    # Update related objects
+    if ai_data.get("related_objects") and isinstance(ai_data["related_objects"], list):
+        if overwrite:
+            annotation.related_objects = [str(ro).strip() for ro in ai_data["related_objects"]]
+        else:
+            existing_ro = set(annotation.related_objects)
+            for ro in ai_data["related_objects"]:
+                ro_clean = str(ro).strip()
+                if ro_clean and ro_clean not in existing_ro:
+                    annotation.related_objects.append(ro_clean)
+
     # Update tags
     if ai_data.get("tags") and isinstance(ai_data["tags"], list):
         if overwrite:
@@ -128,6 +161,36 @@ def enrich_code_object_annotation(
                 r_clean = str(r).strip()
                 if r_clean and r_clean not in existing_rules:
                     annotation.business_rules.append(r_clean)
+
+    if ai_data.get("use_cases") and isinstance(ai_data["use_cases"], list):
+        if overwrite:
+            annotation.use_cases = [str(u).strip() for u in ai_data["use_cases"]]
+        else:
+            existing_uc = set(annotation.use_cases)
+            for u in ai_data["use_cases"]:
+                u_clean = str(u).strip()
+                if u_clean and u_clean not in existing_uc:
+                    annotation.use_cases.append(u_clean)
+
+    if ai_data.get("warnings") and isinstance(ai_data["warnings"], list):
+        if overwrite:
+            annotation.warnings = [str(w).strip() for w in ai_data["warnings"]]
+        else:
+            existing_w = set(annotation.warnings)
+            for w in ai_data["warnings"]:
+                w_clean = str(w).strip()
+                if w_clean and w_clean not in existing_w:
+                    annotation.warnings.append(w_clean)
+
+    if ai_data.get("related_objects") and isinstance(ai_data["related_objects"], list):
+        if overwrite:
+            annotation.related_objects = [str(ro).strip() for ro in ai_data["related_objects"]]
+        else:
+            existing_ro = set(annotation.related_objects)
+            for ro in ai_data["related_objects"]:
+                ro_clean = str(ro).strip()
+                if ro_clean and ro_clean not in existing_ro:
+                    annotation.related_objects.append(ro_clean)
 
     if ai_data.get("tags") and isinstance(ai_data["tags"], list):
         if overwrite:

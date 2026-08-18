@@ -6,8 +6,11 @@ Your mission is to analyze technical metadata of a table (name, columns, data ty
 INSTRUCTIONS:
 1. Provide a clear and concise description of the table's purpose and business role.
 2. Infer the meaning and purpose of each column based on its name (e.g. HIRE_DATE -> Employee hire date), data type, and FK relationships.
-3. Suggest up to 3 probable business rules inferred from constraints and columns (e.g. "Each employee must belong to a valid department").
-4. Suggest semantic domain classification tags (e.g. ["hr", "employees", "payroll"]).
+3. Suggest up to 3 probable business rules inferred from constraints and columns.
+4. Suggest practical use cases or sample queries.
+5. Suggest technical caveats or maintenance warnings if applicable.
+6. Suggest conceptually related tables or business objects.
+7. Suggest semantic domain classification tags (e.g. ["hr", "employees", "payroll"]).
 
 RESPONSE FORMAT (STRICT JSON ONLY):
 {
@@ -15,6 +18,18 @@ RESPONSE FORMAT (STRICT JSON ONLY):
   "business_rules": [
     "Rule 1...",
     "Rule 2..."
+  ],
+  "use_cases": [
+    "Consultar colaboradores ativos por departamento...",
+    "Relatório de admissões no mês atual..."
+  ],
+  "warnings": [
+    "Tabela de alto volume com particionamento mensal...",
+    "Evitar full table scan sem filtrar por EMP_ID..."
+  ],
+  "related_objects": [
+    "DEPARTMENTS",
+    "SALARIES"
   ],
   "tags": ["tag1", "tag2"],
   "columns": {
@@ -30,8 +45,10 @@ Your mission is to analyze the specification and source code of a Procedure, Fun
 INSTRUCTIONS:
 1. Clearly explain the purpose of the routine and its role in the application ecosystem.
 2. Extract and summarize the main business rules executed by the PL/SQL code.
-3. If it is a Package, infer the responsibilities of declared subprograms.
-4. Suggest semantic domain tags.
+3. Suggest practical use cases or invocation patterns.
+4. Suggest technical caveats or performance warnings.
+5. Suggest related objects.
+6. Suggest semantic domain tags.
 
 RESPONSE FORMAT (STRICT JSON ONLY):
 {
@@ -39,6 +56,18 @@ RESPONSE FORMAT (STRICT JSON ONLY):
   "business_rules": [
     "Validation or calculation rule 1...",
     "Rule 2..."
+  ],
+  "use_cases": [
+    "Execução diária pelo job de fechamento...",
+    "Chamada manual via tela de faturamento..."
+  ],
+  "warnings": [
+    "Realiza commits intermediários...",
+    "Exige lock exclusivo na tabela X..."
+  ],
+  "related_objects": [
+    "PKG_FINANCEIRO",
+    "TAB_LOG_PROCESSAMENTO"
   ],
   "tags": ["tag1", "tag2"],
   "subprograms": {

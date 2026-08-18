@@ -147,8 +147,22 @@ def generate_mermaid_graph(focal_name: str, dependencies: list[DependencyLink]) 
 
 def generate_semantic_rag_text(trace_result: ObjectTraceResult, annotation: ObjectAnnotation | None = None) -> str:
     focal_name = trace_result.focal_name
-    focal_type = trace_result.focal_type
     focal_obj = trace_result.focal_object
+    focal_type = trace_result.focal_type
+
+    if isinstance(focal_obj, TableMeta):
+        focal_type = "TABLE"
+    elif isinstance(focal_obj, ViewMeta):
+        focal_type = "VIEW"
+    elif isinstance(focal_obj, MaterializedViewMeta):
+        focal_type = "MATERIALIZED VIEW"
+    elif isinstance(focal_obj, CodeObjectMeta):
+        focal_type = focal_obj.object_type.upper()
+    elif isinstance(focal_obj, TriggerMeta):
+        focal_type = "TRIGGER"
+    elif isinstance(focal_obj, SynonymMeta):
+        focal_type = "SYNONYM"
+
     desc = (annotation and annotation.description) or getattr(focal_obj, "comment", None) or f"Objeto {focal_name} do tipo {focal_type}."
 
     parts = [f"O objeto {focal_name} é do tipo {focal_type}. Descrição de negócio: {desc.strip()}."]
@@ -175,32 +189,40 @@ def generate_semantic_rag_text(trace_result: ObjectTraceResult, annotation: Obje
 
     if trace_result.dependencies:
         dep_descriptions = []
+        seen_dep_texts = set()
         for dep in trace_result.dependencies:
             if dep.target_name == focal_name and dep.source_name == focal_name:
                 continue
+            text = None
             if dep.relation_type == "FK_REFERENCES":
-                dep_descriptions.append(f"possui chave estrangeira para a tabela {dep.target_name}")
+                text = f"possui chave estrangeira para a tabela {dep.target_name}"
             elif dep.relation_type == "FK_REFERENCED_BY":
-                dep_descriptions.append(f"é referenciada pela tabela filha {dep.source_name}")
+                text = f"é referenciada pela tabela filha {dep.source_name}"
             elif dep.relation_type == "READS/SELECTS":
-                dep_descriptions.append(f"consulta o objeto {dep.target_name}")
+                text = f"consulta o objeto {dep.target_name}"
             elif dep.relation_type == "EXECUTES/CALLS":
-                dep_descriptions.append(f"invoca o pacote/rotina {dep.target_name}")
+                text = f"invoca o pacote/rotina {dep.target_name}"
             elif dep.relation_type == "CALLS_SUBPROGRAM":
-                dep_descriptions.append(f"é invocada por {dep.source_name}")
+                text = f"é invocada por {dep.source_name}"
             elif dep.relation_type == "TRIGGER_ON":
-                dep_descriptions.append(f"possui a trigger {dep.source_name}")
+                text = f"possui a trigger {dep.source_name}"
             elif dep.relation_type == "PLSQL_DEPENDENCY":
-                dep_descriptions.append(f"é manipulada pelo código PL/SQL {dep.source_name}")
+                text = f"é manipulada pelo código PL/SQL {dep.source_name}"
             elif dep.relation_type == "SYNONYM_FOR":
-                dep_descriptions.append(f"possui o sinônimo {dep.source_name} apontando para si")
+                text = f"possui o sinônimo {dep.source_name} apontando para si"
             elif dep.relation_type == "REFERENCED_BY":
-                dep_descriptions.append(f"é referenciada pelo objeto {dep.source_type.lower()} {dep.source_name}")
+                text = f"é referenciada pelo objeto {dep.source_type.lower()} {dep.source_name}"
             elif dep.relation_type == "DEPENDS_ON":
-                dep_descriptions.append(f"depende do objeto {dep.target_type.lower()} {dep.target_name}")
+                text = f"depende do objeto {dep.target_type.lower()} {dep.target_name}"
             else:
-                dep_descriptions.append(f"possui vínculo com {dep.target_name} ({dep.relation_type})")
-        parts.append(" Impacto relacional: " + ", ".join(dep_descriptions[:10]) + ".")
+                text = f"possui vínculo com {dep.target_name} ({dep.relation_type})"
+
+            if text and text not in seen_dep_texts:
+                seen_dep_texts.add(text)
+                dep_descriptions.append(text)
+
+        if dep_descriptions:
+            parts.append(" Impacto relacional: " + ", ".join(dep_descriptions[:10]) + ".")
 
     return "".join(parts)
 
@@ -824,7 +846,18 @@ def write_schema_docs(
             generated_ann.append(ann_path)
             annotations_map[table.name.upper()] = annotation
 
-            tr = trace_raw_dependencies(schemas_context, table.name, max_depth=max_depth, index=dep_index) if with_traces else None
+            tr = (
+                trace_raw_dependencies(
+                    schemas_context,
+                    table.name,
+                    max_depth=max_depth,
+                    index=dep_index,
+                    expected_type="TABLE",
+                    schema_name=schema.schema_name,
+                )
+                if with_traces
+                else None
+            )
             if tr:
                 trace_map[table.name.upper()] = tr
 
@@ -858,7 +891,18 @@ def write_schema_docs(
             generated_ann.append(ann_path)
             annotations_map[view.name.upper()] = annotation
 
-            tr = trace_raw_dependencies(schemas_context, view.name, max_depth=max_depth, index=dep_index) if with_traces else None
+            tr = (
+                trace_raw_dependencies(
+                    schemas_context,
+                    view.name,
+                    max_depth=max_depth,
+                    index=dep_index,
+                    expected_type="VIEW",
+                    schema_name=schema.schema_name,
+                )
+                if with_traces
+                else None
+            )
             if tr:
                 trace_map[view.name.upper()] = tr
 
@@ -892,7 +936,18 @@ def write_schema_docs(
             generated_ann.append(ann_path)
             annotations_map[mview.name.upper()] = annotation
 
-            tr = trace_raw_dependencies(schemas_context, mview.name, max_depth=max_depth, index=dep_index) if with_traces else None
+            tr = (
+                trace_raw_dependencies(
+                    schemas_context,
+                    mview.name,
+                    max_depth=max_depth,
+                    index=dep_index,
+                    expected_type="MATERIALIZED VIEW",
+                    schema_name=schema.schema_name,
+                )
+                if with_traces
+                else None
+            )
             if tr:
                 trace_map[mview.name.upper()] = tr
 
@@ -922,7 +977,18 @@ def write_schema_docs(
         generated_ann.append(ann_path)
         annotations_map[code_obj.name.upper()] = annotation
 
-        tr = trace_raw_dependencies(schemas_context, code_obj.name, max_depth=max_depth, index=dep_index) if with_traces else None
+        tr = (
+            trace_raw_dependencies(
+                schemas_context,
+                code_obj.name,
+                max_depth=max_depth,
+                index=dep_index,
+                expected_type=code_obj.object_type,
+                schema_name=schema.schema_name,
+            )
+            if with_traces
+            else None
+        )
         if tr:
             trace_map[code_obj.name.upper()] = tr
 
@@ -970,7 +1036,18 @@ def write_schema_docs(
             generated_ann.append(ann_path)
             annotations_map[trigger.name.upper()] = annotation
 
-            tr = trace_raw_dependencies(schemas_context, trigger.name, max_depth=max_depth, index=dep_index) if with_traces else None
+            tr = (
+                trace_raw_dependencies(
+                    schemas_context,
+                    trigger.name,
+                    max_depth=max_depth,
+                    index=dep_index,
+                    expected_type="TRIGGER",
+                    schema_name=schema.schema_name,
+                )
+                if with_traces
+                else None
+            )
             if tr:
                 trace_map[trigger.name.upper()] = tr
 

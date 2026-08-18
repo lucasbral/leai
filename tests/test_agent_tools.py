@@ -13,6 +13,7 @@ from leai.ai.tools import (
     get_table_schema,
     grep_plsql_code,
     search_business_documentation,
+    search_column_comments,
     search_database_objects,
     trace_object_lineage,
 )
@@ -311,6 +312,120 @@ END;"""
         self.assertEqual(tools_invoked, ["get_table_schema"])
         self.assertIn("VINCULOS", reply)
         self.assertEqual(client.call_count, 2)
+        self.assertEqual(len(engine.last_tool_audits), 1)
+        self.assertEqual(engine.last_tool_audits[0].tool_name, "get_table_schema")
+        self.assertIn("colunas", engine.last_tool_audits[0].summary)
+
+    def test_summarize_tool_result_all_tools(self):
+        from leai.ai.tools import summarize_tool_result
+
+        # grep_plsql_code
+        res = summarize_tool_result("grep_plsql_code", {}, json.dumps({"matches": [{"name": "A"}, {"name": "B"}]}))
+        self.assertEqual(res, "2 ocorrências encontradas")
+
+        # get_table_schema
+        res = summarize_tool_result("get_table_schema", {}, json.dumps({"columns": [1, 2, 3], "primary_keys": ["ID"]}))
+        self.assertIn("3 colunas", res)
+        self.assertIn("1 PK", res)
+
+        # get_subprogram_source
+        res = summarize_tool_result("get_subprogram_source", {}, json.dumps({"source": "line1\nline2\nline3"}))
+        self.assertEqual(res, "3 linhas de código PL/SQL")
+
+        # trace_object_lineage
+        res = summarize_tool_result("trace_object_lineage", {}, json.dumps({"dependencies": [1, 2], "risk_level": "LOW"}))
+        self.assertIn("2 conexões", res)
+
+        # search_business_documentation
+        res = summarize_tool_result("search_business_documentation", {}, json.dumps({"results": [{"name": "T1"}]}))
+        self.assertEqual(res, "1 objeto/regra encontrado")
+
+    def test_session_audit_logger(self):
+        from leai.audit import SessionAuditLogger, ToolExecutionAudit
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logger = SessionAuditLogger(session_id="test_session_123", log_dir=Path(tmpdir))
+
+            # Record a turn
+            tool_rec = ToolExecutionAudit(
+                step=1,
+                tool_name="grep_plsql_code",
+                arguments={"pattern": "CALC"},
+                raw_output=json.dumps({"matches": []}),
+                summary="0 ocorrências",
+                duration_seconds=0.012,
+            )
+            turn = logger.record_turn(
+                user_prompt="Como calcular salário?",
+                ai_response="Para calcular salário...",
+                provider="openai",
+                model="gpt-4o",
+                latency_seconds=1.23,
+                tokens_used=450,
+                rag_entities=["VINCULOS"],
+                tools_executed=[tool_rec],
+            )
+
+            self.assertEqual(turn.turn_id, "1")
+            self.assertEqual(len(logger.turns), 1)
+            self.assertTrue(logger.log_file.exists())
+
+            # Export Markdown report
+            md_path = logger.export_markdown()
+            self.assertTrue(md_path.exists())
+            md_content = md_path.read_text(encoding="utf-8")
+            self.assertIn("LEAI Session Audit Report", md_content)
+            self.assertIn("grep_plsql_code", md_content)
+            self.assertIn("Como calcular salário?", md_content)
+
+            # Export JSON report
+            json_path = logger.export_json()
+            self.assertTrue(json_path.exists())
+
+            # Summary
+            summary = logger.get_session_summary()
+            self.assertEqual(summary["total_turns"], 1)
+            self.assertEqual(summary["total_tool_calls"], 1)
+            self.assertEqual(summary["total_tokens"], 450)
+
+    def test_search_column_comments_and_stemming(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            col_recad = ColumnMeta(name="DT_RECAD", data_type="DATE", nullable=True, comment="Data do último recadastramento anual")
+            tbl = TableMeta(name="TAB_REC", schema_name="RH", comment="Tabela de servidores", columns=[col_recad])
+            schema = SchemaMetadata(schema_name="RH", tables=[tbl])
+            cfg = LeaiConfig()
+            cfg.annotationsPath = Path(tmpdir)
+
+            # Test search_business_documentation with combined object_type 'table,view' and root stem 'recadastramento'
+            res = search_business_documentation([schema], cfg, query="recadastramento", object_type="table,view")
+            self.assertTrue(len(res) >= 1)
+            self.assertEqual(res[0]["object_name"], "TAB_REC")
+            self.assertIn("column/routine: DT_RECAD", res[0]["matched_fields"])
+
+            # Test search_database_objects matching column comment
+            res_db = search_database_objects([schema], query="recadastramento", object_type="table,view", config=cfg)
+            self.assertTrue(len(res_db) >= 1)
+            self.assertEqual(res_db[0]["name"], "TAB_REC")
+            self.assertIn("DT_RECAD", res_db[0]["matched_columns"])
+
+            # Test get_table_schema with qualified SCHEMA.TABLE
+            t_schema = get_table_schema([schema], cfg, "RH.TAB_REC")
+            self.assertEqual(t_schema["table_name"], "TAB_REC")
+            self.assertEqual(t_schema["schema"], "RH")
+            self.assertEqual(len(t_schema["columns"]), 1)
+
+            # Test dedicated search_column_comments tool
+            col_results = search_column_comments([schema], query="recadastramento", config=cfg)
+            self.assertTrue(len(col_results) >= 1)
+            self.assertEqual(col_results[0]["table_name"], "TAB_REC")
+            self.assertEqual(col_results[0]["column_name"], "DT_RECAD")
+            self.assertIn("recadastramento", col_results[0]["comment"].lower())
+
+            # Test dispatch via execute_tool_call
+            out = execute_tool_call("search_column_comments", {"query": "recadastramento"}, [schema], cfg)
+            parsed = json.loads(out)
+            self.assertTrue(len(parsed) >= 1)
+            self.assertEqual(parsed[0]["column_name"], "DT_RECAD")
 
 
 if __name__ == "__main__":

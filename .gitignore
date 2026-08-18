@@ -18,6 +18,8 @@ leai.yml
 raw/
 docs/
 annotations/
+.leai/
+.leai_sessions/
 *.log
 
 # IDE & OS files

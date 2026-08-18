@@ -19,12 +19,12 @@ class CliIntegrationTests(unittest.TestCase):
     def test_version_option(self):
         result = self.runner.invoke(app, ["--version"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("LEAI CLI version 0.2.3", result.output)
+        self.assertIn("LEAI CLI version 0.2.4", result.output)
 
     def test_version_short_option(self):
         result = self.runner.invoke(app, ["-v"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("LEAI CLI version 0.2.3", result.output)
+        self.assertIn("LEAI CLI version 0.2.4", result.output)
 
     def test_help_command(self):
         result = self.runner.invoke(app, ["--help"])
@@ -504,7 +504,20 @@ docPath: "{(base / 'docs').as_posix()}"
             self.assertTrue((base / "docs" / "tables" / "EMPLOYEES.md").exists())
             self.assertFalse((base / "docs" / "tables" / "DEPARTMENTS.md").exists())
 
+    @patch("leai.web.start_server")
+    def test_serve_command(self, mock_start_server):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            cfg_file = base / "leai.yml"
+            cfg_file.write_text("schemas:\n  - HR\n", encoding="utf-8")
+
+            result = self.runner.invoke(app, ["serve", "--config", str(cfg_file), "--port", "8899", "--no-open"])
+            self.assertEqual(result.exit_code, 0, msg=result.output)
+            self.assertIn("Web Studio Running", result.output)
+            self.assertTrue(mock_start_server.called)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

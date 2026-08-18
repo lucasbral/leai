@@ -21,6 +21,8 @@ SLASH_COMMANDS: list[tuple[str, str]] = [
     ("/changes", "Inspect recent DDL modifications in database"),
     ("/model", "Switch AI provider and model dynamically"),
     ("/save", "Save conversation transcript to Markdown file"),
+    ("/audit", "Inspect AI reasoning, tool execution trace and session logs"),
+    ("/tools", "Quick viewer for last turn's tool execution inputs/outputs"),
     ("/check", "Run environment diagnostics on DB, config and AI provider"),
     ("/init", "Create or check leai.yml configuration file"),
     ("/clear", "Clear conversation memory and terminal screen"),
@@ -225,6 +227,25 @@ class LeaiCompleter(Completer):
                                 start_position=-len(word_before_cursor),
                                 display=f_name,
                                 display_meta=f_meta,
+                            )
+                return
+
+            # Sub-argument completion for /audit (last, session, export)
+            if cmd_name == "/audit":
+                if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
+                    a_query = parts[1].lower() if len(parts) > 1 else ""
+                    audit_options = [
+                        ("last", "Inspect tool traces and outputs of last interaction (Default)"),
+                        ("session", "View aggregate session statistics and tool breakdown"),
+                        ("export", "Export session audit report to Markdown or JSON"),
+                    ]
+                    for a_opt, a_meta in audit_options:
+                        if a_opt.startswith(a_query):
+                            yield Completion(
+                                text=a_opt,
+                                start_position=-len(word_before_cursor),
+                                display=a_opt,
+                                display_meta=a_meta,
                             )
                 return
 

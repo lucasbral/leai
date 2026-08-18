@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 import time
@@ -16,11 +17,13 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn, TimeElapsedColumn
 from rich.prompt import Prompt
+from rich.syntax import Syntax
 from rich.table import Column, Table
 from rich.tree import Tree
 
 from leai.ai import get_llm_client
 from leai.ai.base import BaseLLMClient
+from leai.audit import SessionAuditLogger
 from leai.chat_session import ChatSession
 from leai.config import LeaiConfig
 from leai.docs import (
@@ -101,9 +104,12 @@ class InteractiveTUISession:
         self.session = ChatSession(schemas=schemas, config=config, client=client)
         self.last_latency: float | None = None
         self.completer = LeaiCompleter(schemas, config=config)
+        self.audit_logger = SessionAuditLogger()
+        self.web_server = None
+        self.web_url = None
 
-        # Setup persistent history
-        hist_dir = Path.home() / ".leai"
+        # Setup persistent history in project folder (.leai/chat_history)
+        hist_dir = Path("./.leai")
         try:
             hist_dir.mkdir(parents=True, exist_ok=True)
             self.history = FileHistory(str(hist_dir / "chat_history"))
@@ -290,7 +296,8 @@ class InteractiveTUISession:
             return True
 
         if cmd == "/serve":
-            self._run_serve()
+            sub_arg = parts[1] if len(parts) > 1 else None
+            self._run_serve(sub_arg)
             return True
 
         if cmd == "/tables":
@@ -353,6 +360,12 @@ class InteractiveTUISession:
 
         if cmd == "/init":
             self._run_init()
+            return True
+
+        if cmd in ("/audit", "/log", "/tools"):
+            sub_arg = parts[1] if len(parts) > 1 else None
+            extra_arg = parts[2] if len(parts) > 2 else None
+            self._run_audit(sub_arg, extra_arg)
             return True
 
         console.print(f"[yellow]Unknown command '{cmd}'. Type [bold cyan]/help[/bold cyan] for available commands.[/yellow]")
@@ -711,18 +724,58 @@ class InteractiveTUISession:
         except Exception as exc:
             console.print(f"[red]Error during enrichment:[/red] {exc}\n")
 
-    def _run_serve(self) -> None:
-        """Shows how to serve or launches web documentation."""
-        console.print(
-            Panel(
-                f"[bold cyan]✦ LEAI Web Documentation[/bold cyan]\n\n"
-                f"To preview the generated Markdown documentation with full-text search and responsive theme:\n"
-                f"  👉 [bold yellow]leai serve[/bold yellow] (or [bold yellow]mkdocs serve[/bold yellow] if mkdocs is configured)\n\n"
-                f"Docs location: [bold green]{self.config.docPath}[/bold green]",
-                title="[bold green]Web Documentation Preview[/bold green]",
-                border_style="green",
+    def _run_serve(self, arg: str | None = None) -> None:
+        """Launches or controls background LEAI Web Studio."""
+        sub = (arg or "").strip().lower()
+
+        if sub == "stop":
+            if self.web_server:
+                self.web_server.shutdown()
+                self.web_server = None
+                self.web_url = None
+                console.print("[yellow]✓ LEAI Web Studio stopped.[/yellow]\n")
+            else:
+                console.print("[dim]LEAI Web Studio is not currently running.[/dim]\n")
+            return
+
+        port = 8000
+        if sub.isdigit():
+            port = int(sub)
+
+        if self.web_server:
+            console.print(f"[green]✓ LEAI Web Studio is already running at [bold cyan]{self.web_url}[/bold cyan][/green]")
+            import webbrowser
+            webbrowser.open(self.web_url)
+            console.print("[dim]Type [bold cyan]/serve stop[/bold cyan] to shut down the server.[/dim]\n")
+            return
+
+        try:
+            from leai.web import start_server
+
+            self.web_server, self.web_url = start_server(
+                config=self.config,
+                schemas=self.schemas,
+                client=self.client,
+                provider_name=self.provider_name,
+                port=port,
+                open_browser=True,
+                in_background=True,
             )
-        )
+            console.print()
+            console.print(
+                Panel(
+                    f"[bold cyan]⚡ LEAI Web Documentation & Annotation Studio[/bold cyan]\n\n"
+                    f"[bold white]URL:[/bold white] [bold yellow underline]{self.web_url}[/bold yellow underline]\n"
+                    f"[bold white]Features:[/bold white] In-browser real-time annotation editor, instant Markdown sync, AI auto-enrichment & lineage graphs.\n\n"
+                    f"[dim]Studio opened in your default browser. Type [bold cyan]/serve stop[/bold cyan] anytime to stop the server.[/dim]",
+                    title="[bold green]🌐 Web Studio Launched in Background[/bold green]",
+                    box=box.ROUNDED,
+                    border_style="green",
+                )
+            )
+            console.print()
+        except Exception as exc:
+            console.print(f"[red]Failed to launch Web Studio:[/red] {exc}\n")
 
     def _run_check(self) -> None:
         """Runs diagnostics on Oracle connection, schemas snapshot, and AI provider."""
@@ -740,7 +793,7 @@ class InteractiveTUISession:
         # 2. Check Oracle Connection
         if self.config.dsn:
             try:
-                from leai.raw import _build_connect_kwargs
+                from leai.oracle import _build_connect_kwargs
                 conn = oracledb.connect(**_build_connect_kwargs(self.config.dsn))
                 cur = conn.cursor()
                 cur.execute("SELECT * FROM v$version WHERE ROWNUM = 1")
@@ -793,7 +846,7 @@ class InteractiveTUISession:
         table.add_row("/compile [obj]", "Pipeline", "Compile final Markdown docs in docs/ (supports single object)")
         table.add_row("/annotate", "Pipeline", "Synchronize YAML annotation stubs in annotations/")
         table.add_row("/extract [s|ALL]", "Pipeline", "Connect to Oracle and extract fresh raw metadata snapshot")
-        table.add_row("/serve", "Web Preview", "Information on previewing web documentation locally")
+        table.add_row("/serve [port|stop]", "Web Studio", "Launch interactive Web Studio with in-browser editor & real-time sync")
 
         # Exploration & Lineage
         table.add_row("/trace <obj>", "Lineage", "Perform inline dependency lineage & impact X-ray with Mermaid")
@@ -808,6 +861,8 @@ class InteractiveTUISession:
         table.add_row("/init", "Setup", "Check or initialize leai.yml configuration file")
 
         # Session & Utilities
+        table.add_row("/audit [last|session|export]", "Audit & Logs", "Inspect AI tool call trace, latency & session audit log")
+        table.add_row("/tools", "Audit & Logs", "Quick viewer for last turn's tool execution inputs/outputs")
         table.add_row("/save [file.md]", "Session", "Export current conversation transcript to Markdown")
         table.add_row("/clear", "Session", "Clear session memory and reset terminal screen")
         table.add_row("/chat <msg>", "Copilot", "Ask AI Copilot directly (or simply type any question)")
@@ -1007,18 +1062,30 @@ class InteractiveTUISession:
         console.print(f"[dim]✓ Dossier generated at: {written}[/dim]\n")
 
     def _send_ai_prompt(self, user_input: str) -> None:
-        """Queries AI Assistant with live tool feedback, RAG context, and latency metrics."""
+        """Queries AI Assistant with live step-by-step tool feedback, audit recording, and latency metrics."""
         if not self.client:
             console.print("[yellow]! No active AI client configured. Type [bold cyan]/model[/bold cyan] to configure a provider.[/yellow]\n")
             return
 
         start_t = time.perf_counter()
-        tool_calls_executed = []
 
-        def _on_tool_start(t_name: str, t_args: dict) -> None:
-            tool_calls_executed.append(t_name)
-            args_str = ", ".join(f"{k}={v}" for k, v in t_args.items())
-            console.print(f"[dim cyan]  ⚙️ Investigating:[/dim cyan] [bold yellow]{t_name}[/bold yellow]({args_str})")
+        def _format_args_preview(args: dict) -> str:
+            items = []
+            for k, v in args.items():
+                v_str = repr(v) if not isinstance(v, (dict, list)) else json.dumps(v, ensure_ascii=False)
+                if len(v_str) > 28:
+                    v_str = v_str[:25] + "..."
+                items.append(f"{k}={v_str}")
+            return ", ".join(items)
+
+        def _on_tool_start(t_name: str, t_args: dict, step_idx: int = 1) -> None:
+            args_str = _format_args_preview(t_args)
+            console.print(f"  [bold yellow]⚡ [{step_idx}][/bold yellow] [bold cyan]{t_name}[/bold cyan]({args_str}) [dim]➔ Executando...[/dim]")
+
+        def _on_tool_end(t_name: str, t_output: str, summary: str = "", dur: float = 0.0) -> None:
+            sum_text = summary or "OK"
+            dur_text = f" ({dur:.2f}s)" if dur > 0 else ""
+            console.print(f"     [bold green]✓[/bold green] [dim]{sum_text}{dur_text}[/dim]")
 
         with console.status(
             f"[cyan]Thinking with [bold yellow]{self.provider_name.upper()}[/bold yellow] ([bold green]{self.client.model}[/bold green])...[/cyan]",
@@ -1027,18 +1094,27 @@ class InteractiveTUISession:
             reply, detected = self.session.send(
                 user_input,
                 on_tool_start=_on_tool_start,
+                on_tool_end=_on_tool_end,
             )
         self.last_latency = time.perf_counter() - start_t
 
-        # Display detected entities in RAG context or tools executed
-        if tool_calls_executed:
-            console.print(f"[dim]🛠️ Tools Executed: [bold yellow]{', '.join(tool_calls_executed)}[/bold yellow][/dim]")
-        elif detected:
-            console.print(f"[dim]🔍 Active RAG Context: [bold yellow]{', '.join(detected)}[/bold yellow][/dim]")
+        # Record in Session Audit Logger
+        turn_audit = self.audit_logger.record_turn(
+            user_prompt=user_input,
+            ai_response=reply,
+            provider=self.provider_name,
+            model=self.client.model if self.client else "",
+            latency_seconds=self.last_latency,
+            tokens_used=self.session.last_turn_tokens or 0,
+            rag_entities=detected,
+            tools_executed=self.session.last_tool_audits,
+        )
 
         turn_tok_str = f" • {self.session.last_turn_tokens:,} tokens" if self.session.last_turn_tokens else ""
+        tool_count = len(turn_audit.tools_executed)
+        tool_badge = f" • {tool_count} tool{'s' if tool_count > 1 else ''}" if tool_count > 0 else ""
         subtitle_str = (
-            f"[dim]⚡ {self.last_latency:.2f}s{turn_tok_str} • {self.provider_name.upper()} ({self.client.model})"
+            f"[dim]⚡ {self.last_latency:.2f}s{turn_tok_str}{tool_badge} • {self.provider_name.upper()} ({self.client.model})"
             f"{' • RAG: ' + ', '.join(detected) if detected else ''}[/dim]"
         )
 
@@ -1053,7 +1129,105 @@ class InteractiveTUISession:
                 padding=(1, 2),
             )
         )
+        if tool_count > 0:
+            console.print("[dim]Tip: Type [bold cyan]/audit[/bold cyan] to inspect tool inputs, raw database responses, and audit logs.[/dim]\n")
+        else:
+            console.print()
+
+    def _run_audit(self, sub_cmd: str | None = None, arg: str | None = None) -> None:
+        """Inspects AI reasoning, tool execution traces, and session audit logs."""
+        sub = (sub_cmd or "last").lower()
+
+        if sub == "session":
+            summary = self.audit_logger.get_session_summary()
+            table = Table(show_header=True, header_style="bold cyan", box=box.ROUNDED)
+            table.add_column("Metric", style="bold white", width=25)
+            table.add_column("Value", style="bold yellow")
+
+            table.add_row("Session ID", summary["session_id"])
+            table.add_row("Session Start Time", summary["start_time"])
+            table.add_row("Total Questions Asked", str(summary["total_turns"]))
+            table.add_row("Total Tool Executions", str(summary["total_tool_calls"]))
+            table.add_row("Total Tokens Used", f"{summary['total_tokens']:,}")
+            table.add_row("Total Model Latency", f"{summary['total_latency_seconds']}s")
+            table.add_row("Active Audit Log File", summary["log_file"])
+
+            console.print()
+            console.print(Panel(table, title="[bold cyan]✦ AI Session Audit Overview[/bold cyan]", box=box.ROUNDED, border_style="cyan"))
+
+            if summary["tool_usage_breakdown"]:
+                t_table = Table(show_header=True, header_style="bold cyan", box=box.ROUNDED)
+                t_table.add_column("Tool Name", style="bold yellow")
+                t_table.add_column("Execution Count", justify="right", style="green")
+                for t_name, count in sorted(summary["tool_usage_breakdown"].items(), key=lambda x: x[1], reverse=True):
+                    t_table.add_row(t_name, str(count))
+                console.print(Panel(t_table, title="[bold green]✦ Tool Execution Breakdown[/bold green]", box=box.ROUNDED, border_style="green"))
+            console.print()
+            return
+
+        if sub in ("export", "save"):
+            target_path = Path(arg.strip()) if arg else None
+            is_json = target_path and target_path.suffix.lower() == ".json"
+            if is_json:
+                saved = self.audit_logger.export_json(target_path)
+            else:
+                saved = self.audit_logger.export_markdown(target_path)
+            console.print(f"[green]✓ Audit report successfully exported to:[/green] [bold cyan]{saved.resolve()}[/bold cyan]\n")
+            return
+
+        # Default: /audit or /audit last
+        last_turn = self.audit_logger.get_last_turn()
+        if not last_turn:
+            console.print("[yellow]! No interaction has occurred yet in this session.[/yellow]\n")
+            return
+
         console.print()
+        info_panel = (
+            f"[bold white]Turn ID:[/bold white] [bold cyan]#{last_turn.turn_id}[/bold cyan]  •  "
+            f"[bold white]Timestamp:[/bold white] {last_turn.timestamp}  •  "
+            f"[bold white]Model:[/bold white] [bold green]{last_turn.provider}:{last_turn.model}[/bold green]\n"
+            f"[bold white]Prompt:[/bold white] [yellow]\"{last_turn.user_prompt}\"[/yellow]\n"
+            f"[bold white]Latency:[/bold white] {last_turn.latency_seconds}s  •  "
+            f"[bold white]Tokens:[/bold white] {last_turn.tokens_used:,}  •  "
+            f"[bold white]Tools Used:[/bold white] [bold]{len(last_turn.tools_executed)}[/bold]"
+        )
+        console.print(Panel(info_panel, title="[bold cyan]✦ AI Interaction Audit Trace[/bold cyan]", box=box.ROUNDED, border_style="cyan"))
+
+        if not last_turn.tools_executed:
+            console.print("[dim]No database tools were invoked for this question (direct answer or RAG context was sufficient).[/dim]\n")
+            return
+
+        for te in last_turn.tools_executed:
+            t_table = Table(show_header=False, box=box.SIMPLE)
+            t_table.add_column("Field", style="dim cyan", width=16)
+            t_table.add_column("Value", style="white")
+
+            t_table.add_row("Step", f"[bold yellow]#{te.step}[/bold yellow] ([bold cyan]{te.tool_name}[/bold cyan])")
+            t_table.add_row("Duration", f"{te.duration_seconds:.3f}s")
+            t_table.add_row("Summary", f"[bold green]{te.summary}[/bold green]")
+            args_formatted = json.dumps(te.arguments, indent=2, ensure_ascii=False)
+            t_table.add_row("Arguments", Syntax(args_formatted, "json", theme="monokai", word_wrap=True))
+
+            try:
+                parsed_out = json.loads(te.raw_output)
+                out_formatted = json.dumps(parsed_out, indent=2, ensure_ascii=False)
+            except Exception:
+                out_formatted = te.raw_output
+
+            if len(out_formatted) > 800:
+                out_formatted = out_formatted[:797] + "..."
+
+            t_table.add_row("Raw Output", Syntax(out_formatted, "json", theme="monokai", word_wrap=True))
+
+            console.print(
+                Panel(
+                    t_table,
+                    title=f"[bold yellow]⚡ Step {te.step}: {te.tool_name}[/bold yellow]",
+                    box=box.ROUNDED,
+                    border_style="yellow",
+                )
+            )
+        console.print(f"[dim]Audit session file: [bold cyan]{self.audit_logger.log_file}[/bold cyan][/dim]\n")
 
     def run(self) -> None:
         """Main interaction loop."""
