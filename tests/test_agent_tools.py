@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from leai.ai.agent import MAX_AGENT_ITERATIONS, AgentExecutionEngine
 from leai.ai.base import BaseLLMClient
@@ -10,14 +12,17 @@ from leai.ai.tools import (
     get_subprogram_source,
     get_table_schema,
     grep_plsql_code,
+    search_business_documentation,
     search_database_objects,
     trace_object_lineage,
 )
+from leai.annotations import save_annotation
 from leai.config import LeaiConfig
 from leai.models import (
     CodeObjectMeta,
     ColumnMeta,
     ForeignKeyMeta,
+    ObjectAnnotation,
     SchemaMetadata,
     SubprogramMeta,
     SynonymMeta,
@@ -234,12 +239,6 @@ END;"""
         self.assertEqual(parsed[0]["name"], "VINCULOS")
 
     def test_search_business_documentation_accents_and_rules(self):
-        import tempfile
-        from pathlib import Path
-        from leai.ai.tools import search_business_documentation
-        from leai.annotations import save_annotation
-        from leai.models import ObjectAnnotation
-
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg = LeaiConfig()
             cfg.annotationsPath = Path(tmpdir) / "annotations"
