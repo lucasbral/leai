@@ -1,0 +1,2035 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LEAI Docs — Oracle Database Documentation & Annotation Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
+  <style>
+    :root {
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-tertiary: #334155;
+      --bg-hover: #1e293b;
+      --border-color: #334155;
+      --border-subtle: #1e293b;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent: #38bdf8;
+      --accent-hover: #0ea5e9;
+      --accent-dim: rgba(56, 189, 248, 0.12);
+      --success: #34d399;
+      --success-dim: rgba(52, 211, 153, 0.12);
+      --warning: #fbbf24;
+      --danger: #f87171;
+      --font-main: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      --font-mono: 'Fira Code', monospace;
+      --sidebar-width: 320px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-main);
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* Top Navigation Header */
+    .app-header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: 56px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      z-index: 50;
+    }
+
+    .brand-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 18px;
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+    .brand-logo span.badge {
+      background: var(--accent-dim);
+      color: var(--accent);
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .header-center {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      max-width: 500px;
+      margin: 0 20px;
+    }
+    .search-box {
+      position: relative;
+      width: 100%;
+    }
+    .search-box input {
+      width: 100%;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 8px 12px 8px 36px;
+      color: var(--text-primary);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-box input:focus {
+      border-color: var(--accent);
+    }
+    .search-box .search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border-radius: 7px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.2s;
+      outline: none;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #0f172a;
+    }
+    .btn-primary:hover {
+      background: var(--accent-hover);
+    }
+    .btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border-color: var(--border-color);
+    }
+    .btn-secondary:hover {
+      background: #475569;
+    }
+    .btn-ai {
+      background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+      color: white;
+    }
+    .btn-ai:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    /* Main Layout */
+    .app-container {
+      display: flex;
+      width: 100%;
+      height: calc(100vh - 56px);
+      margin-top: 56px;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .sidebar-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .sidebar-tree {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 8px;
+    }
+    .tree-schema {
+      margin-bottom: 12px;
+    }
+    .tree-schema-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 8px;
+      font-weight: 700;
+      color: var(--warning);
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 6px;
+      user-select: none;
+      transition: background 0.15s;
+    }
+    .tree-schema-title:hover {
+      background: var(--bg-hover);
+    }
+    .tree-schema-header-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tree-chevron {
+      font-size: 10px;
+      color: var(--text-muted);
+      width: 14px;
+      text-align: center;
+      user-select: none;
+    }
+    .tree-schema-body {
+      display: block;
+    }
+    .tree-schema-body.collapsed {
+      display: none;
+    }
+    .tree-category {
+      margin-left: 10px;
+      margin-top: 3px;
+    }
+    .tree-cat-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      padding: 5px 8px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-radius: 4px;
+      user-select: none;
+      transition: all 0.15s;
+    }
+    .tree-cat-title:hover {
+      background: var(--bg-hover);
+      color: var(--text-secondary);
+    }
+    .tree-cat-title-left {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .tree-cat-badge {
+      font-size: 10px;
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-family: var(--font-mono);
+    }
+    .tree-cat-body {
+      display: block;
+      margin-left: 8px;
+    }
+    .tree-cat-body.collapsed {
+      display: none;
+    }
+    .tree-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      margin: 1px 0;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-family: var(--font-mono);
+      transition: all 0.15s;
+    }
+    .tree-item:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .tree-item.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-weight: 600;
+      border-left: 3px solid var(--accent);
+    }
+    .item-badge {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #475569;
+    }
+    .item-badge.annotated {
+      background: var(--success);
+      box-shadow: 0 0 6px rgba(52, 211, 153, 0.4);
+    }
+
+    /* Content Area */
+    .content-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-primary);
+    }
+
+    /* Top Object Header */
+    .object-header {
+      padding: 16px 24px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .object-title-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .object-type-badge {
+      background: var(--bg-tertiary);
+      color: var(--accent);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .object-name {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+    }
+    .object-schema-name {
+      color: var(--warning);
+      margin-right: 4px;
+    }
+
+    /* Tabs Bar */
+    .tabs-bar {
+      display: flex;
+      gap: 4px;
+      background: var(--bg-secondary);
+      padding: 0 24px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .tab-btn {
+      padding: 10px 16px;
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-secondary);
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn:hover {
+      color: var(--text-primary);
+    }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    /* Tab Panes */
+    .tab-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+    .tab-pane {
+      display: none;
+    }
+    .tab-pane.active {
+      display: block;
+    }
+
+    /* Form & Editor Styles */
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+    .form-control {
+      width: 100%;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text-primary);
+      font-size: 13px;
+      font-family: var(--font-main);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-control:focus {
+      border-color: var(--accent);
+    }
+    textarea.form-control {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    /* Business Rules List */
+    .rules-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .rule-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .rule-item input {
+      flex: 1;
+    }
+    .btn-icon {
+      background: none;
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      border-radius: 6px;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-icon:hover {
+      background: var(--danger);
+      color: white;
+      border-color: var(--danger);
+    }
+
+    /* Editable Column Table */
+    .table-container {
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+    table.data-table th {
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      font-weight: 600;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+    table.data-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-color);
+      vertical-align: middle;
+    }
+    table.data-table tr:last-child td {
+      border-bottom: none;
+    }
+    table.data-table tr:hover td {
+      background: var(--bg-secondary);
+    }
+    .col-name {
+      font-family: var(--font-mono);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .col-type {
+      font-family: var(--font-mono);
+      color: var(--accent);
+      font-size: 12px;
+    }
+    .badge-pk {
+      background: var(--success-dim);
+      color: var(--success);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .badge-fk {
+      background: rgba(251, 191, 36, 0.12);
+      color: var(--warning);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    /* Doc Toolbar & Path Badge */
+    .doc-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-color);
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .doc-path-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--accent);
+    }
+    .doc-segmented-control {
+      display: flex;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 2px;
+    }
+    .seg-btn {
+      padding: 4px 10px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .seg-btn.active {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    /* Markdown Body Styling */
+    .markdown-body {
+      background: var(--bg-secondary);
+      padding: 28px 32px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      line-height: 1.7;
+      color: var(--text-primary);
+      font-size: 14px;
+    }
+    .markdown-body h1 {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 0 0 16px 0;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .markdown-body h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 28px 0 14px 0;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .markdown-body h3 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 20px 0 10px 0;
+    }
+    .markdown-body p {
+      margin-bottom: 14px;
+      color: #cbd5e1;
+    }
+    .markdown-body ul, .markdown-body ol {
+      margin: 10px 0 16px 24px;
+      color: #cbd5e1;
+    }
+    .markdown-body li {
+      margin-bottom: 6px;
+    }
+    .markdown-body hr {
+      border: none;
+      height: 1px;
+      background: var(--border-color);
+      margin: 24px 0;
+    }
+
+    /* Markdown Tables */
+    .markdown-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 24px 0;
+      font-size: 13px;
+      background: var(--bg-primary);
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+    }
+    .markdown-body th {
+      background: rgba(255, 255, 255, 0.04);
+      padding: 10px 14px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-color);
+    }
+    .markdown-body td {
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      color: #e2e8f0;
+    }
+    .markdown-body tr:last-child td {
+      border-bottom: none;
+    }
+    .markdown-body tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Code Blocks & Inline Code */
+    .markdown-body code:not(pre code) {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--accent);
+      background: rgba(56, 189, 248, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(56, 189, 248, 0.15);
+    }
+    .code-block-wrapper {
+      position: relative;
+      margin: 16px 0;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+      background: #090d16;
+    }
+    .code-block-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .code-copy-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-secondary);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .code-copy-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: var(--text-primary);
+    }
+    .markdown-body pre {
+      margin: 0;
+      padding: 14px 16px;
+      background: transparent;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      line-height: 1.6;
+    }
+    .markdown-body pre code {
+      background: transparent !important;
+      padding: 0;
+      font-family: var(--font-mono);
+    }
+
+    /* GitHub Style Alerts */
+    .github-alert {
+      padding: 12px 16px;
+      margin: 16px 0;
+      border-radius: 8px;
+      border-left: 4px solid;
+      background: rgba(0, 0, 0, 0.2);
+    }
+    .github-alert .alert-title {
+      font-weight: 700;
+      font-size: 13px;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .github-alert.alert-note {
+      border-color: #38bdf8;
+      background: rgba(56, 189, 248, 0.08);
+      color: #bae6fd;
+    }
+    .github-alert.alert-tip {
+      border-color: #4ade80;
+      background: rgba(74, 222, 128, 0.08);
+      color: #bbf7d0;
+    }
+    .github-alert.alert-important {
+      border-color: #c084fc;
+      background: rgba(192, 132, 252, 0.08);
+      color: #e9d5ff;
+    }
+    .github-alert.alert-warning {
+      border-color: #fbbf24;
+      background: rgba(251, 191, 36, 0.08);
+      color: #fef08a;
+    }
+    .github-alert.alert-caution {
+      border-color: #f87171;
+      background: rgba(248, 113, 113, 0.08);
+      color: #fecaca;
+    }
+
+    /* Raw Source Code View */
+    .doc-source-code {
+      background: #090d16;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 20px;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: #cbd5e1;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    /* Lineage Mermaid Container */
+    .mermaid-box {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+      min-height: 250px;
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      border-radius: 8px;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 100;
+    }
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    .toast.success {
+      border-left: 4px solid var(--success);
+    }
+    .toast.error {
+      border-left: 4px solid var(--danger);
+    }
+
+    /* Empty state */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 60vh;
+      color: var(--text-secondary);
+      text-align: center;
+    }
+    .empty-state h2 {
+      color: var(--text-primary);
+      margin: 12px 0 6px 0;
+    }
+
+    /* Modal Dialog */
+    .modal-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+    }
+    .modal-backdrop.show {
+      display: flex;
+    }
+    .modal-dialog {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      width: 90%;
+      max-width: 680px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+      overflow: hidden;
+    }
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-title {
+      font-size: 16px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .modal-nav {
+      display: flex;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-primary);
+    }
+    .modal-nav-btn {
+      padding: 10px 18px;
+      border: none;
+      background: none;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .modal-nav-btn:hover {
+      color: var(--text-primary);
+    }
+    .modal-nav-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      background: var(--bg-secondary);
+    }
+    .modal-body {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .modal-footer {
+      padding: 14px 20px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      background: var(--bg-secondary);
+    }
+    .checkbox-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      user-select: none;
+    }
+    .checkbox-label input {
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header class="app-header">
+    <a href="#" class="brand-logo">
+      <span>⚡ LEAI Docs</span>
+      <span class="badge" id="ai-model-badge">AI: READY</span>
+    </a>
+
+    <div class="header-center">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="global-search" placeholder="Buscar tabela, view, package, procedure ou regra..." oninput="filterCatalog(this.value)">
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <button class="btn btn-secondary" onclick="loadCatalog()">🔄 Atualizar</button>
+      <button class="btn btn-secondary" onclick="compileAll()">📦 Recompilar Tudo</button>
+      <button class="btn btn-secondary" style="font-size: 15px; padding: 6px 12px;" onclick="openSettingsModal()" title="Configurações (leai.yml)">⚙️</button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <div class="app-container">
+    <!-- Sidebar Object Navigator -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span>Catálogo de Objetos</span>
+        <span id="catalog-count" style="color: var(--accent); font-family: var(--font-mono);">0 objetos</span>
+      </div>
+      <div class="sidebar-tree" id="sidebar-tree">
+        <div style="padding: 20px; text-align: center; color: var(--text-muted);">Carregando catálogo...</div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="content-area">
+      <!-- Empty Placeholder -->
+      <div id="empty-state-view" class="empty-state">
+        <div style="font-size: 48px;">📂</div>
+        <h2>Selecione um Objeto no Catálogo</h2>
+        <p style="max-width: 420px; font-size: 13px;">Navegue pela lista de tabelas, views e packages na barra lateral para visualizar documentações compiladas e editar anotações em tempo real.</p>
+      </div>
+
+      <!-- Object Workspace (Hidden by default) -->
+      <div id="object-workspace" style="display: none; height: 100%; flex-direction: column;">
+        <div class="object-header">
+          <div class="object-title-wrap">
+            <span class="object-type-badge" id="view-obj-type">TABLE</span>
+            <div class="object-name">
+              <span class="object-schema-name" id="view-obj-schema">ERGON.</span><span id="view-obj-name">FUNCIONARIOS</span>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-ai" id="btn-ai-enrich" onclick="runAiEnrich()">✨ Sugerir com IA</button>
+            <button class="btn btn-primary" onclick="saveAnnotations()">💾 Salvar e Recompilar</button>
+          </div>
+        </div>
+
+        <div class="tabs-bar">
+          <button class="tab-btn active" onclick="switchTab('edit')">✏️ Editor de Anotações</button>
+          <button class="tab-btn" onclick="switchTab('doc')">📄 Documentação Compilada</button>
+          <button class="tab-btn" onclick="switchTab('lineage')">📊 Linhagem & Impacto</button>
+        </div>
+
+        <div class="tab-content">
+          <!-- TAB 1: Editor Pane -->
+          <div class="tab-pane active" id="tab-pane-edit">
+            <div class="form-group">
+              <label class="form-label">📝 Descrição de Negócio / Objetivo da Entidade</label>
+              <textarea id="edit-description" class="form-control" style="min-height: 80px;" placeholder="Descreva o propósito funcional desta tabela/rotina para as regras de negócio..."></textarea>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">📌 Regras de Negócio</label>
+              <div class="rules-list" id="rules-container"></div>
+              <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('rules-container', '', 'ex: Todo funcionário ativo deve pertencer a um departamento válido...')">+ Adicionar Regra</button>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">💡 Casos de Uso & Consultas de Exemplo</label>
+              <div class="rules-list" id="use-cases-container"></div>
+              <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('use-cases-container', '', 'ex: Consulta analítica de cálculo de proventos e descontos...')">+ Adicionar Caso de Uso</button>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">⚠️ Alertas & Cuidados Técnicos</label>
+              <div class="rules-list" id="warnings-container"></div>
+              <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('warnings-container', '', 'ex: Tabela particionada mensalmente; sempre filtre pela coluna DT_COMPETENCIA...')">+ Adicionar Alerta</button>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">🔗 Relacionamentos de Negócio / Objetos Conectados</label>
+              <div class="rules-list" id="related-objects-container"></div>
+              <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('related-objects-container', '', 'ex: TAB_DEPARTAMENTOS, PKG_FOLHA_PAGAMENTO...')">+ Adicionar Objeto Relacionado</button>
+            </div>
+
+            <div class="form-group" id="columns-section">
+              <label class="form-label">📋 Dicionário de Colunas (Descrições de Campos)</label>
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 25%;">Coluna</th>
+                      <th style="width: 15%;">Tipo de Dado</th>
+                      <th style="width: 60%;">Descrição de Negócio</th>
+                    </tr>
+                  </thead>
+                  <tbody id="columns-table-body"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">🏷️ Tags de Classificação (separadas por vírgula)</label>
+              <input type="text" id="edit-tags" class="form-control" placeholder="ex: RH, FOLHA, PAGAMENTO, SENSIVEL">
+            </div>
+          </div>
+
+          <!-- TAB 2: Documentation View Pane -->
+          <div class="tab-pane" id="tab-pane-doc">
+            <div class="doc-toolbar">
+              <div class="doc-path-badge" id="doc-file-path-badge">
+                <span>📄</span>
+                <span id="doc-file-path-text">docs/HR/tables/EMPLOYEES.md</span>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <div class="doc-segmented-control">
+                  <button type="button" class="seg-btn active" id="seg-btn-rendered" onclick="setDocViewMode('rendered')">👁️ Formatado</button>
+                  <button type="button" class="seg-btn" id="seg-btn-source" onclick="setDocViewMode('source')">📝 Código Fonte (.md)</button>
+                </div>
+                <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 12px;" onclick="copyCompiledMarkdown()">📋 Copiar Markdown</button>
+              </div>
+            </div>
+
+            <div class="markdown-body" id="doc-rendered-content">
+              <p>Carregando visualização...</p>
+            </div>
+            <pre class="doc-source-code" id="doc-source-content" style="display: none;"></pre>
+          </div>
+
+          <!-- TAB 3: Lineage Pane -->
+          <div class="tab-pane" id="tab-pane-lineage">
+            <div class="mermaid-box" id="mermaid-container">
+              <pre class="mermaid" id="mermaid-code">
+graph TD
+  A[Carregando Linhagem...]
+              </pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Settings Modal (leai.yml) -->
+  <div id="settings-modal" class="modal-backdrop" onclick="if(event.target === this) closeSettingsModal()">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title">⚙️ Configurações do Projeto (<code>leai.yml</code>)</div>
+        <button type="button" class="btn-icon" onclick="closeSettingsModal()" title="Fechar">✕</button>
+      </div>
+
+      <div class="modal-nav">
+        <button type="button" class="modal-nav-btn active" id="btn-modal-tab-conn" onclick="switchSettingsTab('conn')">🔌 Conexão & Schemas</button>
+        <button type="button" class="modal-nav-btn" id="btn-modal-tab-paths" onclick="switchSettingsTab('paths')">📁 Diretórios</button>
+        <button type="button" class="modal-nav-btn" id="btn-modal-tab-ai" onclick="switchSettingsTab('ai')">🤖 Inteligência Artificial</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Tab 1: Conexão & Schemas -->
+        <div id="settings-tab-conn">
+          <div class="form-group">
+            <label class="form-label">🔗 String de Conexão Oracle (DSN)</label>
+            <input type="text" id="cfg-dsn" class="form-control" placeholder="user/password@host:1521/service ou ${ORACLE_DSN}">
+            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Aceita credenciais diretas ou variáveis de ambiente como <code>${LEAI_DSN}</code>.</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">📁 Schemas a Documentar (separados por vírgula)</label>
+            <input type="text" id="cfg-schemas" class="form-control" placeholder="HR, FINANCE, ERGON, ALL">
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="form-group">
+              <label class="form-label">🔍 Incluir Apenas (Include)</label>
+              <input type="text" id="cfg-include" class="form-control" placeholder="TAB_*, PRC_* (opcional)">
+            </div>
+            <div class="form-group">
+              <label class="form-label">🚫 Excluir (Exclude)</label>
+              <input type="text" id="cfg-exclude" class="form-control" placeholder="TMP_*, BAK_* (opcional)">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">📦 Tipos de Objetos a Extrair / Compilar</label>
+            <div class="checkbox-grid" id="cfg-object-types-grid">
+              <label class="checkbox-label"><input type="checkbox" name="cfg-obj-type" value="tables" checked> tables</label>
+              <label class="checkbox-label"><input type="checkbox" name="cfg-obj-type" value="views" checked> views</label>
+              <label class="checkbox-label"><input type="checkbox" name="cfg-obj-type" value="mviews" checked> mviews</label>
+              <label class="checkbox-label"><input type="checkbox" name="cfg-obj-type" value="packages" checked> packages</label>
+              <label class="checkbox-label"><input type="checkbox" name="cfg-obj-type" value="procedures" checked> procedures</label>
+              <label class="checkbox-label"><input type="checkbox" name="cfg-obj-type" value="functions" checked> functions</label>
+              <label class="checkbox-label"><input type="checkbox" name="cfg-obj-type" value="triggers" checked> triggers</label>
+              <label class="checkbox-label"><input type="checkbox" name="cfg-obj-type" value="sequences" checked> sequences</label>
+              <label class="checkbox-label"><input type="checkbox" name="cfg-obj-type" value="synonyms" checked> synonyms</label>
+              <label class="checkbox-label"><input type="checkbox" name="cfg-obj-type" value="indexes" checked> indexes</label>
+              <label class="checkbox-label"><input type="checkbox" name="cfg-obj-type" value="types" checked> types</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Diretórios -->
+        <div id="settings-tab-paths" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">📦 Diretório de Metadados Brutos (rawPath)</label>
+            <input type="text" id="cfg-raw-path" class="form-control" placeholder="./raw">
+            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Local onde os JSONs da extração bruta do Oracle são armazenados.</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">✏️ Diretório de Anotações YAML (annotationsPath)</label>
+            <input type="text" id="cfg-ann-path" class="form-control" placeholder="./annotations">
+            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Local onde as anotações e regras de negócio funcionais são salvas.</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">📄 Diretório de Documentações Markdown (docPath)</label>
+            <input type="text" id="cfg-doc-path" class="form-control" placeholder="./docs">
+            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Local onde os arquivos Markdown (.md) compilados finais são gerados.</span>
+          </div>
+        </div>
+
+        <!-- Tab 3: Inteligência Artificial -->
+        <div id="settings-tab-ai" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">🤖 Provedor de IA Padrão (default_provider)</label>
+            <select id="cfg-ai-provider" class="form-control" onchange="onAiProviderChanged()">
+              <option value="gemini">Google Gemini</option>
+              <option value="openai">OpenAI (GPT-4o, etc.)</option>
+              <option value="anthropic">Anthropic Claude</option>
+              <option value="deepseek">DeepSeek</option>
+              <option value="qwen">Qwen (DashScope)</option>
+              <option value="kimi">Kimi (Moonshot)</option>
+              <option value="ollama">Ollama (Local / Offline)</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="groq">Groq</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">🧠 Modelo do Provedor Selecionado (model)</label>
+            <input type="text" id="cfg-ai-model" class="form-control" placeholder="ex: gemini-1.5-flash, gpt-4o, claude-3-5-sonnet-20241022...">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">🔑 Chave de API (api_key)</label>
+            <input type="password" id="cfg-ai-apikey" class="form-control" placeholder="Deixe em branco para manter a chave atual ou use ${ENV_VAR}">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">🌐 Base URL Customizada (opcional)</label>
+            <input type="text" id="cfg-ai-baseurl" class="form-control" placeholder="ex: http://localhost:11434 (para Ollama ou proxy)">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">🌡️ Temperatura de Criatividade</label>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <input type="range" id="cfg-ai-temp" min="0" max="1" step="0.05" value="0.2" class="form-control" style="flex: 1;" oninput="document.getElementById('cfg-ai-temp-val').textContent = parseFloat(this.value).toFixed(2)">
+              <span id="cfg-ai-temp-val" style="font-family: var(--font-mono); font-weight: 700; width: 40px; color: var(--accent);">0.20</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeSettingsModal()">Cancelar</button>
+        <button type="button" class="btn btn-primary" onclick="saveSettings()">💾 Salvar no leai.yml</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="app-toast" class="toast success">
+    <span id="toast-message">Salvo com sucesso!</span>
+  </div>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      maxTextSize: 5000000,
+      maxEdges: 5000,
+      securityLevel: 'loose',
+      flowchart: {
+        useMaxWidth: false,
+        htmlLabels: true
+      }
+    });
+
+    let currentCatalog = [];
+    let currentObject = null;
+    let currentRawData = null;
+    let collapsedSchemas = new Set();
+    let collapsedCategories = new Set();
+    let isInitialCatalogLoad = true;
+
+    async function init() {
+      await checkStatus();
+      await loadCatalog();
+    }
+
+    async function checkStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        document.getElementById('ai-model-badge').textContent = `AI: ${data.provider.toUpperCase()} (${data.model})`;
+      } catch (e) {
+        document.getElementById('ai-model-badge').textContent = 'AI: OFFLINE';
+      }
+    }
+
+    async function loadCatalog() {
+      try {
+        const res = await fetch('/api/catalog');
+        const data = await res.json();
+        currentCatalog = data.schemas || [];
+
+        // All schemas start collapsed by default on initial load
+        if (isInitialCatalogLoad) {
+          collapsedSchemas.clear();
+          currentCatalog.forEach(s => collapsedSchemas.add(s.schema_name));
+          isInitialCatalogLoad = false;
+        }
+
+        renderCatalogTree(currentCatalog, document.getElementById('global-search').value);
+      } catch (e) {
+        showToast('Erro ao carregar catálogo', true);
+      }
+    }
+
+    function toggleSchema(schemaName, e) {
+      if (e) e.stopPropagation();
+      if (collapsedSchemas.has(schemaName)) {
+        collapsedSchemas.delete(schemaName);
+      } else {
+        collapsedSchemas.add(schemaName);
+      }
+      renderCatalogTree(currentCatalog, document.getElementById('global-search').value);
+    }
+
+    function toggleCategory(schemaKey, catKey, e) {
+      if (e) e.stopPropagation();
+      const fullKey = `${schemaKey}:${catKey}`;
+      if (collapsedCategories.has(fullKey)) {
+        collapsedCategories.delete(fullKey);
+      } else {
+        collapsedCategories.add(fullKey);
+      }
+      renderCatalogTree(currentCatalog, document.getElementById('global-search').value);
+    }
+
+    let lastFilterText = '';
+
+    function renderCatalogTree(schemas, filter = '') {
+      const container = document.getElementById('sidebar-tree');
+      container.innerHTML = '';
+      let totalObjects = 0;
+      const lowerFilter = filter.toLowerCase().trim();
+      const isFiltering = lowerFilter.length > 0;
+
+      schemas.forEach(schema => {
+        let schemaMatch = false;
+        const schemaEl = document.createElement('div');
+        schemaEl.className = 'tree-schema';
+
+        const isSchemaCollapsed = collapsedSchemas.has(schema.schema_name);
+
+        const title = document.createElement('div');
+        title.className = 'tree-schema-title';
+        title.innerHTML = `
+          <div class="tree-schema-header-left">
+            <span>📁</span>
+            <span>${schema.schema_name}</span>
+          </div>
+          <span class="tree-chevron">${isSchemaCollapsed ? '▶' : '▼'}</span>
+        `;
+        title.onclick = (e) => toggleSchema(schema.schema_name, e);
+        schemaEl.appendChild(title);
+
+        const schemaBody = document.createElement('div');
+        schemaBody.className = `tree-schema-body ${isSchemaCollapsed ? 'collapsed' : ''}`;
+
+        const cats = [
+          { key: 'tables', label: 'Tabelas', icon: '📊', type: 'TABLE' },
+          { key: 'views', label: 'Views', icon: '👁️', type: 'VIEW' },
+          { key: 'code_objects', label: 'Rotinas (PL/SQL)', icon: '⚙️', type: 'CODE' },
+          { key: 'triggers', label: 'Triggers', icon: '⚡', type: 'TRIGGER' },
+          { key: 'synonyms', label: 'Sinônimos', icon: '🔗', type: 'SYNONYM' },
+          { key: 'sequences', label: 'Sequences', icon: '🔢', type: 'SEQUENCE' },
+        ];
+
+        cats.forEach(cat => {
+          const items = schema[cat.key] || [];
+          const filtered = items.filter(item => !lowerFilter || item.name.toLowerCase().includes(lowerFilter) || (item.comment && item.comment.toLowerCase().includes(lowerFilter)));
+
+          if (filtered.length > 0) {
+            schemaMatch = true;
+            totalObjects += filtered.length;
+
+            const isCatCollapsed = collapsedCategories.has(`${schema.schema_name}:${cat.key}`);
+
+            const catEl = document.createElement('div');
+            catEl.className = 'tree-category';
+
+            const catTitle = document.createElement('div');
+            catTitle.className = 'tree-cat-title';
+            catTitle.innerHTML = `
+              <div class="tree-cat-title-left">
+                <span class="tree-chevron">${isCatCollapsed ? '▶' : '▼'}</span>
+                <span>${cat.icon} ${cat.label}</span>
+              </div>
+              <span class="tree-cat-badge">${filtered.length}</span>
+            `;
+            catTitle.onclick = (e) => toggleCategory(schema.schema_name, cat.key, e);
+            catEl.appendChild(catTitle);
+
+            const catBody = document.createElement('div');
+            catBody.className = `tree-cat-body ${isCatCollapsed ? 'collapsed' : ''}`;
+
+            filtered.forEach(item => {
+              const itemEl = document.createElement('div');
+              itemEl.className = 'tree-item';
+              itemEl.id = `item-${schema.schema_name}-${item.name}`;
+              if (currentObject && currentObject.schema === schema.schema_name && currentObject.name === item.name) {
+                itemEl.classList.add('active');
+              }
+              itemEl.innerHTML = `
+                <span>${item.name}</span>
+                <span class="item-badge ${item.is_annotated ? 'annotated' : ''}" title="${item.is_annotated ? 'Documentado' : 'Pendente'}"></span>
+              `;
+              itemEl.onclick = () => selectObject(schema.schema_name, cat.type, item.name);
+              catBody.appendChild(itemEl);
+            });
+
+            catEl.appendChild(catBody);
+            schemaBody.appendChild(catEl);
+          }
+        });
+
+        schemaEl.appendChild(schemaBody);
+
+        if (schemaMatch || (!isFiltering && !filter)) {
+          container.appendChild(schemaEl);
+        }
+      });
+
+      document.getElementById('catalog-count').textContent = `${totalObjects} objetos`;
+    }
+
+    function filterCatalog(text) {
+      const clean = text.toLowerCase().trim();
+      if (clean && clean !== lastFilterText) {
+        // When typing a new search, expand matching nodes so results are visible immediately
+        currentCatalog.forEach(schema => {
+          collapsedSchemas.delete(schema.schema_name);
+          ['tables', 'views', 'code_objects', 'triggers', 'synonyms', 'sequences'].forEach(k => {
+            collapsedCategories.delete(`${schema.schema_name}:${k}`);
+          });
+        });
+      } else if (!clean && lastFilterText) {
+        // When search query is cleared, reset to collapsed schemas
+        currentCatalog.forEach(schema => {
+          collapsedSchemas.add(schema.schema_name);
+        });
+      }
+      lastFilterText = clean;
+      renderCatalogTree(currentCatalog, text);
+    }
+
+    function addDynamicItem(containerId, value = '', placeholder = '') {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      const div = document.createElement('div');
+      div.className = 'rule-item';
+      div.innerHTML = `
+        <input type="text" class="form-control dynamic-item-input" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}">
+        <button type="button" class="btn-icon" onclick="this.parentElement.remove()" title="Remover item">✕</button>
+      `;
+      container.appendChild(div);
+    }
+
+    function getDynamicItems(containerId) {
+      const container = document.getElementById(containerId);
+      if (!container) return [];
+      const inputs = container.querySelectorAll('.dynamic-item-input');
+      return Array.from(inputs).map(i => i.value.trim()).filter(Boolean);
+    }
+
+    function populateDynamicList(containerId, items, defaultPlaceholder) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      container.innerHTML = '';
+      if (!items || items.length === 0) {
+        addDynamicItem(containerId, '', defaultPlaceholder);
+      } else {
+        items.forEach(item => addDynamicItem(containerId, item, defaultPlaceholder));
+      }
+    }
+
+    async function selectObject(schema, type, name) {
+      // Ensure parent schema and category are expanded
+      collapsedSchemas.delete(schema);
+      const catKeyMap = { 'TABLE': 'tables', 'VIEW': 'views', 'CODE': 'code_objects', 'PACKAGE': 'code_objects', 'PROCEDURE': 'code_objects', 'TRIGGER': 'triggers', 'SYNONYM': 'synonyms', 'SEQUENCE': 'sequences' };
+      if (catKeyMap[type]) {
+        collapsedCategories.delete(`${schema}:${catKeyMap[type]}`);
+      }
+
+      document.querySelectorAll('.tree-item').forEach(el => el.classList.remove('active'));
+      const activeEl = document.getElementById(`item-${schema}-${name}`);
+      if (activeEl) activeEl.classList.add('active');
+
+      try {
+        const res = await fetch(`/api/object?schema=${encodeURIComponent(schema)}&type=${encodeURIComponent(type)}&name=${encodeURIComponent(name)}`);
+        const data = await res.json();
+        currentObject = { schema, type, name };
+        currentRawData = data;
+
+        document.getElementById('empty-state-view').style.display = 'none';
+        const ws = document.getElementById('object-workspace');
+        ws.style.display = 'flex';
+
+        document.getElementById('view-obj-schema').textContent = `${schema}.`;
+        document.getElementById('view-obj-name').textContent = name;
+        document.getElementById('view-obj-type').textContent = type;
+
+        // Populate Form - All 7 Fields
+        const ann = data.annotations || {};
+        document.getElementById('edit-description').value = ann.business_description || ann.description || data.comment || '';
+        document.getElementById('edit-tags').value = (ann.tags || []).join(', ');
+
+        // Populate Dynamic Lists
+        populateDynamicList('rules-container', ann.business_rules, 'ex: Todo funcionário ativo deve pertencer a um departamento válido...');
+        populateDynamicList('use-cases-container', ann.use_cases, 'ex: Consulta analítica de cálculo de proventos e descontos...');
+        populateDynamicList('warnings-container', ann.warnings, 'ex: Tabela particionada mensalmente; sempre filtre pela coluna DT_COMPETENCIA...');
+        populateDynamicList('related-objects-container', ann.related_objects, 'ex: TAB_DEPARTAMENTOS, PKG_FOLHA_PAGAMENTO...');
+
+        // Populate Columns
+        const colSection = document.getElementById('columns-section');
+        const colBody = document.getElementById('columns-table-body');
+        colBody.innerHTML = '';
+
+        if (data.columns && data.columns.length > 0) {
+          colSection.style.display = 'block';
+          const annCols = ann.columns || {};
+
+          data.columns.forEach(c => {
+            const isPk = (data.primary_keys || []).includes(c.name);
+            const isFk = (data.foreign_keys || []).some(fk => fk.columns && fk.columns.includes(c.name));
+            const existingDesc = (annCols[c.name] && annCols[c.name].description) || (annCols[c.name] || c.comment || '');
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>
+                <span class="col-name">${c.name}</span>
+                ${isPk ? '<span class="badge-pk">PK</span>' : ''}
+                ${isFk ? '<span class="badge-fk">FK</span>' : ''}
+              </td>
+              <td><span class="col-type">${c.data_type}</span></td>
+              <td>
+                <input type="text" class="form-control col-desc-input" data-col-name="${c.name}" value="${escapeHtml(existingDesc)}" placeholder="Descrição da coluna ${c.name}...">
+              </td>
+            `;
+            colBody.appendChild(tr);
+          });
+        } else {
+          colSection.style.display = 'none';
+        }
+
+        // Populate Markdown Doc Preview
+        renderMarkdownDoc(data.markdown_doc || '# Sem documentação compilada ainda.');
+
+        // Populate Mermaid Lineage
+        renderMermaidLineage(data.lineage_mermaid || `graph TD\n  ${name}[${name}]`);
+
+      } catch (e) {
+        showToast('Erro ao carregar objeto', true);
+      }
+    }
+
+    async function saveAnnotations() {
+      if (!currentObject) return;
+
+      const desc = document.getElementById('edit-description').value.trim();
+      const tagsStr = document.getElementById('edit-tags').value.trim();
+      const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+      const rules = getDynamicItems('rules-container');
+      const useCases = getDynamicItems('use-cases-container');
+      const warnings = getDynamicItems('warnings-container');
+      const relatedObjects = getDynamicItems('related-objects-container');
+
+      const colInputs = document.querySelectorAll('.col-desc-input');
+      const columns = {};
+      colInputs.forEach(i => {
+        const val = i.value.trim();
+        if (val) {
+          columns[i.getAttribute('data-col-name')] = { description: val };
+        }
+      });
+
+      const payload = {
+        schema: currentObject.schema,
+        object_type: currentObject.type,
+        object_name: currentObject.name,
+        business_description: desc,
+        business_rules: rules,
+        use_cases: useCases,
+        warnings: warnings,
+        related_objects: relatedObjects,
+        columns: columns,
+        tags: tags,
+      };
+
+      try {
+        const res = await fetch('/api/annotations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        if (result.success) {
+          showToast(`✓ Anotação salva e documentação recompilada!`);
+          await selectObject(currentObject.schema, currentObject.type, currentObject.name);
+          await loadCatalog();
+        } else {
+          showToast(`Erro ao salvar: ${result.error}`, true);
+        }
+      } catch (e) {
+        showToast('Erro ao salvar anotação', true);
+      }
+    }
+
+    async function runAiEnrich() {
+      if (!currentObject) return;
+      const btn = document.getElementById('btn-ai-enrich');
+      btn.disabled = true;
+      btn.textContent = '⏳ Gerando com IA...';
+
+      try {
+        const res = await fetch('/api/enrich', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            schema: currentObject.schema,
+            object_type: currentObject.type,
+            object_name: currentObject.name
+          })
+        });
+        const data = await res.json();
+        if (data.success && data.enrichment) {
+          const e = data.enrichment;
+          if (e.business_description) {
+            document.getElementById('edit-description').value = e.business_description;
+          }
+          if (e.business_rules) {
+            populateDynamicList('rules-container', e.business_rules, 'ex: Todo funcionário ativo deve pertencer a um departamento válido...');
+          }
+          if (e.use_cases) {
+            populateDynamicList('use-cases-container', e.use_cases, 'ex: Consulta analítica de cálculo de proventos e descontos...');
+          }
+          if (e.warnings) {
+            populateDynamicList('warnings-container', e.warnings, 'ex: Tabela particionada mensalmente; sempre filtre pela coluna DT_COMPETENCIA...');
+          }
+          if (e.related_objects) {
+            populateDynamicList('related-objects-container', e.related_objects, 'ex: TAB_DEPARTAMENTOS, PKG_FOLHA_PAGAMENTO...');
+          }
+          if (e.tags && e.tags.length > 0) {
+            document.getElementById('edit-tags').value = e.tags.join(', ');
+          }
+          if (e.columns) {
+            document.querySelectorAll('.col-desc-input').forEach(input => {
+              const colName = input.getAttribute('data-col-name');
+              if (e.columns[colName]) {
+                const desc = typeof e.columns[colName] === 'string' ? e.columns[colName] : e.columns[colName].description;
+                if (desc) input.value = desc;
+              }
+            });
+          }
+          showToast('✨ Sugestões geradas com sucesso pela IA!');
+        } else {
+          showToast(`Erro na IA: ${data.error || 'Sem retorno'}`, true);
+        }
+      } catch (err) {
+        showToast('Falha ao comunicar com IA', true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '✨ Sugerir com IA';
+      }
+    }
+
+    async function compileAll() {
+      try {
+        const res = await fetch('/api/compile', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`✓ Todas as documentações foram compiladas!`);
+          if (currentObject) {
+            await selectObject(currentObject.schema, currentObject.type, currentObject.name);
+          }
+        }
+      } catch (e) {
+        showToast('Erro ao recompilar', true);
+      }
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+
+      event.target.classList.add('active');
+      document.getElementById(`tab-pane-${tabId}`).classList.add('active');
+
+      if (tabId === 'lineage') {
+        setTimeout(() => mermaid.run(), 50);
+      }
+    }
+
+    let currentMarkdownDoc = '';
+
+    function parseGitHubAlerts(md) {
+      const alertMap = {
+        'NOTE': { icon: 'ℹ️', title: 'Nota', class: 'alert-note' },
+        'TIP': { icon: '💡', title: 'Dica', class: 'alert-tip' },
+        'IMPORTANT': { icon: '🟣', title: 'Importante', class: 'alert-important' },
+        'WARNING': { icon: '⚠️', title: 'Alerta / Atenção', class: 'alert-warning' },
+        'CAUTION': { icon: '🛑', title: 'Cuidado', class: 'alert-caution' }
+      };
+
+      const lines = md.split('\n');
+      const out = [];
+      let inAlert = false;
+      let alertType = null;
+      let alertContent = [];
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const match = line.match(/^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*)$/i);
+        if (match) {
+          if (inAlert) {
+            const info = alertMap[alertType] || alertMap['NOTE'];
+            out.push(`<div class="github-alert ${info.class}"><div class="alert-title">${info.icon} ${info.title}</div><div class="alert-body">${alertContent.join('<br>')}</div></div>\n`);
+            alertContent = [];
+          }
+          inAlert = true;
+          alertType = match[1].toUpperCase();
+          if (match[2].trim()) {
+            alertContent.push(escapeHtml(match[2].trim()));
+          }
+        } else if (inAlert && line.startsWith('>')) {
+          const content = line.replace(/^>\s?/, '');
+          alertContent.push(escapeHtml(content));
+        } else {
+          if (inAlert) {
+            const info = alertMap[alertType] || alertMap['NOTE'];
+            out.push(`<div class="github-alert ${info.class}"><div class="alert-title">${info.icon} ${info.title}</div><div class="alert-body">${alertContent.join('<br>')}</div></div>\n`);
+            inAlert = false;
+            alertType = null;
+            alertContent = [];
+          }
+          out.push(line);
+        }
+      }
+
+      if (inAlert) {
+        const info = alertMap[alertType] || alertMap['NOTE'];
+        out.push(`<div class="github-alert ${info.class}"><div class="alert-title">${info.icon} ${info.title}</div><div class="alert-body">${alertContent.join('<br>')}</div></div>\n`);
+      }
+
+      return out.join('\n');
+    }
+
+    function renderMarkdownDoc(md) {
+      currentMarkdownDoc = md || '';
+      const renderedContainer = document.getElementById('doc-rendered-content');
+      const sourceContainer = document.getElementById('doc-source-content');
+
+      // Update Path Badge
+      if (currentObject) {
+        const catMap = {
+          'TABLE': 'tables',
+          'VIEW': 'views',
+          'CODE': 'code_objects',
+          'PACKAGE': 'packages',
+          'PROCEDURE': 'procedures',
+          'FUNCTION': 'functions',
+          'TRIGGER': 'triggers',
+          'SYNONYM': 'synonyms',
+          'SEQUENCE': 'sequences'
+        };
+        const catDir = catMap[currentObject.type] || 'tables';
+        document.getElementById('doc-file-path-text').textContent = `docs/${currentObject.schema}/${catDir}/${currentObject.name}.md`;
+      }
+
+      // Populate raw source
+      sourceContainer.textContent = currentMarkdownDoc;
+
+      // Transform alerts then parse markdown
+      try {
+        const transformedMd = parseGitHubAlerts(currentMarkdownDoc);
+        if (typeof marked !== 'undefined') {
+          marked.setOptions({
+            gfm: true,
+            breaks: true
+          });
+          let html = marked.parse(transformedMd);
+          renderedContainer.innerHTML = html;
+        } else {
+          renderedContainer.innerHTML = `<pre>${escapeHtml(currentMarkdownDoc)}</pre>`;
+        }
+      } catch (err) {
+        console.error('Markdown parse error:', err);
+        renderedContainer.innerHTML = `<pre>${escapeHtml(currentMarkdownDoc)}</pre>`;
+      }
+
+      // Post-process Code Blocks with headers and copy buttons
+      renderedContainer.querySelectorAll('pre code').forEach((codeBlock) => {
+        const pre = codeBlock.parentElement;
+        if (pre.parentElement && pre.parentElement.classList.contains('code-block-wrapper')) {
+          return;
+        }
+
+        if (typeof hljs !== 'undefined') {
+          hljs.highlightElement(codeBlock);
+        }
+
+        const langClass = Array.from(codeBlock.classList).find(c => c.startsWith('language-'));
+        const langName = langClass ? langClass.replace('language-', '').toUpperCase() : 'SQL / PLSQL';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'code-block-wrapper';
+
+        const header = document.createElement('div');
+        header.className = 'code-block-header';
+        header.innerHTML = `
+          <span>${escapeHtml(langName)}</span>
+          <button type="button" class="code-copy-btn" onclick="copySnippetCode(this)">📋 Copiar</button>
+        `;
+
+        pre.parentNode.insertBefore(wrapper, pre);
+        wrapper.appendChild(header);
+        wrapper.appendChild(pre);
+      });
+    }
+
+    function setDocViewMode(mode) {
+      const rendered = document.getElementById('doc-rendered-content');
+      const source = document.getElementById('doc-source-content');
+      const btnRendered = document.getElementById('seg-btn-rendered');
+      const btnSource = document.getElementById('seg-btn-source');
+
+      if (mode === 'source') {
+        rendered.style.display = 'none';
+        source.style.display = 'block';
+        btnRendered.classList.remove('active');
+        btnSource.classList.add('active');
+      } else {
+        rendered.style.display = 'block';
+        source.style.display = 'none';
+        btnRendered.classList.add('active');
+        btnSource.classList.remove('active');
+      }
+    }
+
+    async function copyCompiledMarkdown() {
+      if (!currentMarkdownDoc) {
+        showToast('Nenhum markdown para copiar', true);
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(currentMarkdownDoc);
+        showToast('✓ Documentação Markdown copiada para a área de transferência!');
+      } catch (e) {
+        const ta = document.createElement('textarea');
+        ta.value = currentMarkdownDoc;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast('✓ Documentação Markdown copiada!');
+      }
+    }
+
+    async function copySnippetCode(btn) {
+      const wrapper = btn.closest('.code-block-wrapper');
+      if (!wrapper) return;
+      const codeEl = wrapper.querySelector('pre code');
+      if (!codeEl) return;
+      const text = codeEl.innerText;
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = '✓ Copiado!';
+        setTimeout(() => { btn.textContent = '📋 Copiar'; }, 2000);
+      } catch (e) {
+        btn.textContent = '✓ Copiado!';
+        setTimeout(() => { btn.textContent = '📋 Copiar'; }, 2000);
+      }
+    }
+
+    async function renderMermaidLineage(mermaidCode) {
+      const container = document.getElementById('mermaid-container');
+      const uniqueId = 'mermaid-graph-' + Math.floor(Math.random() * 1000000);
+      container.innerHTML = `<div class="mermaid" id="${uniqueId}">${escapeHtml(mermaidCode)}</div>`;
+      try {
+        await mermaid.run({
+          nodes: [document.getElementById(uniqueId)]
+        });
+      } catch (e) {
+        console.warn('Mermaid rendering error:', e);
+        container.innerHTML = `
+          <div style="text-align: center; color: var(--warning); padding: 24px; font-size: 13px;">
+            <p>⚠️ Grafo de dependências extenso ou com formato complexo.</p>
+            <details style="text-align: left; margin-top: 12px; max-width: 650px; margin-left: auto; margin-right: auto;">
+              <summary style="cursor: pointer; color: var(--accent); font-weight: 600;">Ver código Mermaid gerado</summary>
+              <pre style="background: var(--bg-tertiary); padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 11px; margin-top: 8px;">${escapeHtml(mermaidCode)}</pre>
+            </details>
+          </div>
+        `;
+      }
+    }
+
+    let globalConfig = null;
+
+    async function openSettingsModal() {
+      try {
+        const res = await fetch('/api/config');
+        if (!res.ok) {
+          showToast(`Erro ao carregar configurações (HTTP ${res.status}). Se você atualizou o código, reinicie o servidor 'leai serve'.`, true);
+          return;
+        }
+        const data = await res.json();
+        if (data.success === false) {
+          showToast(`Erro do servidor: ${data.error}`, true);
+          return;
+        }
+        globalConfig = data;
+
+        // Populate Connection & Schemas
+        document.getElementById('cfg-dsn').value = data.dsn || '';
+        document.getElementById('cfg-schemas').value = (data.schemas || []).join(', ');
+        document.getElementById('cfg-include').value = (data.include || []).join(', ');
+        document.getElementById('cfg-exclude').value = (data.exclude || []).join(', ');
+
+        const objTypes = new Set(data.object_types || []);
+        document.querySelectorAll('input[name="cfg-obj-type"]').forEach(cb => {
+          cb.checked = objTypes.has(cb.value);
+        });
+
+        // Populate Paths
+        document.getElementById('cfg-raw-path').value = data.rawPath || './raw';
+        document.getElementById('cfg-ann-path').value = data.annotationsPath || './annotations';
+        document.getElementById('cfg-doc-path').value = data.docPath || './docs';
+
+        // Populate AI
+        const ai = data.ai || {};
+        const provSelect = document.getElementById('cfg-ai-provider');
+        const activeProv = (ai.default_provider || 'openai').toLowerCase();
+
+        // Ensure active provider exists in select options
+        let exists = false;
+        for (let opt of provSelect.options) {
+          if (opt.value.toLowerCase() === activeProv) {
+            exists = true;
+            break;
+          }
+        }
+        if (!exists) {
+          const opt = document.createElement('option');
+          opt.value = activeProv;
+          opt.textContent = activeProv.toUpperCase();
+          provSelect.appendChild(opt);
+        }
+        provSelect.value = activeProv;
+
+        const temp = typeof ai.temperature === 'number' ? ai.temperature : 0.2;
+        document.getElementById('cfg-ai-temp').value = temp;
+        document.getElementById('cfg-ai-temp-val').textContent = temp.toFixed(2);
+
+        onAiProviderChanged();
+
+        switchSettingsTab('conn');
+        document.getElementById('settings-modal').classList.add('show');
+      } catch (e) {
+        console.error('Failed to load settings:', e);
+        showToast('Erro ao carregar configurações. Verifique o console ou reinicie o servidor.', true);
+      }
+    }
+
+    function closeSettingsModal() {
+      document.getElementById('settings-modal').classList.remove('show');
+    }
+
+    function switchSettingsTab(tabId) {
+      ['conn', 'paths', 'ai'].forEach(t => {
+        const tabEl = document.getElementById(`settings-tab-${t}`);
+        const btnEl = document.getElementById(`btn-modal-tab-${t}`);
+        if (tabEl) tabEl.style.display = t === tabId ? 'block' : 'none';
+        if (btnEl) btnEl.classList.toggle('active', t === tabId);
+      });
+    }
+
+    function onAiProviderChanged() {
+      if (!globalConfig) return;
+      const provName = document.getElementById('cfg-ai-provider').value;
+      const provData = (globalConfig.ai && globalConfig.ai.providers && (globalConfig.ai.providers[provName] || globalConfig.ai.providers[provName.toLowerCase()])) || {};
+
+      document.getElementById('cfg-ai-model').value = provData.model || '';
+      document.getElementById('cfg-ai-baseurl').value = provData.base_url || '';
+      document.getElementById('cfg-ai-apikey').value = '';
+      if (provData.has_api_key) {
+        document.getElementById('cfg-ai-apikey').placeholder = '•••••••• (Chave salva mantida se em branco)';
+      } else {
+        document.getElementById('cfg-ai-apikey').placeholder = 'Deixe em branco ou use ${ENV_VAR}';
+      }
+    }
+
+    async function saveSettings() {
+      const dsn = document.getElementById('cfg-dsn').value.trim();
+      const schemasStr = document.getElementById('cfg-schemas').value.trim();
+      const schemas = schemasStr ? schemasStr.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
+
+      const incStr = document.getElementById('cfg-include').value.trim();
+      const include = incStr ? incStr.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
+
+      const excStr = document.getElementById('cfg-exclude').value.trim();
+      const exclude = excStr ? excStr.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
+
+      const objTypes = [];
+      document.querySelectorAll('input[name="cfg-obj-type"]:checked').forEach(cb => {
+        objTypes.push(cb.value);
+      });
+
+      const rawPath = document.getElementById('cfg-raw-path').value.trim();
+      const annPath = document.getElementById('cfg-ann-path').value.trim();
+      const docPath = document.getElementById('cfg-doc-path').value.trim();
+
+      const defaultProv = document.getElementById('cfg-ai-provider').value;
+      const model = document.getElementById('cfg-ai-model').value.trim();
+      const apiKey = document.getElementById('cfg-ai-apikey').value.trim();
+      const baseUrl = document.getElementById('cfg-ai-baseurl').value.trim();
+      const temp = parseFloat(document.getElementById('cfg-ai-temp').value) || 0.2;
+
+      const payload = {
+        dsn: dsn,
+        schemas: schemas,
+        include: include,
+        exclude: exclude,
+        object_types: objTypes,
+        rawPath: rawPath,
+        annotationsPath: annPath,
+        docPath: docPath,
+        ai: {
+          default_provider: defaultProv,
+          temperature: temp,
+          providers: {
+            [defaultProv]: {
+              model: model,
+              base_url: baseUrl,
+              ...(apiKey ? { api_key: apiKey } : {})
+            }
+          }
+        }
+      };
+
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('✓ Configurações salvas no leai.yml com sucesso!');
+          closeSettingsModal();
+          await checkStatus();
+          await loadCatalog();
+        } else {
+          showToast(`Erro ao salvar: ${data.error}`, true);
+        }
+      } catch (e) {
+        showToast('Erro ao salvar configurações', true);
+      }
+    }
+
+    function showToast(msg, isError = false) {
+      const toast = document.getElementById('app-toast');
+      toast.className = `toast ${isError ? 'error' : 'success'} show`;
+      document.getElementById('toast-message').textContent = msg;
+      setTimeout(() => toast.classList.remove('show'), 3500);
+    }
+
+    function escapeHtml(str) {
+      return (str || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>

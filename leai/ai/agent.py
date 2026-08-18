@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import time
 from typing import Any, Callable
 
 from leai.ai.base import BaseLLMClient
-from leai.ai.tools import DATABASE_TOOLS_DEFINITIONS, execute_tool_call
+from leai.ai.tools import DATABASE_TOOLS_DEFINITIONS, execute_tool_call, summarize_tool_result
+from leai.audit import ToolExecutionAudit
 from leai.config import LeaiConfig
 from leai.models import SchemaMetadata
 
@@ -21,13 +23,38 @@ AGENT_SYSTEM_PROMPT = """You are the LEAI Autonomous Oracle Database Architect a
 You have access to specialized tools to inspect the real Oracle database schema, view definitions, PL/SQL subprogram code, dependency lineage, code occurrences, and business documentation / YAML annotations.
 
 CORE OPERATING PRINCIPLES:
-1. Always use tools to verify facts before answering questions about database objects, column names, constraints, or PL/SQL logic.
-2. BUSINESS & CONCEPTUAL SEARCH: When the user asks about business concepts, functional domains, or where certain data is stored (e.g. 'onde fica férias?', 'qual tabela tem dados de afastamento?', 'regras de aposentadoria', 'adicional de insalubridade'), ALWAYS call `search_business_documentation` first. Table names in enterprise Oracle databases are often cryptic or abbreviated (e.g. `TGOVPE_FREQ_LIC_AFAST`), so searching documentation, descriptions, business rules, column comments, and tags is essential.
-3. For SQL generation, inspect the relevant table schemas first (`get_table_schema`) to use exact column names and verify primary/foreign keys.
-4. For PL/SQL questions, extract the exact routine source code (`get_subprogram_source`) or trace dependencies (`trace_object_lineage`).
-5. If searching for a constant, keyword, error message, or column usage across routines, use `grep_plsql_code`.
+1. ALWAYS use tools to verify facts before answering questions about database objects, column names, constraints, or PL/SQL logic.
+2. MANDATORY DUAL-DISCOVERY PROTOCOL: When the user asks where specific data, columns, or business dates are located (e.g. 'qual tabela tem a data de recadastramento?', 'onde fica o CPF do dependente?', 'qual campo guarda o saldo de férias?'):
+   - You MUST execute BOTH tools to ensure comprehensive discovery:
+     a) `search_column_comments(query=...)` to scan all native Oracle column comments (`ALL_COL_COMMENTS`) and column names.
+     b) `search_business_documentation(query=...)` to scan compiled Markdown docs, YAML annotations, and business rules.
+   - Execute both tools in your first investigation step (in parallel or sequence).
+   - Once candidate tables or views are identified (e.g. `FUNCIONARIOS`, `VINCULOS`), call `get_table_schema(table_name=...)` on the top candidates to verify the complete schema and column comments before concluding.
+3. EXPLAINING PROCEDURES, FUNCTIONS & PACKAGES: When asked to explain or understand a procedure, function, trigger, or package:
+   - Call `get_subprogram_source` to read the exact PL/SQL source code and subprogram blocks.
+   - Call `trace_object_lineage` to identify upstream tables/objects consumed and downstream callers/active consumers.
+   - If the code modifies or queries tables with important constraints, call `get_table_schema` to verify columns and data types.
+   - Structure your explanation clearly:
+     • 🎯 **Objetivo Funcional e Regras de Negócio**: Explicação clara do propósito da rotina.
+     • 📥 **Parâmetros e Assinatura**: Detalhamento de parâmetros `IN`, `OUT`, `IN OUT` e tipos.
+     • 🗄️ **Tabelas e Operações DML**: Tabelas consultadas (`SELECT`) ou modificadas (`INSERT/UPDATE/DELETE`).
+     • 🛡️ **Fluxo Lógico e Tratamento de Exceções**: Validações, loops, commits e tratamento de erros.
+     • 🔍 **Impacto e Conexões no Banco**: Quem consome ou depende dessa rotina.
+4. MODIFYING / REFACTORING PL/SQL CODE: When asked to modify, optimize, or fix a procedure or package:
+   - Call `get_subprogram_source` to get the original code.
+   - Call `trace_object_lineage` and `grep_plsql_code` to check other routines that call it or use the same signature, avoiding breaking changes.
+   - Call `get_table_schema` for all tables impacted by the modification.
+   - Deliver complete, production-grade PL/SQL code with:
+     • Código compilável pronto para execução (`CREATE OR REPLACE PROCEDURE/PACKAGE BODY ...`).
+     • Tratamento robusto de exceções (`NO_DATA_FOUND`, `TOO_MANY_ROWS`, `OTHERS` com `SQLERRM`).
+     • Explicação clara do que mudou (diff ou tópicos).
+     • Bloco anônimo de teste unitário (`DECLARE ... BEGIN ... END;`) para validação.
+5. STRICT AUTONOMOUS COMPLETION & NO META-TOOL COMMENTARY:
+   - NEVER tell the user *"vou verificar o esquema..."*, *"posso usar a ferramenta get_table_schema para obter mais detalhes..."*, or *"deixe-me consultar a documentação..."* in your final response!
+   - If any tool would provide useful details, CALL IT IMMEDIATELY during the reasoning loop.
+   - Do NOT mention tool names to the user in your final text. Present the complete, verified answer cleanly.
 6. SYNONYMS RESOLUTION: In Oracle, procedures, packages, tables, and views are frequently exposed via SYNONYMS across schemas. If an object is a SYNONYM, explain what it is an alias for, identify its base target object, and use `get_subprogram_source` or `get_table_schema` to inspect and explain the underlying business routine or table.
-7. Once you have gathered sufficient information from the tools, synthesize a clear, comprehensive, and well-structured response in Portuguese (unless the user asks in another language).
+7. Once you have gathered sufficient information from all necessary tools, synthesize a clear, comprehensive, and well-structured response in Portuguese (unless the user asks in another language).
 """
 
 
@@ -45,17 +72,19 @@ class AgentExecutionEngine:
         self.config = config
         self.client = client
         self.max_iterations = max_iterations
+        self.last_tool_audits: list[ToolExecutionAudit] = []
 
     def run(
         self,
         messages: list[dict[str, Any]],
         system_prompt: str | None = None,
-        on_tool_start: Callable[[str, dict[str, Any]], None] | None = None,
-        on_tool_end: Callable[[str, str], None] | None = None,
+        on_tool_start: Callable[[str, dict[str, Any], int], None] | None = None,
+        on_tool_end: Callable[[str, str, str, float], None] | None = None,
     ) -> str:
         """Executes the autonomous agent reasoning loop with tool calling up to MAX_AGENT_ITERATIONS."""
         sys_prompt = (system_prompt or AGENT_SYSTEM_PROMPT).strip()
         working_messages = list(messages)
+        self.last_tool_audits = []
 
         for iteration in range(1, self.max_iterations + 1):
             # Call LLM with tool definitions
@@ -94,9 +123,14 @@ class AgentExecutionEngine:
                 t_name = tc.get("name", "")
                 t_args = tc.get("arguments", {})
                 t_id = tc.get("id", f"call_{t_name}")
+                step_idx = len(self.last_tool_audits) + 1
 
+                t_start = time.perf_counter()
                 if on_tool_start:
-                    on_tool_start(t_name, t_args)
+                    try:
+                        on_tool_start(t_name, t_args, step_idx)
+                    except TypeError:
+                        on_tool_start(t_name, t_args)
 
                 # Execute tool against in-memory schemas and raw dependencies
                 tool_output = execute_tool_call(
@@ -105,9 +139,24 @@ class AgentExecutionEngine:
                     schemas=self.schemas,
                     config=self.config,
                 )
+                t_dur = time.perf_counter() - t_start
+                summary = summarize_tool_result(t_name, t_args, tool_output)
+
+                audit_rec = ToolExecutionAudit(
+                    step=step_idx,
+                    tool_name=t_name,
+                    arguments=t_args,
+                    raw_output=tool_output,
+                    summary=summary,
+                    duration_seconds=round(t_dur, 4),
+                )
+                self.last_tool_audits.append(audit_rec)
 
                 if on_tool_end:
-                    on_tool_end(t_name, tool_output)
+                    try:
+                        on_tool_end(t_name, tool_output, summary, t_dur)
+                    except TypeError:
+                        on_tool_end(t_name, tool_output)
 
                 working_messages.append({
                     "role": "tool",

@@ -141,5 +141,6 @@ class ChatSession:
 
         self.last_turn_tokens = diff
         self.total_tokens += diff
+        self.last_tool_audits = list(self.agent_engine.last_tool_audits)
 
         return reply, detected

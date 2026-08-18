@@ -277,10 +277,13 @@ class RawDependencyIndex:
         token_pattern = re.compile(r"\b[A-Za-z0-9_#$]+\b")
 
         for s in schemas:
+            s_name = (s.schema_name or "DEFAULT").upper()
             for t in s.tables:
                 t_up = t.name.upper()
                 self.raw_objects[t_up] = ("TABLE", t)
+                self.raw_objects[f"{s_name}.{t_up}"] = ("TABLE", t)
                 self.tables_map[t_up] = t
+                self.tables_map[f"{s_name}.{t_up}"] = t
                 for fk in t.foreign_keys:
                     if fk.referenced_table:
                         self.incoming_fks[fk.referenced_table.upper()].append((t_up, fk))
@@ -288,48 +291,66 @@ class RawDependencyIndex:
             for v in s.views:
                 v_up = v.name.upper()
                 self.raw_objects[v_up] = ("VIEW", v)
+                self.raw_objects[f"{s_name}.{v_up}"] = ("VIEW", v)
                 self.views_map[v_up] = v
+                self.views_map[f"{s_name}.{v_up}"] = v
 
             for mv in s.mviews:
                 mv_up = mv.name.upper()
                 self.raw_objects[mv_up] = ("MATERIALIZED VIEW", mv)
+                self.raw_objects[f"{s_name}.{mv_up}"] = ("MATERIALIZED VIEW", mv)
                 self.mviews_map[mv_up] = mv
+                self.mviews_map[f"{s_name}.{mv_up}"] = mv
 
             for co in s.code_objects:
                 co_up = co.name.upper()
                 self.raw_objects[co_up] = (co.object_type.upper(), co)
+                self.raw_objects[f"{s_name}.{co_up}"] = (co.object_type.upper(), co)
                 self.code_map[co_up] = co
+                self.code_map[f"{s_name}.{co_up}"] = co
                 if co.object_type.upper() in ("PACKAGE", "PACKAGE BODY"):
                     self.packages_set.add(co_up)
+                    self.packages_set.add(f"{s_name}.{co_up}")
                     for sub in co.subprograms:
                         sub_full = f"{co_up}.{sub.name.upper()}"
                         self.subprograms_map[sub_full] = sub
+                        self.subprograms_map[f"{s_name}.{sub_full}"] = sub
 
             for trg in s.triggers:
                 trg_up = trg.name.upper()
                 self.raw_objects[trg_up] = ("TRIGGER", trg)
+                self.raw_objects[f"{s_name}.{trg_up}"] = ("TRIGGER", trg)
                 self.triggers_map[trg_up] = trg
+                self.triggers_map[f"{s_name}.{trg_up}"] = trg
                 if trg.table_name:
                     self.table_triggers[trg.table_name.upper()].append(trg)
-
-            for syn in s.synonyms:
-                syn_up = syn.name.upper()
-                self.raw_objects[syn_up] = ("SYNONYM", syn)
-                self.synonyms_map[syn_up] = syn
-                if syn.table_name:
-                    self.synonyms_by_target[syn.table_name.upper()].append(syn)
-                    if (syn.table_name or "").upper() in self.packages_set:
-                        self.packages_set.add(syn_up)
 
             for seq in s.sequences:
                 seq_up = seq.name.upper()
                 self.raw_objects[seq_up] = ("SEQUENCE", seq)
+                self.raw_objects[f"{s_name}.{seq_up}"] = ("SEQUENCE", seq)
                 self.sequences_map[seq_up] = seq
+                self.sequences_map[f"{s_name}.{seq_up}"] = seq
 
             for idx in s.indexes:
                 idx_up = idx.name.upper()
                 self.raw_objects[idx_up] = ("INDEX", idx)
+                self.raw_objects[f"{s_name}.{idx_up}"] = ("INDEX", idx)
                 self.indexes_map[idx_up] = idx
+                self.indexes_map[f"{s_name}.{idx_up}"] = idx
+
+            for syn in s.synonyms:
+                syn_up = syn.name.upper()
+                # Do not overwrite real tables/views/packages with a synonym of the same name
+                if syn_up not in self.raw_objects or self.raw_objects[syn_up][0] == "SYNONYM":
+                    self.raw_objects[syn_up] = ("SYNONYM", syn)
+                self.raw_objects[f"{s_name}.{syn_up}"] = ("SYNONYM", syn)
+                self.synonyms_map[syn_up] = syn
+                self.synonyms_map[f"{s_name}.{syn_up}"] = syn
+                if syn.table_name:
+                    self.synonyms_by_target[syn.table_name.upper()].append(syn)
+                    if (syn.table_name or "").upper() in self.packages_set:
+                        self.packages_set.add(syn_up)
 
         all_names = set(self.raw_objects.keys()) - ORACLE_RESERVED_WORDS
         self.all_names = all_names
@@ -409,6 +430,8 @@ def trace_raw_dependencies(
     target_object_name: str,
     max_depth: int = 1,
     index: RawDependencyIndex | None = None,
+    expected_type: str | None = None,
+    schema_name: str | None = None,
 ) -> ObjectTraceResult:
     try:
         max_depth = int(getattr(max_depth, "default", max_depth))
@@ -417,7 +440,32 @@ def trace_raw_dependencies(
 
     idx = index or RawDependencyIndex(schemas)
     target_upper = target_object_name.strip().upper()
-    focal_type, focal_obj = idx.raw_objects.get(target_upper, ("UNKNOWN", None))
+
+    focal_type = "UNKNOWN"
+    focal_obj = None
+
+    if schema_name:
+        qualified_key = f"{schema_name.strip().upper()}.{target_upper}"
+        if qualified_key in idx.raw_objects:
+            focal_type, focal_obj = idx.raw_objects[qualified_key]
+
+    if (not focal_obj or focal_type == "UNKNOWN") and expected_type:
+        exp_up = expected_type.strip().upper()
+        if exp_up in ("TABLE", "TABLES") and target_upper in idx.tables_map:
+            focal_type, focal_obj = "TABLE", idx.tables_map[target_upper]
+        elif exp_up in ("VIEW", "VIEWS") and target_upper in idx.views_map:
+            focal_type, focal_obj = "VIEW", idx.views_map[target_upper]
+        elif exp_up in ("MVIEW", "MVIEWS", "MATERIALIZED VIEW", "MATERIALIZED VIEWS") and target_upper in idx.mviews_map:
+            focal_type, focal_obj = "MATERIALIZED VIEW", idx.mviews_map[target_upper]
+        elif exp_up in ("PACKAGE", "PACKAGE BODY", "PROCEDURE", "FUNCTION", "TYPE", "TYPE BODY") and target_upper in idx.code_map:
+            focal_type, focal_obj = idx.code_map[target_upper].object_type.upper(), idx.code_map[target_upper]
+        elif exp_up in ("TRIGGER", "TRIGGERS") and target_upper in idx.triggers_map:
+            focal_type, focal_obj = "TRIGGER", idx.triggers_map[target_upper]
+        elif exp_up in ("SYNONYM", "SYNONYMS") and target_upper in idx.synonyms_map:
+            focal_type, focal_obj = "SYNONYM", idx.synonyms_map[target_upper]
+
+    if not focal_obj or focal_type == "UNKNOWN":
+        focal_type, focal_obj = idx.raw_objects.get(target_upper, ("UNKNOWN", None))
 
     notes: list[str] = []
     tasks: list[str] = []

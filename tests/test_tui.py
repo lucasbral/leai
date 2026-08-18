@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +9,7 @@ from unittest.mock import MagicMock, patch
 from prompt_toolkit.completion import CompleteEvent
 from prompt_toolkit.document import Document
 
+from leai.audit import SessionAuditLogger
 from leai.config import LeaiConfig
 from leai.models import (
     CodeObjectMeta,
@@ -123,6 +125,15 @@ class TuiUnitTests(unittest.TestCase):
         texts = [c.text for c in completions]
         self.assertIn("leai_chat.md", texts)
 
+    def test_completer_audit_argument(self):
+        completer = LeaiCompleter([self.schema])
+        doc = Document(text="/audit ", cursor_position=7)
+        completions = list(completer.get_completions(doc, CompleteEvent()))
+        texts = [c.text for c in completions]
+        self.assertIn("last", texts)
+        self.assertIn("session", texts)
+        self.assertIn("export", texts)
+
     def test_completer_at_mentions(self):
         completer = LeaiCompleter([self.schema])
         doc = Document(text="Tell me about @DEP", cursor_position=18)
@@ -221,6 +232,55 @@ class TuiUnitTests(unittest.TestCase):
         session = InteractiveTUISession([self.schema], self.config, self.mock_client)
         res = session.handle_slash_command("/exit")
         self.assertFalse(res)
+
+    def test_session_slash_audit_and_tools(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+            session.audit_logger = SessionAuditLogger(log_dir=Path(tmpdir))
+
+            # Record turn
+            from leai.audit import ToolExecutionAudit
+            tool_rec = ToolExecutionAudit(
+                step=1,
+                tool_name="grep_plsql_code",
+                arguments={"pattern": "SALARY"},
+                raw_output=json.dumps({"matches": []}),
+                summary="0 matches",
+                duration_seconds=0.05,
+            )
+            session.audit_logger.record_turn(
+                user_prompt="Find salary routines",
+                ai_response="No salary routines found.",
+                provider="openai",
+                model="gpt-4o",
+                latency_seconds=0.8,
+                tokens_used=200,
+                tools_executed=[tool_rec],
+            )
+
+            # Test /audit, /audit last, /audit session, /tools
+            self.assertTrue(session.handle_slash_command("/audit"))
+            self.assertTrue(session.handle_slash_command("/audit last"))
+            self.assertTrue(session.handle_slash_command("/audit session"))
+            self.assertTrue(session.handle_slash_command("/tools"))
+
+            # Test /audit export
+            export_file = Path(tmpdir) / "audit_report.md"
+            self.assertTrue(session.handle_slash_command(f"/audit export {export_file}"))
+            self.assertTrue(export_file.exists())
+
+    @patch("webbrowser.open")
+    def test_session_slash_serve(self, mock_web_open):
+        session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+        try:
+            self.assertTrue(session.handle_slash_command("/serve 8891"))
+            self.assertIsNotNone(session.web_server)
+            self.assertTrue(session.handle_slash_command("/serve"))
+            self.assertTrue(session.handle_slash_command("/serve stop"))
+            self.assertIsNone(session.web_server)
+        finally:
+            if session.web_server:
+                session.web_server.shutdown()
 
     def test_completer_new_slash_commands(self):
         completer = LeaiCompleter([self.schema])

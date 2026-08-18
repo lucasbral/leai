@@ -552,7 +552,9 @@ def default(
             cfg = load_config(config)
             if schemas:
                 cfg.schemas = [s.strip().upper() for s in schemas]
-        except Exception:
+        except Exception as exc:
+            if config.exists():
+                console.print(f"[bold yellow]⚠️ Aviso:[/bold yellow] Falha ao ler [cyan]{config}[/cyan]: {exc}")
             cfg = LeaiConfig()
 
         target_schemas = cfg.schemas if not cfg.is_all_schemas else None
@@ -1217,3 +1219,57 @@ def enrich(
     except Exception as exc:
         console.print(f"[red]Error during enrichment:[/red] {exc}")
         raise typer.Exit(code=1)
+
+
+@app.command()
+def serve(
+    port: int = typer.Option(8000, "--port", "-p", help="Port to bind LEAI Web Studio"),
+    host: str = typer.Option("127.0.0.1", "--host", "-h", help="Host address to bind"),
+    open_browser: bool = typer.Option(True, "--open/--no-open", help="Automatically open default browser"),
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    provider: str = typer.Option(None, "--provider", help="AI provider override"),
+) -> None:
+    """Launch interactive LEAI Web Documentation & Annotation Studio in the browser."""
+    try:
+        cfg = load_config(config)
+    except Exception as exc:
+        if config.exists():
+            console.print(f"[bold yellow]⚠️ Aviso:[/bold yellow] Falha ao ler [cyan]{config}[/cyan]: {exc}")
+        cfg = LeaiConfig()
+
+    schemas_meta = load_raw_schemas(cfg.rawPath)
+    try:
+        client = get_llm_client(cfg, provider_override=provider)
+    except Exception:
+        client = None
+
+    url = f"http://{host}:{port}"
+    console.print()
+    console.print(
+        Panel(
+            f"[bold cyan]⚡ LEAI Web Documentation & Annotation Studio[/bold cyan]\n\n"
+            f"[bold white]URL:[/bold white] [bold yellow underline]{url}[/bold yellow underline]\n"
+            f"[bold white]Schemas Loaded:[/bold white] [cyan]{len(schemas_meta)}[/cyan] schemas\n"
+            f"[bold white]AI Model:[/bold white] [bold green]{client.model if client else 'Offline'}[/bold green]\n\n"
+            f"[dim]Features: Real-time annotation editing, instant Markdown sync, AI enrichment, lineage graphs.[/dim]\n"
+            f"[dim]Press [bold red]Ctrl+C[/bold red] to stop server.[/dim]",
+            title="[bold green]🌐 Web Studio Running[/bold green]",
+            box=box.ROUNDED,
+            border_style="green",
+        )
+    )
+
+    from leai.web import start_server
+
+    start_server(
+        config=cfg,
+        schemas=schemas_meta,
+        client=client,
+        provider_name=provider,
+        host=host,
+        port=port,
+        open_browser=open_browser,
+        in_background=False,
+        config_path=config,
+    )
+

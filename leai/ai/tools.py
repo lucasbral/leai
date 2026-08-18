@@ -61,6 +61,35 @@ DATABASE_TOOLS_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "search_column_comments",
+            "description": "Searches for column names and Oracle column comments (ALL_COL_COMMENTS) across all tables, views, and materialized views in the database. Use this tool specifically when the user asks 'qual tabela tem o campo/data X?', 'onde fica a coluna Y?', 'qual tabela guarda a data de recadastramento?' or whenever searching for specific data attributes and column descriptions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Keyword, column prefix, or concept to find in column comments or column names (e.g. 'recadastramento', 'cpf', 'data nascimento', 'dt_recad', 'salario').",
+                    },
+                    "object_type": {
+                        "type": "string",
+                        "description": "Optional filter: 'table', 'view', 'mview', or 'table,view'. Default searches all.",
+                    },
+                    "table_name": {
+                        "type": "string",
+                        "description": "Optional filter by specific table or view name.",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum column matches to return (default 25).",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_table_schema",
             "description": "Retrieves full detailed schema metadata of a table or view: columns, data types, nullability, primary key, foreign keys, and business rules. If given a SYNONYM name, it automatically dereferences it to the target table.",
             "parameters": {
@@ -210,6 +239,49 @@ def _normalize_text(text: str) -> str:
     return "".join(c for c in normalized if not unicodedata.combining(c)).upper()
 
 
+def _extract_search_tokens(query: str) -> list[str]:
+    """Generates search tokens and Portuguese morphological roots/stems from the query."""
+    if not query:
+        return []
+    q_norm = _normalize_text(query).strip()
+    if not q_norm:
+        return []
+    raw_words = [w for w in re.split(r"[\s,;_\-\.:/\\]+", q_norm) if len(w) >= 2]
+    tokens = set(raw_words)
+    tokens.add(q_norm)
+
+    for w in raw_words:
+        if len(w) >= 5:
+            tokens.add(w[:5])
+            tokens.add(w[:6])
+            tokens.add(w[:7])
+            tokens.add(w[:8])
+            for suffix in ("AMENTO", "IMENTO", "ACOES", "ICOES", "ACAO", "ICAO", "ADO", "ADA", "ADOS", "ADAS", "AL", "AIS", "AR", "ER", "IR", "OS", "AS", "ES", "IS", "OR", "ORES"):
+                if w.endswith(suffix) and len(w) - len(suffix) >= 4:
+                    tokens.add(w[:-len(suffix)])
+
+    return [t for t in tokens if len(t) >= 3]
+
+
+def _parse_target_types(object_type: str | None) -> set[str] | None:
+    """Parses and normalizes single or comma-separated object types (e.g. 'table,view', 'tables, views')."""
+    if not object_type:
+        return None
+    raw_list = [item.strip().upper() for item in re.split(r"[,;\s]+", object_type.strip().upper()) if item.strip()]
+    result: set[str] = set()
+    for item in raw_list:
+        clean = item.rstrip("S")
+        result.add(clean)
+        result.add(f"{clean}S")
+        if clean in ("MATERIALIZED VIEW", "MVIEW"):
+            result.update({"MVIEW", "MVIEWS", "MATERIALIZED VIEW", "MATERIALIZED VIEWS"})
+        elif clean in ("PACKAGE_BODY", "PACKAGE_BODYS", "PACKAGE"):
+            result.update({"PACKAGE", "PACKAGES", "PACKAGE_BODY", "PACKAGE_BODYS"})
+        elif clean in ("TYPE_BODY", "TYPE_BODYS", "TYPE"):
+            result.update({"TYPE", "TYPES", "TYPE_BODY", "TYPE_BODYS"})
+    return result if result else None
+
+
 def search_business_documentation(
     schemas: list[SchemaMetadata],
     config: LeaiConfig,
@@ -217,17 +289,16 @@ def search_business_documentation(
     object_type: str | None = None,
     search_fields: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Searches human and AI documentation across YAML annotations and Markdown documents for business concepts."""
+    """Searches human and AI documentation across YAML annotations, Oracle dictionary comments, and columns for business concepts."""
     if not query or not query.strip():
         return []
 
     q_raw = query.strip()
-    q_norm = _normalize_text(q_raw)
-    words = [w for w in q_norm.split() if len(w) > 2]
-    if not words:
-        words = [q_norm]
+    tokens = _extract_search_tokens(q_raw)
+    if not tokens:
+        tokens = [_normalize_text(q_raw)]
 
-    target_type = object_type.strip().upper() if object_type else None
+    target_types = _parse_target_types(object_type)
     fields_filter = (search_fields or "all").strip().lower()
 
     results: list[dict[str, Any]] = []
@@ -259,7 +330,7 @@ def search_business_documentation(
                 elif obj_type in ("TYPE_BODY", "TYPE_BODYS"):
                     obj_type = "TYPE"
 
-                if target_type and target_type not in (obj_type, f"{obj_type}S"):
+                if target_types and obj_type not in target_types and f"{obj_type}S" not in target_types:
                     continue
 
                 ann = load_annotation(yml_file)
@@ -268,14 +339,15 @@ def search_business_documentation(
                 snippets = []
 
                 # Name check
-                if q_norm in _normalize_text(obj_name):
+                norm_name = _normalize_text(obj_name)
+                if any(t in norm_name for t in tokens):
                     score += 50
                     matched_fields.append("name")
 
                 # Description check
                 if fields_filter in ("all", "descriptions", "description") and ann.description:
                     norm_desc = _normalize_text(ann.description)
-                    if q_norm in norm_desc or any(w in norm_desc for w in words):
+                    if any(t in norm_desc for t in tokens):
                         score += 45
                         matched_fields.append("description")
                         snippets.append(f"description: '{ann.description}'")
@@ -284,7 +356,7 @@ def search_business_documentation(
                 if fields_filter in ("all", "rules", "business_rules") and ann.business_rules:
                     for rule in ann.business_rules:
                         norm_rule = _normalize_text(rule)
-                        if q_norm in norm_rule or any(w in norm_rule for w in words):
+                        if any(t in norm_rule for t in tokens):
                             score += 35
                             if "business_rules" not in matched_fields:
                                 matched_fields.append("business_rules")
@@ -293,16 +365,17 @@ def search_business_documentation(
                 # Columns check
                 if fields_filter in ("all", "columns", "cols") and ann.columns:
                     for col_name, col_desc in ann.columns.items():
-                        norm_col = _normalize_text(f"{col_name} {col_desc or ''}")
-                        if q_norm in norm_col or any(w in norm_col for w in words):
-                            score += 30
+                        desc_str = col_desc if isinstance(col_desc, str) else (col_desc.get("description", "") if isinstance(col_desc, dict) else str(col_desc))
+                        norm_col = _normalize_text(f"{col_name} {desc_str}")
+                        if any(t in norm_col for t in tokens):
+                            score += 40
                             matched_fields.append(f"column: {col_name}")
-                            snippets.append(f"column {col_name}: '{col_desc}'")
+                            snippets.append(f"coluna {col_name}: '{desc_str}'")
 
                 # Tags check
                 if fields_filter in ("all", "tags") and ann.tags:
                     for tag in ann.tags:
-                        if q_norm in _normalize_text(tag) or any(w in _normalize_text(tag) for w in words):
+                        if any(t in _normalize_text(tag) for t in tokens):
                             score += 25
                             matched_fields.append(f"tag: {tag}")
                             snippets.append(f"tag: '{tag}'")
@@ -324,7 +397,7 @@ def search_business_documentation(
             except Exception:
                 continue
 
-    # 2. Also search SchemaMetadata dictionary comments for objects not yet found
+    # 2. Also search SchemaMetadata dictionary comments & columns
     for s in schemas:
         s_name = (s.schema_name or "DEFAULT").upper()
         all_objs = (
@@ -337,7 +410,7 @@ def search_business_documentation(
         )
 
         for otype, oname, ocomment, subitems in all_objs:
-            if target_type and target_type not in (otype, f"{otype}S"):
+            if target_types and otype not in target_types and f"{otype}S" not in target_types:
                 continue
             item_key = f"{s_name}.{oname.upper()}"
             if item_key in seen_keys:
@@ -347,23 +420,32 @@ def search_business_documentation(
             matched_fields = []
             snippets = []
 
-            # Name match
-            if q_norm in _normalize_text(oname):
+            norm_name = _normalize_text(oname)
+            if any(t in norm_name for t in tokens):
                 score += 30
                 matched_fields.append("name")
 
-            # Comment match
-            if ocomment and (q_norm in _normalize_text(ocomment) or any(w in _normalize_text(ocomment) for w in words)):
-                score += 35
-                matched_fields.append("oracle_comment")
-                snippets.append(f"comment: '{ocomment}'")
+            if ocomment:
+                norm_ocomment = _normalize_text(ocomment)
+                if any(t in norm_ocomment for t in tokens):
+                    score += 45
+                    matched_fields.append("oracle_comment")
+                    snippets.append(f"comment: '{ocomment}'")
 
-            # Subitem / Column comment match
             for sname, scomment in subitems:
-                if scomment and (q_norm in _normalize_text(scomment) or any(w in _normalize_text(scomment) for w in words)):
-                    score += 20
+                norm_sname = _normalize_text(sname)
+                norm_scomment = _normalize_text(scomment or "")
+                matched_sub = False
+                if any(t in norm_sname for t in tokens):
+                    score += 35
+                    matched_sub = True
+                if scomment and any(t in norm_scomment for t in tokens):
+                    score += 45
+                    matched_sub = True
+
+                if matched_sub:
                     matched_fields.append(f"column/routine: {sname}")
-                    snippets.append(f"{sname}: '{scomment}'")
+                    snippets.append(f"coluna {sname}: '{scomment}'" if scomment else f"coluna {sname}")
 
             if score > 0:
                 seen_keys.add(item_key)
@@ -390,16 +472,28 @@ def search_database_objects(
     object_type: str | None = None,
     config: LeaiConfig | None = None,
 ) -> list[dict[str, Any]]:
-    q_norm = _normalize_text(query)
-    target_type = object_type.strip().upper() if object_type else None
+    q_norm = _normalize_text(query).strip()
+    words = [w for w in q_norm.split() if w]
+    tokens = _extract_search_tokens(query)
+    target_types = _parse_target_types(object_type)
     results: list[dict[str, Any]] = []
+
+    def _matches_text(text: str) -> bool:
+        norm = _normalize_text(text)
+        if q_norm and q_norm in norm:
+            return True
+        if words and len(words) > 1 and all(w in norm for w in words):
+            return True
+        if "_" not in q_norm and tokens and any(tok in norm for tok in tokens):
+            return True
+        return False
 
     for s in schemas:
         s_name = s.schema_name or "DEFAULT"
         is_multi = len(schemas) > 1 or (config and config.is_all_schemas)
 
         # Tables
-        if not target_type or target_type in ("TABLE", "TABLES"):
+        if not target_types or "TABLE" in target_types or "TABLES" in target_types:
             for t in s.tables:
                 ann_desc = ""
                 if config and config.annotationsPath:
@@ -409,31 +503,40 @@ def search_database_objects(
                         ann = load_annotation(ann_file)
                         ann_desc = ann.description or ""
 
-                haystack = f"{t.name} {t.comment or ''} {ann_desc}"
-                if q_norm in _normalize_text(haystack):
+                cols_text = " ".join(f"{c.name} {c.comment or ''}" for c in t.columns)
+                haystack = f"{t.name} {t.comment or ''} {ann_desc} {cols_text}"
+                if _matches_text(haystack):
+                    matched_cols = [c.name for c in t.columns if _matches_text(f"{c.name} {c.comment or ''}")]
                     results.append({
                         "name": t.name,
                         "type": "TABLE",
                         "schema": s_name,
                         "comment": t.comment or (ann_desc if ann_desc else None),
                         "column_count": len(t.columns),
+                        "matched_columns": matched_cols[:5],
                     })
 
         # Views
-        if not target_type or target_type in ("VIEW", "VIEWS"):
+        if not target_types or "VIEW" in target_types or "VIEWS" in target_types:
             for v in s.views:
-                if q_norm in _normalize_text(f"{v.name} {v.comment or ''}"):
+                cols_text = " ".join(f"{c.name} {c.comment or ''}" for c in v.columns)
+                haystack = f"{v.name} {v.comment or ''} {cols_text}"
+                if _matches_text(haystack):
+                    matched_cols = [c.name for c in v.columns if _matches_text(f"{c.name} {c.comment or ''}")]
                     results.append({
                         "name": v.name,
                         "type": "VIEW",
                         "schema": s_name,
                         "comment": v.comment,
+                        "matched_columns": matched_cols[:5],
                     })
 
         # Materialized Views
-        if not target_type or target_type in ("MVIEW", "MVIEWS", "MATERIALIZED VIEW"):
+        if not target_types or any(t in target_types for t in ("MVIEW", "MVIEWS", "MATERIALIZED VIEW", "MATERIALIZED VIEWS")):
             for mv in s.mviews:
-                if q_norm in _normalize_text(f"{mv.name} {mv.comment or ''}"):
+                cols_text = " ".join(f"{c.name} {c.comment or ''}" for c in mv.columns)
+                haystack = f"{mv.name} {mv.comment or ''} {cols_text}"
+                if _matches_text(haystack):
                     results.append({
                         "name": mv.name,
                         "type": "MATERIALIZED VIEW",
@@ -444,8 +547,8 @@ def search_database_objects(
         # Code Objects (Packages, Procedures, Functions)
         for co in s.code_objects:
             c_type = co.object_type.upper()
-            if not target_type or target_type in (c_type, f"{c_type}S"):
-                if q_norm in _normalize_text(f"{co.name} {co.comment or ''}"):
+            if not target_types or c_type in target_types or f"{c_type}S" in target_types:
+                if _matches_text(f"{co.name} {co.comment or ''}"):
                     results.append({
                         "name": co.name,
                         "type": c_type,
@@ -457,8 +560,8 @@ def search_database_objects(
             # Subprograms inside packages
             for sp in co.subprograms:
                 sp_full = f"{co.name}.{sp.name}"
-                if not target_type or target_type in (sp.subprogram_type.upper(), f"{sp.subprogram_type.upper()}S", "SUBPROGRAM"):
-                    if q_norm in _normalize_text(f"{sp.name} {sp_full} {sp.comment or ''}"):
+                if not target_types or any(t in target_types for t in (sp.subprogram_type.upper(), f"{sp.subprogram_type.upper()}S", "SUBPROGRAM", "SUBPROGRAMS")):
+                    if _matches_text(f"{sp.name} {sp_full} {sp.comment or ''}"):
                         results.append({
                             "name": sp_full,
                             "type": f"{co.object_type}.{sp.subprogram_type}",
@@ -469,9 +572,9 @@ def search_database_objects(
                         })
 
         # Triggers
-        if not target_type or target_type in ("TRIGGER", "TRIGGERS"):
+        if not target_types or "TRIGGER" in target_types or "TRIGGERS" in target_types:
             for trg in s.triggers:
-                if q_norm in _normalize_text(f"{trg.name} {trg.table_name or ''}"):
+                if _matches_text(f"{trg.name} {trg.table_name or ''}"):
                     results.append({
                         "name": trg.name,
                         "type": "TRIGGER",
@@ -481,9 +584,9 @@ def search_database_objects(
                     })
 
         # Synonyms
-        if not target_type or target_type in ("SYNONYM", "SYNONYMS"):
+        if not target_types or "SYNONYM" in target_types or "SYNONYMS" in target_types:
             for syn in s.synonyms:
-                if q_norm in _normalize_text(f"{syn.name} {syn.table_name or ''}"):
+                if _matches_text(f"{syn.name} {syn.table_name or ''}"):
                     target_info = resolve_synonym(schemas, syn.name)
                     target_desc = f"{syn.table_owner or ''}.{syn.table_name or ''}"
                     if target_info and target_info.get("target_type") != "UNKNOWN":
@@ -500,18 +603,166 @@ def search_database_objects(
     return results[:25]
 
 
+def search_column_comments(
+    schemas: list[SchemaMetadata],
+    query: str,
+    object_type: str | None = None,
+    table_name: str | None = None,
+    max_results: int = 25,
+    config: LeaiConfig | None = None,
+) -> list[dict[str, Any]]:
+    """Searches column names and Oracle column comments across all tables, views, and materialized views."""
+    q_norm = _normalize_text(query).strip()
+    if not q_norm:
+        return []
+
+    tokens = _extract_search_tokens(query)
+    target_types = _parse_target_types(object_type)
+    target_table = table_name.strip().upper() if table_name else None
+
+    matches: list[dict[str, Any]] = []
+
+    def _score_and_match(text: str, col_name: str) -> tuple[bool, int]:
+        t_norm = _normalize_text(text)
+        c_norm = _normalize_text(col_name)
+        score = 0
+
+        # Exact query match in comment or column name
+        if q_norm in t_norm:
+            score += 100
+        if q_norm in c_norm:
+            score += 80
+
+        # Token / stem matching
+        for tok in tokens:
+            if tok in t_norm:
+                score += 30
+            if tok in c_norm:
+                score += 25
+
+        return (score > 0, score)
+
+    for s in schemas:
+        s_name = (s.schema_name or "DEFAULT").upper()
+
+        # 1. Tables
+        if not target_types or any(t in target_types for t in ("TABLE", "TABLES")):
+            for t in s.tables:
+                t_up = t.name.upper()
+                if target_table and t_up != target_table and f"{s_name}.{t_up}" != target_table:
+                    continue
+
+                ann = None
+                if config:
+                    is_multi = len(schemas) > 1 or config.is_all_schemas
+                    ann_dir = config.annotationsPath / s_name if is_multi else config.annotationsPath
+                    ann_file = ann_dir / "tables" / f"{t.name}.yml"
+                    ann = load_annotation(ann_file) if ann_file.exists() else None
+
+                pk_cols = set(t.primary_keys) if t.primary_keys else set()
+
+                for c in t.columns:
+                    comment = (ann and ann.columns.get(c.name)) or c.comment or ""
+                    matched, score = _score_and_match(f"{comment} {t.comment or ''}", c.name)
+                    if matched:
+                        matches.append({
+                            "schema": s_name,
+                            "table_name": t.name,
+                            "qualified_name": f"{s_name}.{t.name}",
+                            "object_type": "TABLE",
+                            "column_name": c.name,
+                            "data_type": c.data_type,
+                            "nullable": c.nullable,
+                            "is_pk": c.name in pk_cols,
+                            "comment": comment or "(Sem comentário)",
+                            "table_comment": t.comment or "",
+                            "_score": score,
+                        })
+
+        # 2. Views
+        if not target_types or any(t in target_types for t in ("VIEW", "VIEWS")):
+            for v in s.views:
+                v_up = v.name.upper()
+                if target_table and v_up != target_table and f"{s_name}.{v_up}" != target_table:
+                    continue
+
+                ann = None
+                if config:
+                    is_multi = len(schemas) > 1 or config.is_all_schemas
+                    ann_dir = config.annotationsPath / s_name if is_multi else config.annotationsPath
+                    ann_file = ann_dir / "views" / f"{v.name}.yml"
+                    ann = load_annotation(ann_file) if ann_file.exists() else None
+
+                for c in v.columns:
+                    comment = (ann and ann.columns.get(c.name)) or c.comment or ""
+                    matched, score = _score_and_match(f"{comment} {v.comment or ''}", c.name)
+                    if matched:
+                        matches.append({
+                            "schema": s_name,
+                            "table_name": v.name,
+                            "qualified_name": f"{s_name}.{v.name}",
+                            "object_type": "VIEW",
+                            "column_name": c.name,
+                            "data_type": c.data_type,
+                            "nullable": c.nullable,
+                            "is_pk": False,
+                            "comment": comment or "(Sem comentário)",
+                            "table_comment": v.comment or "",
+                            "_score": score,
+                        })
+
+        # 3. Materialized Views
+        if not target_types or any(t in target_types for t in ("MVIEW", "MVIEWS", "MATERIALIZED VIEW", "MATERIALIZED VIEWS")):
+            for mv in s.mviews:
+                mv_up = mv.name.upper()
+                if target_table and mv_up != target_table and f"{s_name}.{mv_up}" != target_table:
+                    continue
+
+                for c in mv.columns:
+                    comment = c.comment or ""
+                    matched, score = _score_and_match(f"{comment} {mv.comment or ''}", c.name)
+                    if matched:
+                        matches.append({
+                            "schema": s_name,
+                            "table_name": mv.name,
+                            "qualified_name": f"{s_name}.{mv.name}",
+                            "object_type": "MATERIALIZED VIEW",
+                            "column_name": c.name,
+                            "data_type": c.data_type,
+                            "nullable": c.nullable,
+                            "is_pk": False,
+                            "comment": comment or "(Sem comentário)",
+                            "table_comment": mv.comment or "",
+                            "_score": score,
+                        })
+
+    matches.sort(key=lambda x: (-x["_score"], x["table_name"], x["column_name"]))
+    for m in matches:
+        m.pop("_score", None)
+
+    return matches[:max_results]
+
+
 def get_table_schema(
     schemas: list[SchemaMetadata],
     config: LeaiConfig,
     table_name: str,
 ) -> dict[str, Any]:
-    t_name = table_name.strip().upper()
+    raw_name = table_name.strip().upper()
+    target_schema: str | None = None
+    target_name = raw_name
+    if "." in raw_name:
+        parts = raw_name.split(".", 1)
+        target_schema = parts[0].strip()
+        target_name = parts[1].strip()
 
+    # 1. Search in Tables
     for s in schemas:
-        s_name = s.schema_name or "DEFAULT"
+        s_name = (s.schema_name or "DEFAULT").upper()
+        if target_schema and s_name != target_schema:
+            continue
         for t in s.tables:
-            if t.name.upper() == t_name:
-                # Load annotation if exists
+            if t.name.upper() == target_name:
                 is_multi = len(schemas) > 1 or config.is_all_schemas
                 ann_dir = config.annotationsPath / s_name if is_multi else config.annotationsPath
                 ann_file = ann_dir / "tables" / f"{t.name}.yml"
@@ -541,6 +792,7 @@ def get_table_schema(
 
                 return {
                     "table_name": t.name,
+                    "type": "TABLE",
                     "schema": s_name,
                     "comment": t.comment,
                     "business_description": ann.description if ann else None,
@@ -550,16 +802,80 @@ def get_table_schema(
                     "foreign_keys": fks_info,
                 }
 
-    # If not found directly, check if table_name is a synonym
-    syn_info = resolve_synonym(schemas, t_name)
-    if syn_info and syn_info.get("target_name") and syn_info["target_name"] != t_name:
+    # 2. Search in Views
+    for s in schemas:
+        s_name = (s.schema_name or "DEFAULT").upper()
+        if target_schema and s_name != target_schema:
+            continue
+        for v in s.views:
+            if v.name.upper() == target_name:
+                is_multi = len(schemas) > 1 or config.is_all_schemas
+                ann_dir = config.annotationsPath / s_name if is_multi else config.annotationsPath
+                ann_file = ann_dir / "views" / f"{v.name}.yml"
+                ann = load_annotation(ann_file) if ann_file.exists() else None
+
+                cols_info = []
+                for c in v.columns:
+                    col_doc = (ann and ann.columns.get(c.name)) or c.comment or ""
+                    cols_info.append({
+                        "name": c.name,
+                        "type": c.data_type,
+                        "nullable": c.nullable,
+                        "is_pk": False,
+                        "description": col_doc,
+                    })
+
+                return {
+                    "table_name": v.name,
+                    "type": "VIEW",
+                    "schema": s_name,
+                    "comment": v.comment,
+                    "business_description": ann.description if ann else None,
+                    "business_rules": ann.business_rules if ann else [],
+                    "tags": ann.tags if ann else [],
+                    "columns": cols_info,
+                    "foreign_keys": [],
+                }
+
+    # 3. Search in Materialized Views
+    for s in schemas:
+        s_name = (s.schema_name or "DEFAULT").upper()
+        if target_schema and s_name != target_schema:
+            continue
+        for mv in s.mviews:
+            if mv.name.upper() == target_name:
+                cols_info = []
+                for c in mv.columns:
+                    cols_info.append({
+                        "name": c.name,
+                        "type": c.data_type,
+                        "nullable": c.nullable,
+                        "is_pk": False,
+                        "description": c.comment or "",
+                    })
+
+                return {
+                    "table_name": mv.name,
+                    "type": "MATERIALIZED VIEW",
+                    "schema": s_name,
+                    "comment": mv.comment,
+                    "business_description": None,
+                    "business_rules": [],
+                    "tags": [],
+                    "columns": cols_info,
+                    "foreign_keys": [],
+                }
+
+    # 4. If not found directly, check if table_name is a synonym
+    syn_info = resolve_synonym(schemas, target_name)
+    if syn_info and syn_info.get("target_name") and syn_info["target_name"] != target_name:
         resolved_table = get_table_schema(schemas, config, syn_info["target_name"])
         if "error" not in resolved_table:
-            resolved_table["accessed_via_synonym"] = t_name
+            resolved_table["accessed_via_synonym"] = raw_name
             resolved_table["synonym_target_owner"] = syn_info["target_owner"]
             return resolved_table
 
-    return {"error": f"Table '{table_name}' was not found in the loaded schemas."}
+    return {"error": f"Table/View '{table_name}' was not found in the loaded schemas."}
 
 
 def get_subprogram_source(
@@ -570,6 +886,17 @@ def get_subprogram_source(
     p_name = (package_name or "").strip().upper()
     sp_name = (subprogram_name or "").strip().upper()
 
+    target_schema: str | None = None
+    if sp_name and not p_name:
+        parts = sp_name.split(".")
+        if len(parts) == 3:
+            target_schema, p_name, sp_name = parts[0], parts[1], parts[2]
+        elif len(parts) == 2:
+            p_name, sp_name = parts[0], parts[1]
+    elif p_name and "." in p_name:
+        parts = p_name.split(".", 1)
+        target_schema, p_name = parts[0], parts[1]
+
     search_names = [n for n in (p_name, sp_name) if n]
     if not search_names:
         return {"error": "Please provide a package_name and/or subprogram_name to inspect."}
@@ -578,7 +905,9 @@ def get_subprogram_source(
     if p_name and sp_name:
         package_found = False
         for s in schemas:
-            s_name = s.schema_name or "DEFAULT"
+            s_name = (s.schema_name or "DEFAULT").upper()
+            if target_schema and s_name != target_schema:
+                continue
             for co in s.code_objects:
                 if co.name.upper() == p_name:
                     package_found = True
@@ -594,62 +923,84 @@ def get_subprogram_source(
                             }
 
                     if co.source:
-                        extracted = extract_subprogram_block(co.source, sp_name)
-                        if extracted:
+                        code_src = extract_subprogram_block(co.source, sp_name)
+                        if code_src:
                             return {
                                 "package_name": co.name,
                                 "subprogram_name": sp_name,
                                 "subprogram_type": "SUBPROGRAM",
                                 "schema": s_name,
-                                "source_code": extracted,
+                                "source_code": code_src,
                             }
-        if package_found and sp_name != p_name:
-            return {"error": f"Subprogram '{sp_name}' in package '{p_name}' was not found."}
 
-    # 2. Search standalone code objects (Procedures / Functions / Packages)
-    for name_candidate in search_names:
+        if package_found:
+            return {"error": f"Subprogram '{sp_name}' was not found inside package '{p_name}'."}
+
+    # 2. Search standalone code objects (Procedures, Functions, Packages)
+    name_candidate = sp_name or p_name
+    for s in schemas:
+        s_name = (s.schema_name or "DEFAULT").upper()
+        if target_schema and s_name != target_schema:
+            continue
+        for co in s.code_objects:
+            if co.name.upper() == name_candidate:
+                return {
+                    "package_name": None if co.object_type.upper() != "PACKAGE" else co.name,
+                    "subprogram_name": co.name,
+                    "subprogram_type": co.object_type.upper(),
+                    "schema": s_name,
+                    "source_code": co.source or f"-- Objeto {co.object_type} {co.name} registrado sem fonte inline.",
+                }
+
+    # 3. Check Synonyms
+    syn_info = resolve_synonym(schemas, name_candidate)
+    if syn_info and syn_info.get("target_name") and syn_info["target_name"] != name_candidate:
+        target_name = syn_info["target_name"]
+        target_owner = (syn_info.get("target_owner") or "").upper()
+        matching_entry = None
+
         for s in schemas:
-            s_name = s.schema_name or "DEFAULT"
+            s_name = (s.schema_name or "DEFAULT").upper()
             for co in s.code_objects:
-                if co.name.upper() == name_candidate:
-                    return {
-                        "package_name": co.name if co.object_type.upper() in ("PACKAGE", "PACKAGE BODY") else None,
+                if co.name.upper() == target_name:
+                    entry = {
+                        "accessed_via_synonym": name_candidate,
+                        "synonym_target_owner": syn_info["target_owner"],
+                        "package_name": None if co.object_type.upper() != "PACKAGE" else co.name,
                         "subprogram_name": co.name,
                         "subprogram_type": co.object_type.upper(),
                         "schema": s_name,
                         "source_code": co.source or f"-- Objeto {co.object_type} {co.name} registrado sem fonte inline.",
                     }
+                    if target_owner and s_name == target_owner:
+                        matching_entry = entry
+                        break
+                    elif not matching_entry:
+                        matching_entry = entry
 
-    # 3. Transparent Synonym Resolution
-    for name_candidate in search_names:
-        syn_info = resolve_synonym(schemas, name_candidate)
-        if syn_info and syn_info.get("target_name"):
-            target_name = syn_info["target_name"]
-            for s in schemas:
-                s_name = s.schema_name or "DEFAULT"
-                for co in s.code_objects:
-                    if co.name.upper() == target_name:
-                        return {
+                for sp in co.subprograms:
+                    if sp.name.upper() == target_name:
+                        code_src = sp.source or (extract_subprogram_block(co.source, sp.name) if co.source else "")
+                        entry = {
                             "accessed_via_synonym": name_candidate,
                             "synonym_target_owner": syn_info["target_owner"],
-                            "package_name": co.name if co.object_type.upper() in ("PACKAGE", "PACKAGE BODY") else None,
-                            "subprogram_name": co.name,
-                            "subprogram_type": co.object_type.upper(),
+                            "package_name": co.name,
+                            "subprogram_name": sp.name,
+                            "subprogram_type": sp.subprogram_type,
                             "schema": s_name,
-                            "source_code": co.source or f"-- Objeto {co.object_type} {co.name} registrado sem fonte inline.",
+                            "source_code": code_src,
                         }
-                    for sp in co.subprograms:
-                        if sp.name.upper() == target_name:
-                            code_src = sp.source or (extract_subprogram_block(co.source, sp.name) if co.source else "")
-                            return {
-                                "accessed_via_synonym": name_candidate,
-                                "synonym_target_owner": syn_info["target_owner"],
-                                "package_name": co.name,
-                                "subprogram_name": sp.name,
-                                "subprogram_type": sp.subprogram_type,
-                                "schema": s_name,
-                                "source_code": code_src,
-                            }
+                        if target_owner and s_name == target_owner:
+                            matching_entry = entry
+                            break
+                        elif not matching_entry:
+                            matching_entry = entry
+
+            if matching_entry and target_owner and matching_entry.get("schema") == target_owner:
+                break
+
+        if matching_entry:
+            return matching_entry
 
     return {"error": f"Subprogram/Procedure '{sp_name or p_name}' was not found in the loaded schemas or synonyms."}
 
@@ -664,9 +1015,15 @@ def trace_object_lineage(
     except Exception:
         depth = 1
 
-    obj_name = object_name.strip().upper()
-    trace_res = trace_raw_dependencies(schemas, obj_name, max_depth=depth)
-    syn_info = resolve_synonym(schemas, obj_name)
+    raw_name = object_name.strip().upper()
+    target_schema: str | None = None
+    target_name = raw_name
+    if "." in raw_name:
+        parts = raw_name.split(".", 1)
+        target_schema, target_name = parts[0].strip(), parts[1].strip()
+
+    trace_res = trace_raw_dependencies(schemas, target_name, max_depth=depth, schema_name=target_schema)
+    syn_info = resolve_synonym(schemas, target_name)
 
     if not trace_res.focal_object and trace_res.focal_type == "UNKNOWN" and not syn_info:
         return {"error": f"Object '{object_name}' was not found for lineage tracing."}
@@ -683,6 +1040,7 @@ def trace_object_lineage(
             "depth": dep.depth,
         })
 
+    obj_name = target_name
     parents = [d.target_name for d in trace_res.dependencies if d.target_name != obj_name and d.relation_type in ("FK_REFERENCES", "DEPENDS_ON", "READS/SELECTS", "EXECUTES/CALLS", "SYNONYM_FOR")]
     children = [d.source_name for d in trace_res.dependencies if d.source_name != obj_name and d.relation_type in ("FK_REFERENCED_BY",)]
     consumers = [
@@ -791,6 +1149,15 @@ def execute_tool_call(
                 object_type=arguments.get("object_type"),
                 search_fields=arguments.get("search_fields"),
             )
+        elif tool_name == "search_column_comments":
+            res = search_column_comments(
+                schemas,
+                query=arguments.get("query", ""),
+                object_type=arguments.get("object_type"),
+                table_name=arguments.get("table_name"),
+                max_results=arguments.get("max_results", 25),
+                config=config,
+            )
         elif tool_name == "search_database_objects":
             res = search_database_objects(schemas, query=arguments.get("query", ""), object_type=arguments.get("object_type"), config=config)
         elif tool_name == "get_table_schema":
@@ -818,3 +1185,74 @@ def execute_tool_call(
         return json.dumps(res, ensure_ascii=False, indent=2)
     except Exception as exc:
         return json.dumps({"error": f"Tool execution failed ({tool_name}): {str(exc)}"})
+
+
+def summarize_tool_result(tool_name: str, arguments: dict[str, Any], raw_output: str) -> str:
+    """Generates a concise, human-readable summary of a tool execution result."""
+    try:
+        data = json.loads(raw_output)
+        if isinstance(data, dict) and "error" in data:
+            return f"❌ {data['error']}"
+
+        if tool_name == "search_column_comments":
+            results = data if isinstance(data, list) else data.get("results", [])
+            count = len(results)
+            if count == 0:
+                return "0 colunas encontradas"
+            return f"{count} coluna{'s' if count > 1 else ''} encontrada{'s' if count > 1 else ''}"
+
+        if tool_name == "grep_plsql_code":
+            matches = data.get("matches", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+            count = len(matches)
+            if count == 0:
+                return "0 ocorrências"
+            return f"{count} ocorrência{'s' if count > 1 else ''} encontrada{'s' if count > 1 else ''}"
+
+        if tool_name == "get_table_schema":
+            if isinstance(data, dict):
+                cols = len(data.get("columns", []))
+                pks = len(data.get("primary_keys", []))
+                fks = len(data.get("foreign_keys", []))
+                pk_str = f", {pks} PK" if pks else ""
+                fk_str = f", {fks} FK" if fks else ""
+                return f"{cols} colunas{pk_str}{fk_str}"
+            return "Tabela recuperada"
+
+        if tool_name == "get_subprogram_source":
+            if isinstance(data, dict):
+                source = data.get("source", "")
+                if source:
+                    lines = len(source.splitlines())
+                    return f"{lines} linhas de código PL/SQL"
+                subprograms = data.get("subprograms", [])
+                if subprograms:
+                    return f"Pacote com {len(subprograms)} rotinas"
+            return "Código PL/SQL extraído"
+
+        if tool_name == "trace_object_lineage":
+            if isinstance(data, dict):
+                deps = len(data.get("dependencies", []))
+                risk = data.get("risk_level", "NORMAL")
+                return f"{deps} conexões (Risco: {risk})"
+            return "Linhagem mapeada"
+
+        if tool_name == "search_business_documentation":
+            results = data.get("results", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+            count = len(results)
+            if count == 0:
+                return "0 resultados na documentação"
+            return f"{count} objeto{'s' if count > 1 else ''}/regra{'s' if count > 1 else ''} encontrado{'s' if count > 1 else ''}"
+
+        if tool_name == "search_database_objects":
+            results = data.get("results", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+            count = len(results)
+            if count == 0:
+                return "0 objetos encontrados"
+            return f"{count} objeto{'s' if count > 1 else ''} encontrado{'s' if count > 1 else ''}"
+
+        if isinstance(data, list):
+            return f"{len(data)} itens"
+        return "OK"
+    except Exception:
+        return "Concluído"
+
