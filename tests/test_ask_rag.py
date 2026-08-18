@@ -86,8 +86,8 @@ class AskRAGTests(unittest.TestCase):
         context, entities = build_rag_context(question, [self.schema], self.cfg)
 
         self.assertIn("FUNCIONARIOS", entities)
-        self.assertIn("### [RAG CONTEXT] DETALHAMENTO DE IMPACTO E LINHAGEM TÉCNICA DAS ENTIDADES FOCAIS:", context)
-        self.assertIn("--- INÍCIO DO DOSSIÊ FOCAL: FUNCIONARIOS ---", context)
+        self.assertIn("### [RAG CONTEXT] TECHNICAL IMPACT & LINEAGE DOSSIER OF FOCAL ENTITIES:", context)
+        self.assertIn("--- START OF FOCAL DOSSIER: FUNCIONARIOS ---", context)
         self.assertIn("rag_metadata:", context)
         self.assertIn("VW_FOLHA", context)
         self.assertIn("TRG_FUNC_AUDIT", context)
@@ -98,8 +98,8 @@ class AskRAGTests(unittest.TestCase):
         context, entities = build_rag_context(question, [self.schema], self.cfg)
 
         self.assertEqual(entities, [])
-        self.assertNotIn("--- INÍCIO DO DOSSIÊ FOCAL:", context)
-        self.assertIn("### [CATÁLOGO COMPACTO DO SCHEMA]", context)
+        self.assertNotIn("--- START OF FOCAL DOSSIER:", context)
+        self.assertIn("### [COMPACT SCHEMA CATALOG]", context)
         self.assertIn("FUNCIONARIOS", context)
         self.assertIn("DEPARTAMENTOS", context)
 

@@ -16,13 +16,13 @@ DATABASE_TOOLS_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "search_business_documentation",
-            "description": "Searches human and AI documentation across YAML annotations (descriptions, column comments, business rules, tags) and Markdown documents for business concepts, domain keywords, and functional rules (e.g. 'férias', 'afastamento', 'cálculo de proventos', 'adicional noturno'). Use this when the user asks conceptual questions or when table names are not obvious.",
+            "description": "Searches human and AI documentation across YAML annotations (descriptions, column comments, business rules, tags) and Markdown documents for business concepts, domain keywords, and functional rules (e.g. 'vacation', 'leave', 'payroll calculation', 'night shift allowance'). Use this when the user asks conceptual questions or when table names are not obvious.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "The business concept, functional term, or keyword to search in documentation (e.g. 'ferias', 'afastamento', 'licenca', 'salario').",
+                        "description": "The business concept, functional term, or keyword to search in documentation (e.g. 'vacation', 'leave', 'payroll', 'salary').",
                     },
                     "object_type": {
                         "type": "string",
@@ -734,7 +734,7 @@ def search_column_comments(
                                 "data_type": c.data_type,
                                 "nullable": c.nullable,
                                 "is_pk": c.name in pk_cols,
-                                "comment": comment or "(Sem comentário)",
+                                "comment": comment or "(No comment)",
                                 "table_comment": t.comment or "",
                                 "_score": score,
                             }
@@ -768,7 +768,7 @@ def search_column_comments(
                                 "data_type": c.data_type,
                                 "nullable": c.nullable,
                                 "is_pk": False,
-                                "comment": comment or "(Sem comentário)",
+                                "comment": comment or "(No comment)",
                                 "table_comment": v.comment or "",
                                 "_score": score,
                             }
@@ -795,7 +795,7 @@ def search_column_comments(
                                 "data_type": c.data_type,
                                 "nullable": c.nullable,
                                 "is_pk": False,
-                                "comment": comment or "(Sem comentário)",
+                                "comment": comment or "(No comment)",
                                 "table_comment": mv.comment or "",
                                 "_score": score,
                             }
@@ -1148,8 +1148,8 @@ def trace_object_lineage(
             "db_link": syn_info["db_link"],
         }
         result_payload["synonym_guidance"] = (
-            f"O objeto '{obj_name}' é um SYNONYM que aponta para '{syn_info['target_owner']}.{syn_info['target_name']}' "
-            f"(tipo: {syn_info['target_type']}). Para analisar a lógica, use 'get_subprogram_source' para ler o código ou 'get_table_schema' para as colunas."
+            f"The object '{obj_name}' is a SYNONYM pointing to '{syn_info['target_owner']}.{syn_info['target_name']}' "
+            f"(type: {syn_info['target_type']}). To analyze its logic, use 'get_subprogram_source' to read the code or 'get_table_schema' for columns."
         )
 
     return result_payload
@@ -1284,15 +1284,15 @@ def summarize_tool_result(tool_name: str, arguments: dict[str, Any], raw_output:
             results = data if isinstance(data, list) else data.get("results", [])
             count = len(results)
             if count == 0:
-                return "0 colunas encontradas"
-            return f"{count} coluna{'s' if count > 1 else ''} encontrada{'s' if count > 1 else ''}"
+                return "0 columns found"
+            return f"{count} column{'s' if count > 1 else ''} found"
 
         if tool_name == "grep_plsql_code":
             matches = data.get("matches", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
             count = len(matches)
             if count == 0:
-                return "0 ocorrências"
-            return f"{count} ocorrência{'s' if count > 1 else ''} encontrada{'s' if count > 1 else ''}"
+                return "0 occurrences found"
+            return f"{count} occurrence{'s' if count > 1 else ''} found"
 
         if tool_name == "get_table_schema":
             if isinstance(data, dict):
@@ -1301,43 +1301,43 @@ def summarize_tool_result(tool_name: str, arguments: dict[str, Any], raw_output:
                 fks = len(data.get("foreign_keys", []))
                 pk_str = f", {pks} PK" if pks else ""
                 fk_str = f", {fks} FK" if fks else ""
-                return f"{cols} colunas{pk_str}{fk_str}"
-            return "Tabela recuperada"
+                return f"{cols} columns{pk_str}{fk_str}"
+            return "Table retrieved"
 
         if tool_name == "get_subprogram_source":
             if isinstance(data, dict):
                 source = data.get("source", "")
                 if source:
                     lines = len(source.splitlines())
-                    return f"{lines} linhas de código PL/SQL"
+                    return f"{lines} lines of PL/SQL code"
                 subprograms = data.get("subprograms", [])
                 if subprograms:
-                    return f"Pacote com {len(subprograms)} rotinas"
-            return "Código PL/SQL extraído"
+                    return f"Package with {len(subprograms)} routines"
+            return "PL/SQL code extracted"
 
         if tool_name == "trace_object_lineage":
             if isinstance(data, dict):
                 deps = len(data.get("dependencies", []))
                 risk = data.get("risk_level", "NORMAL")
-                return f"{deps} conexões (Risco: {risk})"
-            return "Linhagem mapeada"
+                return f"{deps} dependencies (Risk: {risk})"
+            return "Lineage mapped"
 
         if tool_name == "search_business_documentation":
             results = data.get("results", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
             count = len(results)
             if count == 0:
-                return "0 resultados na documentação"
-            return f"{count} objeto{'s' if count > 1 else ''}/regra{'s' if count > 1 else ''} encontrado{'s' if count > 1 else ''}"
+                return "0 documentation results"
+            return f"{count} object{'s' if count > 1 else ''}/rule{'s' if count > 1 else ''} found"
 
         if tool_name == "search_database_objects":
             results = data.get("results", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
             count = len(results)
             if count == 0:
-                return "0 objetos encontrados"
-            return f"{count} objeto{'s' if count > 1 else ''} encontrado{'s' if count > 1 else ''}"
+                return "0 objects found"
+            return f"{count} object{'s' if count > 1 else ''} found"
 
         if isinstance(data, list):
-            return f"{len(data)} itens"
+            return f"{len(data)} items"
         return "OK"
     except Exception:
-        return "Concluído"
+        return "Completed"

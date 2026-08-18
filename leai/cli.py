@@ -592,7 +592,7 @@ def default(
                 cfg.schemas = [s.strip().upper() for s in schemas]
         except Exception as exc:
             if config.exists():
-                console.print(f"[bold yellow]⚠️ Aviso:[/bold yellow] Falha ao ler [cyan]{config}[/cyan]: {exc}")
+                console.print(f"[bold yellow]⚠️ Warning:[/bold yellow] Failed to load [cyan]{config}[/cyan]: {exc}")
             cfg = LeaiConfig()
 
         target_schemas = cfg.schemas if not cfg.is_all_schemas else None

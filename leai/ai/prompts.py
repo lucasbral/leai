@@ -20,12 +20,12 @@ RESPONSE FORMAT (STRICT JSON ONLY):
     "Rule 2..."
   ],
   "use_cases": [
-    "Consultar colaboradores ativos por departamento...",
-    "Relatório de admissões no mês atual..."
+    "Query active employees by department...",
+    "Monthly new hires onboarding report..."
   ],
   "warnings": [
-    "Tabela de alto volume com particionamento mensal...",
-    "Evitar full table scan sem filtrar por EMP_ID..."
+    "High-volume table with monthly partitioning...",
+    "Avoid full table scans without filtering by EMP_ID..."
   ],
   "related_objects": [
     "DEPARTMENTS",
@@ -58,16 +58,16 @@ RESPONSE FORMAT (STRICT JSON ONLY):
     "Rule 2..."
   ],
   "use_cases": [
-    "Execução diária pelo job de fechamento...",
-    "Chamada manual via tela de faturamento..."
+    "Daily execution by the end-of-day closing job...",
+    "Manual trigger via billing processing screen..."
   ],
   "warnings": [
-    "Realiza commits intermediários...",
-    "Exige lock exclusivo na tabela X..."
+    "Performs intermediate commits...",
+    "Requires exclusive table lock on table X..."
   ],
   "related_objects": [
-    "PKG_FINANCEIRO",
-    "TAB_LOG_PROCESSAMENTO"
+    "PKG_FINANCIAL",
+    "TAB_PROCESSING_LOG"
   ],
   "tags": ["tag1", "tag2"],
   "subprograms": {

@@ -539,7 +539,7 @@ class RawDependencyIndex:
                     v_name = v.name.upper()
                     for w in words & all_names:
                         if w != v_name:
-                            self.text_references[w].append((v_name, "VIEW", "READS/SELECTS", "View realiza consulta SQL sobre o objeto"))
+                            self.text_references[w].append((v_name, "VIEW", "READS/SELECTS", "View executes SQL query against object"))
 
             for mv in s.mviews:
                 if mv.query:
@@ -549,7 +549,7 @@ class RawDependencyIndex:
                     for w in words & all_names:
                         if w != mv_name:
                             self.text_references[w].append(
-                                (mv_name, "MATERIALIZED VIEW", "READS/SELECTS", "Materialized View baseada no objeto")
+                                (mv_name, "MATERIALIZED VIEW", "READS/SELECTS", "Materialized View based on object")
                             )
 
             for co in s.code_objects:
@@ -564,7 +564,7 @@ class RawDependencyIndex:
                                     co_name,
                                     co.object_type.upper(),
                                     "PLSQL_DEPENDENCY",
-                                    f"Objeto {co.object_type} manipula ou referencia {w} no código-fonte",
+                                    f"Object {co.object_type} references {w} in source code",
                                 )
                             )
 
@@ -576,7 +576,7 @@ class RawDependencyIndex:
                     for w in words & all_names:
                         if w != trg_name and w != (trg.table_name or "").upper():
                             self.text_references[w].append(
-                                (trg_name, "TRIGGER", "PLSQL_DEPENDENCY", f"Trigger {trg.name} manipula ou referencia {w} no corpo")
+                                (trg_name, "TRIGGER", "PLSQL_DEPENDENCY", f"Trigger {trg.name} references {w} in trigger body")
                             )
 
 
@@ -674,7 +674,7 @@ def trace_raw_dependencies(
     if focal_type == "SYNONYM" and focal_obj and getattr(focal_obj, "table_name", None):
         real_target = focal_obj.table_name.upper()
         if real_target != target_upper and real_target not in ORACLE_RESERVED_WORDS:
-            details_str = f"Sinônimo aponta para {focal_obj.table_owner or ''}.{focal_obj.table_name}"
+            details_str = f"Synonym points to {focal_obj.table_owner or ''}.{focal_obj.table_name}"
             if focal_obj.db_link:
                 details_str += f"@{focal_obj.db_link}"
             result.dependencies.append(
@@ -715,7 +715,7 @@ def trace_raw_dependencies(
                             target_name=curr_name,
                             target_type=curr_type,
                             relation_type="SYNONYM_FOR",
-                            details=f"Sinônimo {syn_name} aponta para {curr_name}",
+                            details=f"Synonym {syn_name} points to {curr_name}",
                             depth=current_depth,
                         )
                     )
@@ -731,9 +731,9 @@ def trace_raw_dependencies(
                         ref_tbl = fk.referenced_table.upper()
                         if ref_tbl == curr_name or ref_tbl in ORACLE_RESERVED_WORDS:
                             continue
-                        fk_key = ("FK", curr_name, ref_tbl, (fk.column or "").upper())
-                        if fk_key not in seen_links:
-                            seen_links.add(fk_key)
+                        link_key = ("FK", curr_name, ref_tbl, (fk.column or "").upper())
+                        if link_key not in seen_links:
+                            seen_links.add(link_key)
                             result.dependencies.append(
                                 DependencyLink(
                                     source_name=curr_name,
@@ -741,7 +741,7 @@ def trace_raw_dependencies(
                                     target_name=ref_tbl,
                                     target_type="TABLE",
                                     relation_type="FK_REFERENCES",
-                                    details=f"Coluna {fk.column} -> {ref_tbl}.{fk.referenced_column} ({fk.name})",
+                                    details=f"Column {fk.column} -> {ref_tbl}.{fk.referenced_column} ({fk.name})",
                                     depth=current_depth,
                                 )
                             )
@@ -764,7 +764,7 @@ def trace_raw_dependencies(
                             target_name=curr_name,
                             target_type=curr_type,
                             relation_type="FK_REFERENCED_BY",
-                            details=f"Tabela filha {child_name}.{fk.column} referencia {curr_name}.{fk.referenced_column}",
+                            details=f"Child table {child_name}.{fk.column} references {curr_name}.{fk.referenced_column}",
                             depth=current_depth,
                         )
                     )
@@ -788,7 +788,7 @@ def trace_raw_dependencies(
                             target_name=curr_name,
                             target_type=curr_type,
                             relation_type="TRIGGER_ON",
-                            details=f"Evento {trg.trigger_type} {trg.triggering_event}",
+                            details=f"Trigger {trg.trigger_type} {trg.triggering_event}",
                             depth=current_depth,
                         )
                     )
@@ -897,7 +897,7 @@ def trace_subprogram_dependencies(
                                 target_name=call_name,
                                 target_type="SUBPROGRAM",
                                 relation_type="EXECUTES/CALLS",
-                                details=f"Sub-rotina invoca {call_name}",
+                                details=f"Routine invokes {call_name}",
                                 depth=1,
                             )
                         )
@@ -935,7 +935,7 @@ def trace_subprogram_dependencies(
                         target_name=w,
                         target_type=target_type,
                         relation_type=rel_type,
-                        details=f"Sub-rotina manipula/executa {w}",
+                        details=f"Routine accesses/executes {w}",
                         depth=1,
                     )
                 )

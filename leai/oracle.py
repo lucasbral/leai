@@ -33,7 +33,7 @@ def _build_connect_kwargs(dsn: str) -> dict[str, str]:
 
     service = parsed.path.lstrip("/")
     if not parsed.hostname or not service:
-        raise ValueError("Oracle DSN URL inválida. Informe host, porta e serviço.")
+        raise ValueError("Invalid Oracle DSN URL. Provide host, port, and service name.")
 
     easy_connect = f"{parsed.hostname}:{parsed.port}/{service}" if parsed.port else f"{parsed.hostname}/{service}"
     return {

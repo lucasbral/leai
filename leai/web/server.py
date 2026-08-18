@@ -520,7 +520,7 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                 }
             )
         except Exception as exc:
-            self._send_error(f"Erro ao obter configurações: {exc}")
+            self._send_error(f"Error fetching configuration: {exc}")
 
     def _handle_api_save_config(self, payload: dict[str, Any]) -> None:
         cfg = self.server.config
@@ -623,7 +623,7 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         self._send_json(
             {
                 "success": True,
-                "message": "Configurações salvas no leai.yml com sucesso!",
+                "message": "Configuration saved to leai.yml successfully!",
                 "saved_file": str(config_path.resolve()),
             }
         )

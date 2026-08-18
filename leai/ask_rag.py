@@ -74,14 +74,14 @@ def build_rag_context(
             if sub_block:
                 skeleton = extract_package_skeleton(co.source)
                 context_parts.append(
-                    f"### [SUBPROGRAMA PL/SQL FOCAL: {entity} (PACOTE {co.name})]\n"
+                    f"### [FOCAL PL/SQL SUBPROGRAM: {entity} (PACKAGE {co.name})]\n"
                     f"{skeleton}\n\n"
-                    f"CÓDIGO-FONTE MINIFICADO DO SUBPROGRAMA REQUISITADO:\n```sql\n{sub_block}\n```"
+                    f"MINIFIED SOURCE CODE OF REQUESTED SUBPROGRAM:\n```sql\n{sub_block}\n```"
                 )
 
     # 3. If primary entities are detected, generate the trace and contextual dossier
     if detected_entities:
-        context_parts.append("### [RAG CONTEXT] DETALHAMENTO DE IMPACTO E LINHAGEM TÉCNICA DAS ENTIDADES FOCAIS:")
+        context_parts.append("### [RAG CONTEXT] TECHNICAL IMPACT & LINEAGE DOSSIER OF FOCAL ENTITIES:")
         for entity in detected_entities[:3]:  # Limit to 3 entities to avoid context overflow
             # If the entity is a subprogram, trace its parent package
             target_trace = subprogram_to_package_map[entity][0].name if entity in subprogram_to_package_map else entity
@@ -102,11 +102,11 @@ def build_rag_context(
                 # Render dossier in Markdown with Mermaid and Frontmatter
                 dossier_text = render_dossier_markdown(trace_res, annotation=ann)
                 context_parts.append(
-                    f"\n--- INÍCIO DO DOSSIÊ FOCAL: {target_trace} ---\n{dossier_text}\n--- FIM DO DOSSIÊ FOCAL: {target_trace} ---"
+                    f"\n--- START OF FOCAL DOSSIER: {target_trace} ---\n{dossier_text}\n--- END OF FOCAL DOSSIER: {target_trace} ---"
                 )
 
     # 4. Add high-level macro catalog summary in compact notation (low token consumption)
-    context_parts.append("\n### [CATÁLOGO COMPACTO DO SCHEMA]")
+    context_parts.append("\n### [COMPACT SCHEMA CATALOG]")
     for s in schemas:
         compact_text = compact_schema_notation(s, max_tables=50)
         context_parts.append(compact_text)

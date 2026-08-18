@@ -934,14 +934,14 @@
     <div class="header-center">
       <div class="search-box">
         <span class="search-icon">🔍</span>
-        <input type="text" id="global-search" placeholder="Buscar tabela, view, package, procedure ou regra..." oninput="filterCatalog(this.value)">
+        <input type="text" id="global-search" placeholder="Search table, view, package, procedure, or business rule..." oninput="filterCatalog(this.value)">
       </div>
     </div>
 
     <div class="header-actions">
-      <button class="btn btn-secondary" onclick="loadCatalog()">🔄 Atualizar</button>
-      <button class="btn btn-secondary" onclick="compileAll()">📦 Recompilar Tudo</button>
-      <button class="btn btn-secondary" style="font-size: 15px; padding: 6px 12px;" onclick="openSettingsModal()" title="Configurações (leai.yml)">⚙️</button>
+      <button class="btn btn-secondary" onclick="loadCatalog()">🔄 Refresh</button>
+      <button class="btn btn-secondary" onclick="compileAll()">📦 Recompile All</button>
+      <button class="btn btn-secondary" style="font-size: 15px; padding: 6px 12px;" onclick="openSettingsModal()" title="Settings (leai.yml)">⚙️</button>
     </div>
   </header>
 
@@ -950,11 +950,11 @@
     <!-- Sidebar Object Navigator -->
     <aside class="sidebar">
       <div class="sidebar-header">
-        <span>Catálogo de Objetos</span>
-        <span id="catalog-count" style="color: var(--accent); font-family: var(--font-mono);">0 objetos</span>
+        <span>Object Catalog</span>
+        <span id="catalog-count" style="color: var(--accent); font-family: var(--font-mono);">0 objects</span>
       </div>
       <div class="sidebar-tree" id="sidebar-tree">
-        <div style="padding: 20px; text-align: center; color: var(--text-muted);">Carregando catálogo...</div>
+        <div style="padding: 20px; text-align: center; color: var(--text-muted);">Loading catalog...</div>
       </div>
     </aside>
 
@@ -963,8 +963,8 @@
       <!-- Empty Placeholder -->
       <div id="empty-state-view" class="empty-state">
         <div style="font-size: 48px;">📂</div>
-        <h2>Selecione um Objeto no Catálogo</h2>
-        <p style="max-width: 420px; font-size: 13px;">Navegue pela lista de tabelas, views e packages na barra lateral para visualizar documentações compiladas e editar anotações em tempo real.</p>
+        <h2>Select an Object in Catalog</h2>
+        <p style="max-width: 420px; font-size: 13px;">Browse tables, views, and packages in the sidebar to view compiled documentation and edit annotations in real time.</p>
       </div>
 
       <!-- Object Workspace (Hidden by default) -->
@@ -973,63 +973,63 @@
           <div class="object-title-wrap">
             <span class="object-type-badge" id="view-obj-type">TABLE</span>
             <div class="object-name">
-              <span class="object-schema-name" id="view-obj-schema">ERGON.</span><span id="view-obj-name">FUNCIONARIOS</span>
+              <span class="object-schema-name" id="view-obj-schema">HR.</span><span id="view-obj-name">EMPLOYEES</span>
             </div>
           </div>
 
           <div style="display: flex; gap: 8px;">
-            <button class="btn btn-ai" id="btn-ai-enrich" onclick="runAiEnrich()">✨ Sugerir com IA</button>
-            <button class="btn btn-primary" onclick="saveAnnotations()">💾 Salvar e Recompilar</button>
+            <button class="btn btn-ai" id="btn-ai-enrich" onclick="runAiEnrich()">✨ Suggest with AI</button>
+            <button class="btn btn-primary" onclick="saveAnnotations()">💾 Save & Recompile</button>
           </div>
         </div>
 
         <div class="tabs-bar">
-          <button class="tab-btn active" onclick="switchTab('edit')">✏️ Editor de Anotações</button>
-          <button class="tab-btn" onclick="switchTab('doc')">📄 Documentação Compilada</button>
-          <button class="tab-btn" onclick="switchTab('lineage')">📊 Linhagem & Impacto</button>
+          <button class="tab-btn active" onclick="switchTab('edit')">✏️ Annotation Editor</button>
+          <button class="tab-btn" onclick="switchTab('doc')">📄 Compiled Docs</button>
+          <button class="tab-btn" onclick="switchTab('lineage')">📊 Lineage & Impact</button>
         </div>
 
         <div class="tab-content">
           <!-- TAB 1: Editor Pane -->
           <div class="tab-pane active" id="tab-pane-edit">
             <div class="form-group">
-              <label class="form-label">📝 Descrição de Negócio / Objetivo da Entidade</label>
-              <textarea id="edit-description" class="form-control" style="min-height: 80px;" placeholder="Descreva o propósito funcional desta tabela/rotina para as regras de negócio..."></textarea>
+              <label class="form-label">📝 Business Description / Entity Purpose</label>
+              <textarea id="edit-description" class="form-control" style="min-height: 80px;" placeholder="Describe the functional purpose of this table/routine for business rules..."></textarea>
             </div>
 
             <div class="form-group">
-              <label class="form-label">📌 Regras de Negócio</label>
+              <label class="form-label">📌 Business Rules</label>
               <div class="rules-list" id="rules-container"></div>
-              <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('rules-container', '', 'ex: Todo funcionário ativo deve pertencer a um departamento válido...')">+ Adicionar Regra</button>
+              <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('rules-container', '', 'e.g. Every active employee must belong to a valid department...')">+ Add Rule</button>
             </div>
 
             <div class="form-group">
-              <label class="form-label">💡 Casos de Uso & Consultas de Exemplo</label>
+              <label class="form-label">💡 Use Cases & Sample Queries</label>
               <div class="rules-list" id="use-cases-container"></div>
-              <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('use-cases-container', '', 'ex: Consulta analítica de cálculo de proventos e descontos...')">+ Adicionar Caso de Uso</button>
+              <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('use-cases-container', '', 'e.g. Analytical query for earnings and deduction calculations...')">+ Add Use Case</button>
             </div>
 
             <div class="form-group">
-              <label class="form-label">⚠️ Alertas & Cuidados Técnicos</label>
+              <label class="form-label">⚠️ Technical Alerts & Warnings</label>
               <div class="rules-list" id="warnings-container"></div>
-              <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('warnings-container', '', 'ex: Tabela particionada mensalmente; sempre filtre pela coluna DT_COMPETENCIA...')">+ Adicionar Alerta</button>
+              <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('warnings-container', '', 'e.g. Monthly partitioned table; always filter on DT_COMPETENCIA column...')">+ Add Warning</button>
             </div>
 
             <div class="form-group">
-              <label class="form-label">🔗 Relacionamentos de Negócio / Objetos Conectados</label>
+              <label class="form-label">🔗 Business Relationships / Connected Objects</label>
               <div class="rules-list" id="related-objects-container"></div>
-              <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('related-objects-container', '', 'ex: TAB_DEPARTAMENTOS, PKG_FOLHA_PAGAMENTO...')">+ Adicionar Objeto Relacionado</button>
+              <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('related-objects-container', '', 'e.g. TAB_DEPARTMENTS, PKG_PAYROLL...')">+ Add Related Object</button>
             </div>
 
             <div class="form-group" id="columns-section">
-              <label class="form-label">📋 Dicionário de Colunas (Descrições de Campos)</label>
+              <label class="form-label">📋 Column Dictionary (Field Descriptions)</label>
               <div class="table-container">
                 <table class="data-table">
                   <thead>
                     <tr>
-                      <th style="width: 25%;">Coluna</th>
-                      <th style="width: 15%;">Tipo de Dado</th>
-                      <th style="width: 60%;">Descrição de Negócio</th>
+                      <th style="width: 25%;">Column</th>
+                      <th style="width: 15%;">Data Type</th>
+                      <th style="width: 60%;">Business Description</th>
                     </tr>
                   </thead>
                   <tbody id="columns-table-body"></tbody>
@@ -1038,8 +1038,8 @@
             </div>
 
             <div class="form-group">
-              <label class="form-label">🏷️ Tags de Classificação (separadas por vírgula)</label>
-              <input type="text" id="edit-tags" class="form-control" placeholder="ex: RH, FOLHA, PAGAMENTO, SENSIVEL">
+              <label class="form-label">🏷️ Classification Tags (comma-separated)</label>
+              <input type="text" id="edit-tags" class="form-control" placeholder="e.g. HR, PAYROLL, SENSITIVE">
             </div>
           </div>
 
@@ -1052,15 +1052,15 @@
               </div>
               <div style="display: flex; gap: 8px; align-items: center;">
                 <div class="doc-segmented-control">
-                  <button type="button" class="seg-btn active" id="seg-btn-rendered" onclick="setDocViewMode('rendered')">👁️ Formatado</button>
-                  <button type="button" class="seg-btn" id="seg-btn-source" onclick="setDocViewMode('source')">📝 Código Fonte (.md)</button>
+                  <button type="button" class="seg-btn active" id="seg-btn-rendered" onclick="setDocViewMode('rendered')">👁️ Rendered</button>
+                  <button type="button" class="seg-btn" id="seg-btn-source" onclick="setDocViewMode('source')">📝 Source Code (.md)</button>
                 </div>
-                <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 12px;" onclick="copyCompiledMarkdown()">📋 Copiar Markdown</button>
+                <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 12px;" onclick="copyCompiledMarkdown()">📋 Copy Markdown</button>
               </div>
             </div>
 
             <div class="markdown-body" id="doc-rendered-content">
-              <p>Carregando visualização...</p>
+              <p>Loading preview...</p>
             </div>
             <pre class="doc-source-code" id="doc-source-content" style="display: none;"></pre>
           </div>
@@ -1070,7 +1070,7 @@
             <div class="mermaid-box" id="mermaid-container">
               <pre class="mermaid" id="mermaid-code">
 graph TD
-  A[Carregando Linhagem...]
+  A[Loading Lineage...]
               </pre>
             </div>
           </div>
@@ -1083,43 +1083,43 @@ graph TD
   <div id="settings-modal" class="modal-backdrop" onclick="if(event.target === this) closeSettingsModal()">
     <div class="modal-dialog">
       <div class="modal-header">
-        <div class="modal-title">⚙️ Configurações do Projeto (<code>leai.yml</code>)</div>
-        <button type="button" class="btn-icon" onclick="closeSettingsModal()" title="Fechar">✕</button>
+        <div class="modal-title">⚙️ Project Settings (<code>leai.yml</code>)</div>
+        <button type="button" class="btn-icon" onclick="closeSettingsModal()" title="Close">✕</button>
       </div>
 
       <div class="modal-nav">
-        <button type="button" class="modal-nav-btn active" id="btn-modal-tab-conn" onclick="switchSettingsTab('conn')">🔌 Conexão & Schemas</button>
-        <button type="button" class="modal-nav-btn" id="btn-modal-tab-paths" onclick="switchSettingsTab('paths')">📁 Diretórios</button>
-        <button type="button" class="modal-nav-btn" id="btn-modal-tab-ai" onclick="switchSettingsTab('ai')">🤖 Inteligência Artificial</button>
+        <button type="button" class="modal-nav-btn active" id="btn-modal-tab-conn" onclick="switchSettingsTab('conn')">🔌 Connection & Schemas</button>
+        <button type="button" class="modal-nav-btn" id="btn-modal-tab-paths" onclick="switchSettingsTab('paths')">📁 Directories</button>
+        <button type="button" class="modal-nav-btn" id="btn-modal-tab-ai" onclick="switchSettingsTab('ai')">🤖 Artificial Intelligence</button>
       </div>
 
       <div class="modal-body">
-        <!-- Tab 1: Conexão & Schemas -->
+        <!-- Tab 1: Connection & Schemas -->
         <div id="settings-tab-conn">
           <div class="form-group">
-            <label class="form-label">🔗 String de Conexão Oracle (DSN)</label>
-            <input type="text" id="cfg-dsn" class="form-control" placeholder="user/password@host:1521/service ou ${ORACLE_DSN}">
-            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Aceita credenciais diretas ou variáveis de ambiente como <code>${LEAI_DSN}</code>.</span>
+            <label class="form-label">🔗 Oracle Connection String (DSN)</label>
+            <input type="text" id="cfg-dsn" class="form-control" placeholder="user/password@host:1521/service or ${ORACLE_DSN}">
+            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Accepts direct credentials or environment variables like <code>${LEAI_DSN}</code>.</span>
           </div>
 
           <div class="form-group">
-            <label class="form-label">📁 Schemas a Documentar (separados por vírgula)</label>
+            <label class="form-label">📁 Schemas to Document (comma-separated)</label>
             <input type="text" id="cfg-schemas" class="form-control" placeholder="HR, FINANCE, ERGON, ALL">
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="form-group">
-              <label class="form-label">🔍 Incluir Apenas (Include)</label>
-              <input type="text" id="cfg-include" class="form-control" placeholder="TAB_*, PRC_* (opcional)">
+              <label class="form-label">🔍 Include Only (Include)</label>
+              <input type="text" id="cfg-include" class="form-control" placeholder="TAB_*, PRC_* (optional)">
             </div>
             <div class="form-group">
-              <label class="form-label">🚫 Excluir (Exclude)</label>
-              <input type="text" id="cfg-exclude" class="form-control" placeholder="TMP_*, BAK_* (opcional)">
+              <label class="form-label">🚫 Exclude (Exclude)</label>
+              <input type="text" id="cfg-exclude" class="form-control" placeholder="TMP_*, BAK_* (optional)">
             </div>
           </div>
 
           <div class="form-group">
-            <label class="form-label">📦 Tipos de Objetos a Extrair / Compilar</label>
+            <label class="form-label">📦 Object Types to Extract / Compile</label>
             <div class="checkbox-grid" id="cfg-object-types-grid">
               <label class="checkbox-label"><input type="checkbox" name="cfg-obj-type" value="tables" checked> tables</label>
               <label class="checkbox-label"><input type="checkbox" name="cfg-obj-type" value="views" checked> views</label>
@@ -1136,31 +1136,31 @@ graph TD
           </div>
         </div>
 
-        <!-- Tab 2: Diretórios -->
+        <!-- Tab 2: Directories -->
         <div id="settings-tab-paths" style="display: none;">
           <div class="form-group">
-            <label class="form-label">📦 Diretório de Metadados Brutos (rawPath)</label>
+            <label class="form-label">📦 Raw Metadata Directory (rawPath)</label>
             <input type="text" id="cfg-raw-path" class="form-control" placeholder="./raw">
-            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Local onde os JSONs da extração bruta do Oracle são armazenados.</span>
+            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Directory where raw Oracle JSON snapshot files are stored.</span>
           </div>
 
           <div class="form-group">
-            <label class="form-label">✏️ Diretório de Anotações YAML (annotationsPath)</label>
+            <label class="form-label">✏️ YAML Annotations Directory (annotationsPath)</label>
             <input type="text" id="cfg-ann-path" class="form-control" placeholder="./annotations">
-            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Local onde as anotações e regras de negócio funcionais são salvas.</span>
+            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Directory where functional annotations and business rules are stored.</span>
           </div>
 
           <div class="form-group">
-            <label class="form-label">📄 Diretório de Documentações Markdown (docPath)</label>
+            <label class="form-label">📄 Markdown Docs Directory (docPath)</label>
             <input type="text" id="cfg-doc-path" class="form-control" placeholder="./docs">
-            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Local onde os arquivos Markdown (.md) compilados finais são gerados.</span>
+            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Directory where compiled Markdown (.md) documents are generated.</span>
           </div>
         </div>
 
-        <!-- Tab 3: Inteligência Artificial -->
+        <!-- Tab 3: Artificial Intelligence -->
         <div id="settings-tab-ai" style="display: none;">
           <div class="form-group">
-            <label class="form-label">🤖 Provedor de IA Padrão (default_provider)</label>
+            <label class="form-label">🤖 Default AI Provider (default_provider)</label>
             <select id="cfg-ai-provider" class="form-control" onchange="onAiProviderChanged()">
               <option value="gemini">Google Gemini</option>
               <option value="openai">OpenAI (GPT-4o, etc.)</option>
@@ -1175,22 +1175,22 @@ graph TD
           </div>
 
           <div class="form-group">
-            <label class="form-label">🧠 Modelo do Provedor Selecionado (model)</label>
-            <input type="text" id="cfg-ai-model" class="form-control" placeholder="ex: gemini-1.5-flash, gpt-4o, claude-3-5-sonnet-20241022...">
+            <label class="form-label">🧠 Selected Provider Model (model)</label>
+            <input type="text" id="cfg-ai-model" class="form-control" placeholder="e.g. gemini-1.5-flash, gpt-4o, claude-3-5-sonnet-20241022...">
           </div>
 
           <div class="form-group">
-            <label class="form-label">🔑 Chave de API (api_key)</label>
-            <input type="password" id="cfg-ai-apikey" class="form-control" placeholder="Deixe em branco para manter a chave atual ou use ${ENV_VAR}">
+            <label class="form-label">🔑 API Key (api_key)</label>
+            <input type="password" id="cfg-ai-apikey" class="form-control" placeholder="Leave blank to keep existing key or use ${ENV_VAR}">
           </div>
 
           <div class="form-group">
-            <label class="form-label">🌐 Base URL Customizada (opcional)</label>
-            <input type="text" id="cfg-ai-baseurl" class="form-control" placeholder="ex: http://localhost:11434 (para Ollama ou proxy)">
+            <label class="form-label">🌐 Custom Base URL (optional)</label>
+            <input type="text" id="cfg-ai-baseurl" class="form-control" placeholder="e.g. http://localhost:11434 (for Ollama or proxy)">
           </div>
 
           <div class="form-group">
-            <label class="form-label">🌡️ Temperatura de Criatividade</label>
+            <label class="form-label">🌡️ Creativity Temperature</label>
             <div style="display: flex; align-items: center; gap: 12px;">
               <input type="range" id="cfg-ai-temp" min="0" max="1" step="0.05" value="0.2" class="form-control" style="flex: 1;" oninput="document.getElementById('cfg-ai-temp-val').textContent = parseFloat(this.value).toFixed(2)">
               <span id="cfg-ai-temp-val" style="font-family: var(--font-mono); font-weight: 700; width: 40px; color: var(--accent);">0.20</span>
@@ -1200,15 +1200,15 @@ graph TD
       </div>
 
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" onclick="closeSettingsModal()">Cancelar</button>
-        <button type="button" class="btn btn-primary" onclick="saveSettings()">💾 Salvar no leai.yml</button>
+        <button type="button" class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="saveSettings()">💾 Save to leai.yml</button>
       </div>
     </div>
   </div>
 
   <!-- Toast -->
   <div id="app-toast" class="toast success">
-    <span id="toast-message">Salvo com sucesso!</span>
+    <span id="toast-message">Saved successfully!</span>
   </div>
 
   <script>
@@ -1261,7 +1261,7 @@ graph TD
 
         renderCatalogTree(currentCatalog, document.getElementById('global-search').value);
       } catch (e) {
-        showToast('Erro ao carregar catálogo', true);
+        showToast('Failed to load catalog', true);
       }
     }
 
@@ -1318,11 +1318,11 @@ graph TD
         schemaBody.className = `tree-schema-body ${isSchemaCollapsed ? 'collapsed' : ''}`;
 
         const cats = [
-          { key: 'tables', label: 'Tabelas', icon: '📊', type: 'TABLE' },
+          { key: 'tables', label: 'Tables', icon: '📊', type: 'TABLE' },
           { key: 'views', label: 'Views', icon: '👁️', type: 'VIEW' },
-          { key: 'code_objects', label: 'Rotinas (PL/SQL)', icon: '⚙️', type: 'CODE' },
+          { key: 'code_objects', label: 'Routines (PL/SQL)', icon: '⚙️', type: 'CODE' },
           { key: 'triggers', label: 'Triggers', icon: '⚡', type: 'TRIGGER' },
-          { key: 'synonyms', label: 'Sinônimos', icon: '🔗', type: 'SYNONYM' },
+          { key: 'synonyms', label: 'Synonyms', icon: '🔗', type: 'SYNONYM' },
           { key: 'sequences', label: 'Sequences', icon: '🔢', type: 'SEQUENCE' },
         ];
 
@@ -1363,7 +1363,7 @@ graph TD
               }
               itemEl.innerHTML = `
                 <span>${item.name}</span>
-                <span class="item-badge ${item.is_annotated ? 'annotated' : ''}" title="${item.is_annotated ? 'Documentado' : 'Pendente'}"></span>
+                <span class="item-badge ${item.is_annotated ? 'annotated' : ''}" title="${item.is_annotated ? 'Documented' : 'Pending'}"></span>
               `;
               itemEl.onclick = () => selectObject(schema.schema_name, cat.type, item.name);
               catBody.appendChild(itemEl);
@@ -1381,7 +1381,7 @@ graph TD
         }
       });
 
-      document.getElementById('catalog-count').textContent = `${totalObjects} objetos`;
+      document.getElementById('catalog-count').textContent = `${totalObjects} objects`;
     }
 
     function filterCatalog(text) {
@@ -1411,7 +1411,7 @@ graph TD
       div.className = 'rule-item';
       div.innerHTML = `
         <input type="text" class="form-control dynamic-item-input" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}">
-        <button type="button" class="btn-icon" onclick="this.parentElement.remove()" title="Remover item">✕</button>
+        <button type="button" class="btn-icon" onclick="this.parentElement.remove()" title="Remove item">✕</button>
       `;
       container.appendChild(div);
     }
@@ -1466,10 +1466,10 @@ graph TD
         document.getElementById('edit-tags').value = (ann.tags || []).join(', ');
 
         // Populate Dynamic Lists
-        populateDynamicList('rules-container', ann.business_rules, 'ex: Todo funcionário ativo deve pertencer a um departamento válido...');
-        populateDynamicList('use-cases-container', ann.use_cases, 'ex: Consulta analítica de cálculo de proventos e descontos...');
-        populateDynamicList('warnings-container', ann.warnings, 'ex: Tabela particionada mensalmente; sempre filtre pela coluna DT_COMPETENCIA...');
-        populateDynamicList('related-objects-container', ann.related_objects, 'ex: TAB_DEPARTAMENTOS, PKG_FOLHA_PAGAMENTO...');
+        populateDynamicList('rules-container', ann.business_rules, 'e.g. Every active employee must belong to a valid department...');
+        populateDynamicList('use-cases-container', ann.use_cases, 'e.g. Analytical query for earnings and deduction calculations...');
+        populateDynamicList('warnings-container', ann.warnings, 'e.g. Monthly partitioned table; always filter on DT_COMPETENCIA column...');
+        populateDynamicList('related-objects-container', ann.related_objects, 'e.g. TAB_DEPARTMENTS, PKG_PAYROLL...');
 
         // Populate Columns
         const colSection = document.getElementById('columns-section');
@@ -1494,7 +1494,7 @@ graph TD
               </td>
               <td><span class="col-type">${c.data_type}</span></td>
               <td>
-                <input type="text" class="form-control col-desc-input" data-col-name="${c.name}" value="${escapeHtml(existingDesc)}" placeholder="Descrição da coluna ${c.name}...">
+                <input type="text" class="form-control col-desc-input" data-col-name="${c.name}" value="${escapeHtml(existingDesc)}" placeholder="Description for column ${c.name}...">
               </td>
             `;
             colBody.appendChild(tr);
@@ -1504,13 +1504,13 @@ graph TD
         }
 
         // Populate Markdown Doc Preview
-        renderMarkdownDoc(data.markdown_doc || '# Sem documentação compilada ainda.');
+        renderMarkdownDoc(data.markdown_doc || '# No compiled documentation yet.');
 
         // Populate Mermaid Lineage
         renderMermaidLineage(data.lineage_mermaid || `graph TD\n  ${name}[${name}]`);
 
       } catch (e) {
-        showToast('Erro ao carregar objeto', true);
+        showToast('Failed to load object', true);
       }
     }
 
@@ -1556,14 +1556,14 @@ graph TD
         });
         const result = await res.json();
         if (result.success) {
-          showToast(`✓ Anotação salva e documentação recompilada!`);
+          showToast(`✓ Annotation saved and documentation recompiled!`);
           await selectObject(currentObject.schema, currentObject.type, currentObject.name);
           await loadCatalog();
         } else {
-          showToast(`Erro ao salvar: ${result.error}`, true);
+          showToast(`Failed to save: ${result.error}`, true);
         }
       } catch (e) {
-        showToast('Erro ao salvar anotação', true);
+        showToast('Failed to save annotation', true);
       }
     }
 
@@ -1571,7 +1571,7 @@ graph TD
       if (!currentObject) return;
       const btn = document.getElementById('btn-ai-enrich');
       btn.disabled = true;
-      btn.textContent = '⏳ Gerando com IA...';
+      btn.textContent = '⏳ Generating with AI...';
 
       try {
         const res = await fetch('/api/enrich', {
@@ -1590,16 +1590,16 @@ graph TD
             document.getElementById('edit-description').value = e.business_description;
           }
           if (e.business_rules) {
-            populateDynamicList('rules-container', e.business_rules, 'ex: Todo funcionário ativo deve pertencer a um departamento válido...');
+            populateDynamicList('rules-container', e.business_rules, 'e.g. Every active employee must belong to a valid department...');
           }
           if (e.use_cases) {
-            populateDynamicList('use-cases-container', e.use_cases, 'ex: Consulta analítica de cálculo de proventos e descontos...');
+            populateDynamicList('use-cases-container', e.use_cases, 'e.g. Analytical query for earnings and deduction calculations...');
           }
           if (e.warnings) {
-            populateDynamicList('warnings-container', e.warnings, 'ex: Tabela particionada mensalmente; sempre filtre pela coluna DT_COMPETENCIA...');
+            populateDynamicList('warnings-container', e.warnings, 'e.g. Monthly partitioned table; always filter on DT_COMPETENCIA column...');
           }
           if (e.related_objects) {
-            populateDynamicList('related-objects-container', e.related_objects, 'ex: TAB_DEPARTAMENTOS, PKG_FOLHA_PAGAMENTO...');
+            populateDynamicList('related-objects-container', e.related_objects, 'e.g. TAB_DEPARTMENTS, PKG_PAYROLL...');
           }
           if (e.tags && e.tags.length > 0) {
             document.getElementById('edit-tags').value = e.tags.join(', ');
@@ -1613,15 +1613,15 @@ graph TD
               }
             });
           }
-          showToast('✨ Sugestões geradas com sucesso pela IA!');
+          showToast('✨ Suggestions generated successfully by AI!');
         } else {
-          showToast(`Erro na IA: ${data.error || 'Sem retorno'}`, true);
+          showToast(`AI error: ${data.error || 'No response'}`, true);
         }
       } catch (err) {
-        showToast('Falha ao comunicar com IA', true);
+        showToast('Failed to communicate with AI', true);
       } finally {
         btn.disabled = false;
-        btn.textContent = '✨ Sugerir com IA';
+        btn.textContent = '✨ Suggest with AI';
       }
     }
 
@@ -1630,13 +1630,13 @@ graph TD
         const res = await fetch('/api/compile', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
-          showToast(`✓ Todas as documentações foram compiladas!`);
+          showToast(`✓ All documentation compiled successfully!`);
           if (currentObject) {
             await selectObject(currentObject.schema, currentObject.type, currentObject.name);
           }
         }
       } catch (e) {
-        showToast('Erro ao recompilar', true);
+        showToast('Error during recompilation', true);
       }
     }
 
@@ -1656,11 +1656,11 @@ graph TD
 
     function parseGitHubAlerts(md) {
       const alertMap = {
-        'NOTE': { icon: 'ℹ️', title: 'Nota', class: 'alert-note' },
-        'TIP': { icon: '💡', title: 'Dica', class: 'alert-tip' },
-        'IMPORTANT': { icon: '🟣', title: 'Importante', class: 'alert-important' },
-        'WARNING': { icon: '⚠️', title: 'Alerta / Atenção', class: 'alert-warning' },
-        'CAUTION': { icon: '🛑', title: 'Cuidado', class: 'alert-caution' }
+        'NOTE': { icon: 'ℹ️', title: 'Note', class: 'alert-note' },
+        'TIP': { icon: '💡', title: 'Tip', class: 'alert-tip' },
+        'IMPORTANT': { icon: '🟣', title: 'Important', class: 'alert-important' },
+        'WARNING': { icon: '⚠️', title: 'Warning', class: 'alert-warning' },
+        'CAUTION': { icon: '🛑', title: 'Caution', class: 'alert-caution' }
       };
 
       const lines = md.split('\n');
@@ -1770,7 +1770,7 @@ graph TD
         header.className = 'code-block-header';
         header.innerHTML = `
           <span>${escapeHtml(langName)}</span>
-          <button type="button" class="code-copy-btn" onclick="copySnippetCode(this)">📋 Copiar</button>
+          <button type="button" class="code-copy-btn" onclick="copySnippetCode(this)">📋 Copy</button>
         `;
 
         pre.parentNode.insertBefore(wrapper, pre);
@@ -1800,12 +1800,12 @@ graph TD
 
     async function copyCompiledMarkdown() {
       if (!currentMarkdownDoc) {
-        showToast('Nenhum markdown para copiar', true);
+        showToast('No markdown to copy', true);
         return;
       }
       try {
         await navigator.clipboard.writeText(currentMarkdownDoc);
-        showToast('✓ Documentação Markdown copiada para a área de transferência!');
+        showToast('✓ Markdown documentation copied to clipboard!');
       } catch (e) {
         const ta = document.createElement('textarea');
         ta.value = currentMarkdownDoc;
@@ -1813,7 +1813,7 @@ graph TD
         ta.select();
         document.execCommand('copy');
         document.body.removeChild(ta);
-        showToast('✓ Documentação Markdown copiada!');
+        showToast('✓ Markdown documentation copied!');
       }
     }
 
@@ -1825,11 +1825,11 @@ graph TD
       const text = codeEl.innerText;
       try {
         await navigator.clipboard.writeText(text);
-        btn.textContent = '✓ Copiado!';
-        setTimeout(() => { btn.textContent = '📋 Copiar'; }, 2000);
+        btn.textContent = '✓ Copied!';
+        setTimeout(() => { btn.textContent = '📋 Copy'; }, 2000);
       } catch (e) {
-        btn.textContent = '✓ Copiado!';
-        setTimeout(() => { btn.textContent = '📋 Copiar'; }, 2000);
+        btn.textContent = '✓ Copied!';
+        setTimeout(() => { btn.textContent = '📋 Copy'; }, 2000);
       }
     }
 
@@ -1845,9 +1845,9 @@ graph TD
         console.warn('Mermaid rendering error:', e);
         container.innerHTML = `
           <div style="text-align: center; color: var(--warning); padding: 24px; font-size: 13px;">
-            <p>⚠️ Grafo de dependências extenso ou com formato complexo.</p>
+            <p>⚠️ Large or complex dependency graph.</p>
             <details style="text-align: left; margin-top: 12px; max-width: 650px; margin-left: auto; margin-right: auto;">
-              <summary style="cursor: pointer; color: var(--accent); font-weight: 600;">Ver código Mermaid gerado</summary>
+              <summary style="cursor: pointer; color: var(--accent); font-weight: 600;">View generated Mermaid code</summary>
               <pre style="background: var(--bg-tertiary); padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 11px; margin-top: 8px;">${escapeHtml(mermaidCode)}</pre>
             </details>
           </div>
@@ -1861,12 +1861,12 @@ graph TD
       try {
         const res = await fetch('/api/config');
         if (!res.ok) {
-          showToast(`Erro ao carregar configurações (HTTP ${res.status}). Se você atualizou o código, reinicie o servidor 'leai serve'.`, true);
+          showToast(`Failed to load settings (HTTP ${res.status}). If you updated the code, restart the 'leai serve' server.`, true);
           return;
         }
         const data = await res.json();
         if (data.success === false) {
-          showToast(`Erro do servidor: ${data.error}`, true);
+          showToast(`Server error: ${data.error}`, true);
           return;
         }
         globalConfig = data;
@@ -1918,7 +1918,7 @@ graph TD
         document.getElementById('settings-modal').classList.add('show');
       } catch (e) {
         console.error('Failed to load settings:', e);
-        showToast('Erro ao carregar configurações. Verifique o console ou reinicie o servidor.', true);
+        showToast('Failed to load settings. Check the console or restart the server.', true);
       }
     }
 
@@ -1944,9 +1944,9 @@ graph TD
       document.getElementById('cfg-ai-baseurl').value = provData.base_url || '';
       document.getElementById('cfg-ai-apikey').value = '';
       if (provData.has_api_key) {
-        document.getElementById('cfg-ai-apikey').placeholder = '•••••••• (Chave salva mantida se em branco)';
+        document.getElementById('cfg-ai-apikey').placeholder = '•••••••• (Saved key preserved if blank)';
       } else {
-        document.getElementById('cfg-ai-apikey').placeholder = 'Deixe em branco ou use ${ENV_VAR}';
+        document.getElementById('cfg-ai-apikey').placeholder = 'Leave blank or use ${ENV_VAR}';
       }
     }
 
@@ -2006,15 +2006,15 @@ graph TD
         });
         const data = await res.json();
         if (data.success) {
-          showToast('✓ Configurações salvas no leai.yml com sucesso!');
+          showToast('✓ Configuration saved to leai.yml successfully!');
           closeSettingsModal();
           await checkStatus();
           await loadCatalog();
         } else {
-          showToast(`Erro ao salvar: ${data.error}`, true);
+          showToast(`Failed to save: ${data.error}`, true);
         }
       } catch (e) {
-        showToast('Erro ao salvar configurações', true);
+        showToast('Failed to save configuration', true);
       }
     }
 

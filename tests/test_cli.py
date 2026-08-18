@@ -19,12 +19,12 @@ class CliIntegrationTests(unittest.TestCase):
     def test_version_option(self):
         result = self.runner.invoke(app, ["--version"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("LEAI CLI version 0.2.5", result.output)
+        self.assertIn("LEAI CLI version 0.2.6", result.output)
 
     def test_version_short_option(self):
         result = self.runner.invoke(app, ["-v"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("LEAI CLI version 0.2.5", result.output)
+        self.assertIn("LEAI CLI version 0.2.6", result.output)
 
     def test_help_command(self):
         result = self.runner.invoke(app, ["--help"])
@@ -376,8 +376,8 @@ docPath: "{(base / "docs").as_posix()}"
             # Test default invocation (calling bare `leai` without subcommand starts interactive studio)
             result_default = self.runner.invoke(app, ["--config", str(cfg_file)], input="/exit\n")
             self.assertEqual(result_default.exit_code, 0, msg=result_default.output)
-            self.assertIn("Oracle Database DOC Assistant", result_default.output)
-            self.assertIn("Leai", result_default.output)
+            self.assertIn("Oracle Database Docs", result_default.output)
+            self.assertIn("LEAI CLI", result_default.output)
 
             # Test doc command
             result_doc = self.runner.invoke(app, ["doc", "EMPLOYEES", "--config", str(cfg_file)], input="0\n")

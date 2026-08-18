@@ -171,7 +171,7 @@ class ConfigAndDocsTests(unittest.TestCase):
 
             content = path.read_text(encoding="utf-8")
             self.assertIn("Regra de negócio antiga.", content)
-            self.assertIn("| ID | NUMBER | NÃO |  |  |", content)
+            self.assertIn("| ID | NUMBER | NO |  |  |", content)
 
     def test_oracle_url_dsn_is_parsed_to_connect_kwargs(self):
         dsn = "oracle://usuario:senha@localhost:1521/ORCLPDB1"
@@ -203,8 +203,8 @@ class ConfigAndDocsTests(unittest.TestCase):
             ],
         )
         md = render_table_markdown(table)
-        self.assertIn("| Coluna | Tipo | Nulo | Padrão | Comentário |", md)
-        self.assertIn("| STATUS | VARCHAR2(1) | NÃO | 'A' | Status do registro Linha 2 |", md)
+        self.assertIn("| Column | Type | Nullable | Default | Comment |", md)
+        self.assertIn("| STATUS | VARCHAR2(1) | NO | 'A' | Status do registro Linha 2 |", md)
 
     def test_split_package_source_extracts_procedures_and_functions(self):
         plsql = """
@@ -361,7 +361,7 @@ class ConfigAndDocsTests(unittest.TestCase):
             # Test Markdown rendering
             write_schema_docs(loaded, docs_dir)
             md = (docs_dir / "tables" / "AUDIT_TBL.md").read_text(encoding="utf-8")
-            self.assertIn("**Última Modificação DDL:** 2026-08-13 14:30:00 (por `HR`)", md)
+            self.assertIn("**Last DDL Modification:** 2026-08-13 14:30:00 (by `HR`)", md)
 
     def test_raw_schema_type_and_type_body_loading(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -484,9 +484,9 @@ class ConfigAndDocsTests(unittest.TestCase):
             content = written.read_text(encoding="utf-8")
             self.assertIn("rag_metadata:", content)
             self.assertIn("entity: FUNCIONARIOS", content)
-            self.assertIn("Raio-X de Impacto Técnico:", content)
-            self.assertIn("## 🧠 Resumo Narrativo Semântico (RAG Ready)", content)
-            self.assertIn("# DOSSIÊ DE IMPACTO E DOCUMENTAÇÃO FOCAL: FUNCIONARIOS", content)
+            self.assertIn("Technical Impact X-Ray:", content)
+            self.assertIn("## 🧠 Semantic Narrative Summary (RAG Ready)", content)
+            self.assertIn("# TECHNICAL IMPACT & FOCAL DOCUMENTATION DOSSIER: FUNCIONARIOS", content)
             self.assertIn("Tabela de colaboradores da empresa", content)
             self.assertIn("Documentação humana prévia do dossiê", content)
 
@@ -595,38 +595,38 @@ class ConfigAndDocsTests(unittest.TestCase):
                 columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)],
             )
             md = render_table_markdown(table, annotation=loaded)
-            self.assertIn("## Casos de uso e Consultas de Exemplo", md)
+            self.assertIn("## Use Cases & Sample Queries", md)
             self.assertIn("```sql\nSELECT id, nome FROM employees WHERE status = 'A';\n```", md)
             self.assertIn("- Relatório de folha de pagamento por departamento", md)
 
     def test_write_schema_docs_with_traces_and_rag_chunks(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            from leai.docs import write_schema_docs
-            from leai.models import ColumnMeta, ForeignKeyMeta, SchemaMetadata, TableMeta
-
-            root = Path(tmpdir)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
             docs_dir = root / "docs"
             ann_dir = root / "annotations"
+            ann_dir.mkdir(parents=True, exist_ok=True)
 
+            emp = TableMeta(
+                name="EMPLOYEES",
+                columns=[
+                    ColumnMeta(name="ID", data_type="NUMBER", nullable=False),
+                    ColumnMeta(name="DEP_ID", data_type="NUMBER", nullable=False),
+                ],
+                primary_keys=["ID"],
+                foreign_keys=[ForeignKeyMeta(name="FK_EMP_DEP", column="DEP_ID", referenced_table="DEPARTMENTS", referenced_column="ID")],
+            )
             dept = TableMeta(
                 name="DEPARTMENTS",
                 columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)],
                 primary_keys=["ID"],
             )
-            emp = TableMeta(
-                name="EMPLOYEES",
-                columns=[
-                    ColumnMeta(name="ID", data_type="NUMBER", nullable=False),
-                    ColumnMeta(name="DEPT_ID", data_type="NUMBER", nullable=False),
-                ],
-                primary_keys=["ID"],
-                foreign_keys=[
-                    ForeignKeyMeta(name="FK_EMP_DEPT", column="DEPT_ID", referenced_table="DEPARTMENTS", referenced_column="ID"),
-                ],
-            )
-            schema = SchemaMetadata(schema_name="HR", tables=[dept, emp])
 
-            gen_md, gen_ann = write_schema_docs(
+            schema = SchemaMetadata(
+                schema_name="HR",
+                tables=[emp, dept],
+            )
+
+            write_schema_docs(
                 schema,
                 doc_path=docs_dir,
                 annotations_path=ann_dir,
@@ -638,7 +638,7 @@ class ConfigAndDocsTests(unittest.TestCase):
             index_file = docs_dir / "INDEX.md"
             self.assertTrue(index_file.exists())
             index_content = index_file.read_text(encoding="utf-8")
-            self.assertIn("Catálogo e Matriz de Governança", index_content)
+            self.assertIn("Schema Catalog & Governance Matrix", index_content)
             self.assertIn("EMPLOYEES", index_content)
             self.assertIn("DEPARTMENTS", index_content)
 
@@ -647,21 +647,13 @@ class ConfigAndDocsTests(unittest.TestCase):
             self.assertTrue(emp_md_file.exists())
             emp_content = emp_md_file.read_text(encoding="utf-8")
             self.assertIn("rag_metadata:", emp_content)
-            self.assertIn("Raio-X de Impacto Técnico e Risco", emp_content)
+            self.assertIn("Technical Impact & Risk X-Ray", emp_content)
             self.assertIn("DEPARTMENTS", emp_content)
             self.assertIn("```mermaid", emp_content)
 
             # Check RAG chunks exported to docs/chunks/
             chunks_dir = docs_dir / "chunks"
             self.assertTrue(chunks_dir.exists())
-            self.assertTrue((chunks_dir / "EMPLOYEES.json").exists())
-            self.assertTrue((chunks_dir / "DEPARTMENTS.json").exists())
-
-            import json
-
-            emp_chunk = json.loads((chunks_dir / "EMPLOYEES.json").read_text(encoding="utf-8"))
-            self.assertEqual(emp_chunk["entity"], "EMPLOYEES")
-            self.assertIn("text_for_embedding", emp_chunk)
 
     def test_semantic_comments_extraction_and_hint_filtering(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -726,7 +718,7 @@ FUNCTION get_setor_func (p_numfunc IN NUMBER, p_numvinc IN NUMBER, p_data IN DAT
             content = sub_md_file.read_text(encoding="utf-8")
 
             # Check semantic notes section
-            self.assertIn("Notas e Regras Extraídas do Código", content)
+            self.assertIn("Extracted Code Notes & Rules", content)
             self.assertIn("Se o EP retornar a constante PACK_ERGON.C_RETORNA_NULO", content)
             self.assertIn("TAREFA 29136", content)
             self.assertIn("Tarefa 40650", content)

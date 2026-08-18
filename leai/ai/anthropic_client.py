@@ -131,13 +131,13 @@ class AnthropicClient(BaseLLMClient):
                 )
                 contents = resp_data.get("content", [])
                 if not contents:
-                    raise RuntimeError(f"Anthropic API retornou resposta sem conteúdo: {resp_data}")
+                    raise RuntimeError(f"Anthropic API returned empty response content: {resp_data}")
                 return contents[0]["text"]
         except urllib.error.HTTPError as exc:
             err_body = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Erro na API da Anthropic (HTTP {exc.code}): {err_body}") from exc
+            raise RuntimeError(f"Anthropic API error (HTTP {exc.code}): {err_body}") from exc
         except urllib.error.URLError as exc:
-            raise RuntimeError(f"Erro de conexão com a Anthropic: {exc.reason}") from exc
+            raise RuntimeError(f"Connection error with Anthropic: {exc.reason}") from exc
 
     def stream_chat(
         self,
