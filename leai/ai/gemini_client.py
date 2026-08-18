@@ -84,6 +84,12 @@ class GeminiClient(BaseLLMClient):
         try:
             with urllib.request.urlopen(req, timeout=90) as resp:
                 resp_data = json.loads(resp.read().decode("utf-8"))
+                usage = resp_data.get("usageMetadata", {})
+                self.record_usage(
+                    prompt_tokens=usage.get("promptTokenCount", 0),
+                    completion_tokens=usage.get("candidatesTokenCount", 0),
+                    total_tokens=usage.get("totalTokenCount"),
+                )
                 candidates = resp_data.get("candidates", [])
                 if not candidates:
                     raise RuntimeError(f"Gemini API returned response with no candidates: {resp_data}")
@@ -212,6 +218,12 @@ class GeminiClient(BaseLLMClient):
         try:
             with urllib.request.urlopen(req, timeout=90) as resp:
                 resp_data = json.loads(resp.read().decode("utf-8"))
+                usage = resp_data.get("usageMetadata", {})
+                self.record_usage(
+                    prompt_tokens=usage.get("promptTokenCount", 0),
+                    completion_tokens=usage.get("candidatesTokenCount", 0),
+                    total_tokens=usage.get("totalTokenCount"),
+                )
                 candidates = resp_data.get("candidates", [])
                 if not candidates:
                     raise RuntimeError(f"Gemini API returned response with no candidates: {resp_data}")

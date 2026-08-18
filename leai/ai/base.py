@@ -12,6 +12,18 @@ class BaseLLMClient(ABC):
         self.model = model
         self.base_url = base_url
         self.temperature = temperature
+        self.last_prompt_tokens: int = 0
+        self.last_completion_tokens: int = 0
+        self.last_total_tokens: int = 0
+        self.total_tokens: int = 0
+
+    def record_usage(self, prompt_tokens: int = 0, completion_tokens: int = 0, total_tokens: int | None = None) -> None:
+        """Records token usage from API responses or estimation heuristics."""
+        self.last_prompt_tokens = max(0, prompt_tokens)
+        self.last_completion_tokens = max(0, completion_tokens)
+        tot = total_tokens if total_tokens is not None else (self.last_prompt_tokens + self.last_completion_tokens)
+        self.last_total_tokens = max(0, tot)
+        self.total_tokens += self.last_total_tokens
 
     @abstractmethod
     def generate_text(self, prompt: str, system_prompt: str | None = None) -> str:

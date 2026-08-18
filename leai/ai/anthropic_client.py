@@ -54,6 +54,11 @@ class AnthropicClient(BaseLLMClient):
         try:
             with urllib.request.urlopen(req, timeout=90) as resp:
                 resp_data = json.loads(resp.read().decode("utf-8"))
+                usage = resp_data.get("usage", {})
+                self.record_usage(
+                    prompt_tokens=usage.get("input_tokens", 0),
+                    completion_tokens=usage.get("output_tokens", 0),
+                )
                 contents = resp_data.get("content", [])
                 if not contents:
                     raise RuntimeError(f"Anthropic API returned empty response content: {resp_data}")
@@ -119,6 +124,11 @@ class AnthropicClient(BaseLLMClient):
         try:
             with urllib.request.urlopen(req, timeout=90) as resp:
                 resp_data = json.loads(resp.read().decode("utf-8"))
+                usage = resp_data.get("usage", {})
+                self.record_usage(
+                    prompt_tokens=usage.get("input_tokens", 0),
+                    completion_tokens=usage.get("output_tokens", 0),
+                )
                 contents = resp_data.get("content", [])
                 if not contents:
                     raise RuntimeError(f"Anthropic API retornou resposta sem conteúdo: {resp_data}")

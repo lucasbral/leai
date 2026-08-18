@@ -38,7 +38,6 @@ class LeaiConfig(BaseModel):
 
     dsn: str = ""
     schemas: list[str] = Field(default_factory=list)
-    is_all_schemas: bool = False
     rawPath: Path = Field(default=Path("./raw"))
     annotationsPath: Path = Field(default=Path("./annotations"))
     docPath: Path = Field(default=Path("./docs"))
@@ -51,6 +50,10 @@ class LeaiConfig(BaseModel):
     @property
     def schema_name(self) -> str:
         return self.schemas[0] if self.schemas else ""
+
+    @property
+    def is_all_schemas(self) -> bool:
+        return any(s.upper() == "ALL" for s in self.schemas)
 
 
 
@@ -75,27 +78,18 @@ def load_config(config_path: Path) -> LeaiConfig:
     if not raw_schemas:
         raise ConfigError("Must define 'schema' or 'schemas' in leai.yml")
 
-    is_all = False
     parsed_schemas: list[str] = []
 
     if isinstance(raw_schemas, str):
-        if raw_schemas.strip().upper() == "ALL":
-            is_all = True
-            parsed_schemas = ["ALL"]
-        else:
-            parsed_schemas = [raw_schemas.strip().upper()]
+        parsed_schemas = [raw_schemas.strip().upper()]
     elif isinstance(raw_schemas, list):
         for s in raw_schemas:
-            item = str(s).strip().upper()
-            if item == "ALL":
-                is_all = True
-            parsed_schemas.append(item)
+            parsed_schemas.append(str(s).strip().upper())
 
     raw["schemas"] = parsed_schemas
 
     try:
         config = LeaiConfig.model_validate(raw)
-        config.is_all_schemas = is_all
     except Exception as exc:  # pydantic provides detailed message
         raise ConfigError(f"Invalid config file: {exc}") from exc
 

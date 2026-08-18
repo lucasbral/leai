@@ -759,6 +759,7 @@ def write_schema_docs(
     max_depth: int = 1,
     generate_rag_chunks: bool = False,
     progress_callback: Callable[[str, str, int, int], None] | None = None,
+    target_object: str | None = None,
 ) -> tuple[list[Path], list[Path]]:
     try:
         max_depth = int(getattr(max_depth, "default", max_depth))
@@ -770,6 +771,19 @@ def write_schema_docs(
         generate_rag_chunks = bool(getattr(generate_rag_chunks, "default", False))
 
     from leai.raw import RawDependencyIndex, trace_raw_dependencies, trace_subprogram_dependencies
+
+    target_obj_up = target_object.strip().upper() if target_object else None
+    target_clean_obj = target_obj_up
+    if target_obj_up and "." in target_obj_up:
+        s_part, o_part = target_obj_up.split(".", 1)
+        if s_part == (schema.schema_name or "").upper():
+            target_clean_obj = o_part
+
+    def _matches_target(name: str) -> bool:
+        if not target_clean_obj:
+            return True
+        up = name.upper()
+        return up == target_clean_obj or up == target_obj_up
 
     target_doc_path = (doc_path / schema.schema_name) if (multi_schema and schema.schema_name) else doc_path
     base_ann = annotations_path or (doc_path.parent / "annotations")
@@ -793,12 +807,14 @@ def write_schema_docs(
     trace_map: dict[str, ObjectTraceResult] = {}
     annotations_map: dict[str, ObjectAnnotation] = {}
 
-    total_objects = count_schema_objects(schema, object_types)
+    total_objects = 1 if target_clean_obj else count_schema_objects(schema, object_types)
     processed_count = 0
 
     # 1. Tables
     if _is_category_allowed("tables", allowed_types):
         for table in schema.tables:
+            if target_clean_obj and not _matches_target(table.name):
+                continue
             processed_count += 1
             if progress_callback:
                 progress_callback("Table", table.name, processed_count, total_objects)
@@ -831,6 +847,8 @@ def write_schema_docs(
     # 2. Views
     if _is_category_allowed("views", allowed_types):
         for view in schema.views:
+            if target_clean_obj and not _matches_target(view.name):
+                continue
             processed_count += 1
             if progress_callback:
                 progress_callback("View", view.name, processed_count, total_objects)
@@ -863,6 +881,8 @@ def write_schema_docs(
     # 3. Materialized Views
     if _is_category_allowed("mviews", allowed_types):
         for mview in schema.mviews:
+            if target_clean_obj and not _matches_target(mview.name):
+                continue
             processed_count += 1
             if progress_callback:
                 progress_callback("MView", mview.name, processed_count, total_objects)
@@ -890,6 +910,8 @@ def write_schema_docs(
     for code_obj in schema.code_objects:
         if not _is_code_obj_allowed(code_obj, allowed_types):
             continue
+        if target_clean_obj and not (_matches_target(code_obj.name) or any(_matches_target(sub.name) or _matches_target(f"{code_obj.name}.{sub.name}") for sub in code_obj.subprograms)):
+            continue
         processed_count += 1
         if progress_callback:
             progress_callback(code_obj.object_type.title(), code_obj.name, processed_count, total_objects)
@@ -916,6 +938,8 @@ def write_schema_docs(
 
         # Package Splitting (Subprogram disassembly)
         for sub in code_obj.subprograms:
+            if target_clean_obj and not (_matches_target(sub.name) or _matches_target(f"{code_obj.name}.{sub.name}")):
+                continue
             processed_count += 1
             if progress_callback:
                 progress_callback("Routine", f"{code_obj.name}.{sub.name}", processed_count, total_objects)
@@ -935,6 +959,8 @@ def write_schema_docs(
     # 5. Triggers
     if _is_category_allowed("triggers", allowed_types):
         for trigger in schema.triggers:
+            if target_clean_obj and not _matches_target(trigger.name):
+                continue
             processed_count += 1
             if progress_callback:
                 progress_callback("Trigger", trigger.name, processed_count, total_objects)
@@ -961,6 +987,8 @@ def write_schema_docs(
     # 6. Sequences
     if _is_category_allowed("sequences", allowed_types):
         for sequence in schema.sequences:
+            if target_clean_obj and not _matches_target(sequence.name):
+                continue
             processed_count += 1
             if progress_callback:
                 progress_callback("Sequence", sequence.name, processed_count, total_objects)
@@ -978,6 +1006,8 @@ def write_schema_docs(
     # 7. Indexes
     if _is_category_allowed("indexes", allowed_types):
         for index in schema.indexes:
+            if target_clean_obj and not _matches_target(index.name):
+                continue
             processed_count += 1
             if progress_callback:
                 progress_callback("Index", index.name, processed_count, total_objects)
@@ -995,6 +1025,8 @@ def write_schema_docs(
     # 8. Synonyms
     if _is_category_allowed("synonyms", allowed_types):
         for synonym in schema.synonyms:
+            if target_clean_obj and not _matches_target(synonym.name):
+                continue
             processed_count += 1
             if progress_callback:
                 progress_callback("Synonym", synonym.name, processed_count, total_objects)
@@ -1009,10 +1041,11 @@ def write_schema_docs(
             markdown = render_synonym_markdown(synonym, syn_doc=manual_doc, annotation=annotation)
             generated_md.append(_write_single_doc(file_path, markdown))
 
-    # 9. Schema Index & Risk Matrix
-    index_path = target_doc_path / "INDEX.md"
-    index_md = render_schema_index_markdown(schema, trace_map=trace_map, annotations_map=annotations_map)
-    generated_md.append(_write_single_doc(index_path, index_md))
+    # 9. Schema Index & Risk Matrix (only when compiling entire schema)
+    if not target_clean_obj:
+        index_path = target_doc_path / "INDEX.md"
+        index_md = render_schema_index_markdown(schema, trace_map=trace_map, annotations_map=annotations_map)
+        generated_md.append(_write_single_doc(index_path, index_md))
 
     return generated_md, generated_ann
 

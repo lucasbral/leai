@@ -53,6 +53,12 @@ class OpenAICompatibleClient(BaseLLMClient):
         try:
             with urllib.request.urlopen(req, timeout=90) as resp:
                 resp_data = json.loads(resp.read().decode("utf-8"))
+                usage = resp_data.get("usage", {})
+                self.record_usage(
+                    prompt_tokens=usage.get("prompt_tokens", 0),
+                    completion_tokens=usage.get("completion_tokens", 0),
+                    total_tokens=usage.get("total_tokens"),
+                )
                 return resp_data["choices"][0]["message"]["content"]
         except urllib.error.HTTPError as exc:
             err_body = exc.read().decode("utf-8", errors="replace")
@@ -133,6 +139,12 @@ class OpenAICompatibleClient(BaseLLMClient):
         try:
             with urllib.request.urlopen(req, timeout=90) as resp:
                 resp_data = json.loads(resp.read().decode("utf-8"))
+                usage = resp_data.get("usage", {})
+                self.record_usage(
+                    prompt_tokens=usage.get("prompt_tokens", 0),
+                    completion_tokens=usage.get("completion_tokens", 0),
+                    total_tokens=usage.get("total_tokens"),
+                )
                 choice_msg = resp_data["choices"][0]["message"]
                 content = choice_msg.get("content")
                 raw_tcs = choice_msg.get("tool_calls", [])

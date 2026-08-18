@@ -28,6 +28,8 @@ class ChatSession:
         self.max_history_turns = max_history_turns
         self.messages: list[dict[str, Any]] = []
         self.active_entities: set[str] = set()
+        self.last_turn_tokens: int | None = None
+        self.total_tokens: int = 0
         self.agent_engine = AgentExecutionEngine(
             schemas=schemas,
             config=config,
@@ -53,10 +55,17 @@ class ChatSession:
     def add_assistant_message(self, content: str) -> None:
         self.messages.append({"role": "assistant", "content": content})
 
+    def update_schemas(self, schemas: list[SchemaMetadata]) -> None:
+        """Updates internal schemas metadata and engine without erasing conversation history."""
+        self.schemas = schemas
+        if hasattr(self, "agent_engine") and self.agent_engine:
+            self.agent_engine.schemas = schemas
+
     def clear(self) -> None:
-        """Clears session history and memory."""
+        """Clears session history and memory while preserving accumulated token counts."""
         self.messages.clear()
         self.active_entities.clear()
+        self.last_turn_tokens = None
 
     def save_transcript(self, output_file: Path | None = None) -> Path:
         """Exports the conversation history formatted in Markdown."""
@@ -111,6 +120,7 @@ class ChatSession:
         self.add_user_message(user_input)
 
         # 4. Generate multi-turn response using the autonomous Agent Execution Engine
+        tokens_before = self.client.total_tokens if (self.client and isinstance(getattr(self.client, "total_tokens", None), int)) else 0
         reply = self.agent_engine.run(
             self.messages,
             system_prompt=combined_sys,
@@ -118,5 +128,18 @@ class ChatSession:
             on_tool_end=on_tool_end,
         )
         self.add_assistant_message(reply)
+
+        tokens_after = self.client.total_tokens if (self.client and isinstance(getattr(self.client, "total_tokens", None), int)) else 0
+        diff = tokens_after - tokens_before
+        if diff <= 0:
+            # Fallback estimation heuristic if client did not return usage tokens
+            est_prompt = (len(combined_sys) + sum(len(m.get("content", "")) for m in self.messages)) // 4
+            est_reply = len(reply) // 4
+            diff = max(1, est_prompt + est_reply)
+            if self.client and hasattr(self.client, "record_usage") and callable(self.client.record_usage):
+                self.client.record_usage(prompt_tokens=est_prompt, completion_tokens=est_reply, total_tokens=diff)
+
+        self.last_turn_tokens = diff
+        self.total_tokens += diff
 
         return reply, detected
