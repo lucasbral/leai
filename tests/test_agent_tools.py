@@ -313,31 +313,31 @@ END;"""
         self.assertEqual(client.call_count, 2)
         self.assertEqual(len(engine.last_tool_audits), 1)
         self.assertEqual(engine.last_tool_audits[0].tool_name, "get_table_schema")
-        self.assertIn("colunas", engine.last_tool_audits[0].summary)
+        self.assertIn("columns", engine.last_tool_audits[0].summary)
 
     def test_summarize_tool_result_all_tools(self):
         from leai.ai.tools import summarize_tool_result
 
         # grep_plsql_code
         res = summarize_tool_result("grep_plsql_code", {}, json.dumps({"matches": [{"name": "A"}, {"name": "B"}]}))
-        self.assertEqual(res, "2 ocorrências encontradas")
+        self.assertEqual(res, "2 occurrences found")
 
         # get_table_schema
         res = summarize_tool_result("get_table_schema", {}, json.dumps({"columns": [1, 2, 3], "primary_keys": ["ID"]}))
-        self.assertIn("3 colunas", res)
+        self.assertIn("3 columns", res)
         self.assertIn("1 PK", res)
 
         # get_subprogram_source
         res = summarize_tool_result("get_subprogram_source", {}, json.dumps({"source": "line1\nline2\nline3"}))
-        self.assertEqual(res, "3 linhas de código PL/SQL")
+        self.assertEqual(res, "3 lines of PL/SQL code")
 
         # trace_object_lineage
         res = summarize_tool_result("trace_object_lineage", {}, json.dumps({"dependencies": [1, 2], "risk_level": "LOW"}))
-        self.assertIn("2 conexões", res)
+        self.assertIn("2 dependencies", res)
 
         # search_business_documentation
         res = summarize_tool_result("search_business_documentation", {}, json.dumps({"results": [{"name": "T1"}]}))
-        self.assertEqual(res, "1 objeto/regra encontrado")
+        self.assertEqual(res, "1 object/rule found")
 
     def test_session_audit_logger(self):
         from leai.audit import SessionAuditLogger, ToolExecutionAudit

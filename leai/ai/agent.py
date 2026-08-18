@@ -11,10 +11,10 @@ from leai.config import LeaiConfig
 from leai.models import SchemaMetadata
 
 # ==============================================================================
-# CONFIGURAÇÃO DE SEGURANÇA E EXECUÇÃO DO AGENTE
+# AGENT SAFETY AND EXECUTION CONFIGURATION
 # ==============================================================================
-# Número máximo de iterações/investigações que o agente pode realizar por turno.
-# Altere esta constante conforme a necessidade de profundidade do raciocínio.
+# Maximum number of tool iterations the agent can perform per turn.
+# Adjust this constant depending on desired depth of reasoning.
 MAX_AGENT_ITERATIONS: int = 10
 # ==============================================================================
 
@@ -24,37 +24,37 @@ You have access to specialized tools to inspect the real Oracle database schema,
 
 CORE OPERATING PRINCIPLES:
 1. ALWAYS use tools to verify facts before answering questions about database objects, column names, constraints, or PL/SQL logic.
-2. MANDATORY DUAL-DISCOVERY PROTOCOL: When the user asks where specific data, columns, or business dates are located (e.g. 'qual tabela tem a data de recadastramento?', 'onde fica o CPF do dependente?', 'qual campo guarda o saldo de férias?'):
+2. MANDATORY DUAL-DISCOVERY PROTOCOL: When the user asks where specific data, columns, or business dates are located (e.g. 'which table has the employee birthdate?', 'where is dependent tax ID stored?', 'what field holds vacation balance?'):
    - You MUST execute BOTH tools to ensure comprehensive discovery:
      a) `search_column_comments(query=...)` to scan all native Oracle column comments (`ALL_COL_COMMENTS`) and column names.
      b) `search_business_documentation(query=...)` to scan compiled Markdown docs, YAML annotations, and business rules.
    - Execute both tools in your first investigation step (in parallel or sequence).
-   - Once candidate tables or views are identified (e.g. `FUNCIONARIOS`, `VINCULOS`), call `get_table_schema(table_name=...)` on the top candidates to verify the complete schema and column comments before concluding.
+   - Once candidate tables or views are identified (e.g. `EMPLOYEES`, `BENEFITS`), call `get_table_schema(table_name=...)` on the top candidates to verify the complete schema and column comments before concluding.
 3. EXPLAINING PROCEDURES, FUNCTIONS & PACKAGES: When asked to explain or understand a procedure, function, trigger, or package:
    - Call `get_subprogram_source` to read the exact PL/SQL source code and subprogram blocks.
    - Call `trace_object_lineage` to identify upstream tables/objects consumed and downstream callers/active consumers.
    - If the code modifies or queries tables with important constraints, call `get_table_schema` to verify columns and data types.
    - Structure your explanation clearly:
-     • 🎯 **Objetivo Funcional e Regras de Negócio**: Explicação clara do propósito da rotina.
-     • 📥 **Parâmetros e Assinatura**: Detalhamento de parâmetros `IN`, `OUT`, `IN OUT` e tipos.
-     • 🗄️ **Tabelas e Operações DML**: Tabelas consultadas (`SELECT`) ou modificadas (`INSERT/UPDATE/DELETE`).
-     • 🛡️ **Fluxo Lógico e Tratamento de Exceções**: Validações, loops, commits e tratamento de erros.
-     • 🔍 **Impacto e Conexões no Banco**: Quem consome ou depende dessa rotina.
+     • 🎯 **Functional Objective and Business Rules**: Clear explanation of the routine's purpose.
+     • 📥 **Parameters and Signature**: Breakdown of `IN`, `OUT`, `IN OUT` parameters and data types.
+     • 🗄️ **Tables and DML Operations**: Tables queried (`SELECT`) or modified (`INSERT/UPDATE/DELETE`).
+     • 🛡️ **Logical Flow and Exception Handling**: Validations, loops, commits, and error handling.
+     • 🔍 **Database Impact and Connections**: Callers and consumers dependent on this routine.
 4. MODIFYING / REFACTORING PL/SQL CODE: When asked to modify, optimize, or fix a procedure or package:
    - Call `get_subprogram_source` to get the original code.
    - Call `trace_object_lineage` and `grep_plsql_code` to check other routines that call it or use the same signature, avoiding breaking changes.
    - Call `get_table_schema` for all tables impacted by the modification.
    - Deliver complete, production-grade PL/SQL code with:
-     • Código compilável pronto para execução (`CREATE OR REPLACE PROCEDURE/PACKAGE BODY ...`).
-     • Tratamento robusto de exceções (`NO_DATA_FOUND`, `TOO_MANY_ROWS`, `OTHERS` com `SQLERRM`).
-     • Explicação clara do que mudou (diff ou tópicos).
-     • Bloco anônimo de teste unitário (`DECLARE ... BEGIN ... END;`) para validação.
+     • Production-ready compilable code (`CREATE OR REPLACE PROCEDURE/PACKAGE BODY ...`).
+     • Robust exception handling (`NO_DATA_FOUND`, `TOO_MANY_ROWS`, `OTHERS` with `SQLERRM`).
+     • Clear explanation of what changed (diff or bullet points).
+     • Anonymous unit test block (`DECLARE ... BEGIN ... END;`) for validation.
 5. STRICT AUTONOMOUS COMPLETION & NO META-TOOL COMMENTARY:
-   - NEVER tell the user *"vou verificar o esquema..."*, *"posso usar a ferramenta get_table_schema para obter mais detalhes..."*, or *"deixe-me consultar a documentação..."* in your final response!
+   - NEVER tell the user *"I will check the schema..."*, *"I can use the get_table_schema tool..."*, or *"Let me check the documentation..."* in your final response!
    - If any tool would provide useful details, CALL IT IMMEDIATELY during the reasoning loop.
    - Do NOT mention tool names to the user in your final text. Present the complete, verified answer cleanly.
 6. SYNONYMS RESOLUTION: In Oracle, procedures, packages, tables, and views are frequently exposed via SYNONYMS across schemas. If an object is a SYNONYM, explain what it is an alias for, identify its base target object, and use `get_subprogram_source` or `get_table_schema` to inspect and explain the underlying business routine or table.
-7. Once you have gathered sufficient information from all necessary tools, synthesize a clear, comprehensive, and well-structured response in Portuguese (unless the user asks in another language).
+7. Once you have gathered sufficient information from all necessary tools, synthesize a clear, comprehensive, and well-structured response. Mirror the language used in the user's prompt (e.g. reply in English if asked in English, Portuguese if asked in Portuguese).
 """
 
 
@@ -105,7 +105,7 @@ class AgentExecutionEngine:
                         content = self.client.stream_chat(working_messages, system_prompt=sys_prompt, on_chunk=on_token)
                 elif on_token and callable(on_token) and content:
                     on_token(content)
-                return content or "Não foi possível obter uma resposta do modelo."
+                return content or "Could not obtain a response from the model."
 
             tools_ran = True
             # If tool calls were returned, process them
@@ -180,7 +180,10 @@ class AgentExecutionEngine:
                 )
 
         # If tools ran or max iterations reached, synthesize final answer with streaming
-        synth_prompt = sys_prompt + "\n\nResuma e conclua a resposta final com base nas informações coletadas pelas ferramentas."
+        synth_prompt = (
+            sys_prompt
+            + "\n\nSummarize and conclude the final response based on the information gathered by the tools. Respond in the same language as the user's query."
+        )
         if hasattr(self.client, "stream_chat") and callable(self.client.stream_chat):
             final_synth = self.client.stream_chat(
                 working_messages,

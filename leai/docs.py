@@ -36,7 +36,7 @@ def _extract_manual_section(content: str | None) -> str:
 
 
 def _render_manual_section(doc: str = "") -> list[str]:
-    return ["", "## Documentação humana", "", MANUAL_START, doc or "", MANUAL_END, ""]
+    return ["", "## Human Documentation", "", MANUAL_START, doc or "", MANUAL_END, ""]
 
 
 def _render_audit_meta(obj) -> list[str]:
@@ -47,10 +47,10 @@ def _render_audit_meta(obj) -> list[str]:
 
     parts: list[str] = []
     if last_ddl:
-        by_str = f" (por `{modified_by}`)" if modified_by else ""
-        parts.append(f"**Última Modificação DDL:** {last_ddl}{by_str}")
+        by_str = f" (by `{modified_by}`)" if modified_by else ""
+        parts.append(f"**Last DDL Modification:** {last_ddl}{by_str}")
     if created:
-        parts.append(f"**Data de Criação:** {created}")
+        parts.append(f"**Creation Date:** {created}")
 
     if parts:
         lines.append(" | ".join(parts))
@@ -65,15 +65,15 @@ def _render_annotation_details(annotation: ObjectAnnotation | None) -> list[str]
 
     if annotation.tags:
         tags_str = ", ".join(annotation.tags)
-        lines.extend(["", f"**Tags / Domínio de Negócio:** `{tags_str}`"])
+        lines.extend(["", f"**Tags / Business Domain:** `{tags_str}`"])
 
     if annotation.warnings:
-        lines.extend(["", "## Alertas e avisos técnicos", ""])
+        lines.extend(["", "## Technical Alerts & Warnings", ""])
         for warn in annotation.warnings:
             lines.append(f"> [!WARNING]\n> {warn}")
 
     if annotation.related_objects:
-        lines.extend(["", "## Relacionamentos de negócio", ""])
+        lines.extend(["", "## Business Relationships", ""])
         for rel in annotation.related_objects:
             lines.append(f"- {rel}")
 
@@ -83,7 +83,7 @@ def _render_annotation_details(annotation: ObjectAnnotation | None) -> list[str]
 def _render_use_cases(annotation: ObjectAnnotation | None) -> list[str]:
     if not annotation or not annotation.use_cases:
         return []
-    lines = ["", "## Casos de uso e Consultas de Exemplo", ""]
+    lines = ["", "## Use Cases & Sample Queries", ""]
     for uc in annotation.use_cases:
         uc_clean = uc.strip()
         if "SELECT " in uc_clean.upper() and not uc_clean.startswith("```"):
@@ -96,7 +96,7 @@ def _render_use_cases(annotation: ObjectAnnotation | None) -> list[str]:
 def _render_business_rules(annotation: ObjectAnnotation | None) -> list[str]:
     lines = _render_annotation_details(annotation)
     if annotation and annotation.business_rules:
-        lines.extend(["", "## Regras de negócio", ""])
+        lines.extend(["", "## Business Rules", ""])
         for rule in annotation.business_rules:
             lines.append(f"- {rule}")
     lines.extend(_render_use_cases(annotation))
@@ -179,29 +179,29 @@ def generate_semantic_rag_text(trace_result: ObjectTraceResult, annotation: Obje
     elif isinstance(focal_obj, SynonymMeta):
         focal_type = "SYNONYM"
 
-    desc = (annotation and annotation.description) or getattr(focal_obj, "comment", None) or f"Objeto {focal_name} do tipo {focal_type}."
+    desc = (annotation and annotation.description) or getattr(focal_obj, "comment", None) or f"Object {focal_name} of type {focal_type}."
 
-    parts = [f"O objeto {focal_name} é do tipo {focal_type}. Descrição de negócio: {desc.strip()}."]
+    parts = [f"The object {focal_name} is of type {focal_type}. Business description: {desc.strip()}."]
 
     if annotation and annotation.business_rules:
-        rules_str = " Regras de negócio associadas: " + "; ".join(annotation.business_rules) + "."
+        rules_str = " Associated business rules: " + "; ".join(annotation.business_rules) + "."
         parts.append(rules_str)
 
     if annotation and annotation.use_cases:
-        use_cases_str = " Casos de uso e consultas de referência: " + " | ".join(annotation.use_cases) + "."
+        use_cases_str = " Use cases and reference queries: " + " | ".join(annotation.use_cases) + "."
         parts.append(use_cases_str)
 
     if trace_result.extracted_notes:
-        notes_str = " Notas e regras extraídas do código: " + " | ".join(trace_result.extracted_notes[:5]) + "."
+        notes_str = " Code notes and extracted rules: " + " | ".join(trace_result.extracted_notes[:5]) + "."
         parts.append(notes_str)
 
     if trace_result.extracted_tasks:
-        tasks_str = " Rastreabilidade de tarefas/demandas: " + ", ".join(trace_result.extracted_tasks) + "."
+        tasks_str = " Task / issue traceability: " + ", ".join(trace_result.extracted_tasks) + "."
         parts.append(tasks_str)
 
     if isinstance(focal_obj, TableMeta):
         cols_summary = ", ".join([f"{c.name} ({c.data_type})" for c in focal_obj.columns[:15]])
-        parts.append(f" Estrutura de colunas principais: {cols_summary}.")
+        parts.append(f" Primary column structure: {cols_summary}.")
 
     if trace_result.dependencies:
         dep_descriptions = []
@@ -211,34 +211,34 @@ def generate_semantic_rag_text(trace_result: ObjectTraceResult, annotation: Obje
                 continue
             text = None
             if dep.relation_type == "FK_REFERENCES":
-                text = f"possui chave estrangeira para a tabela {dep.target_name}"
+                text = f"has a foreign key pointing to table {dep.target_name}"
             elif dep.relation_type == "FK_REFERENCED_BY":
-                text = f"é referenciada pela tabela filha {dep.source_name}"
+                text = f"is referenced by child table {dep.source_name}"
             elif dep.relation_type == "READS/SELECTS":
-                text = f"consulta o objeto {dep.target_name}"
+                text = f"queries object {dep.target_name}"
             elif dep.relation_type == "EXECUTES/CALLS":
-                text = f"invoca o pacote/rotina {dep.target_name}"
+                text = f"invokes package/routine {dep.target_name}"
             elif dep.relation_type == "CALLS_SUBPROGRAM":
-                text = f"é invocada por {dep.source_name}"
+                text = f"is invoked by {dep.source_name}"
             elif dep.relation_type == "TRIGGER_ON":
-                text = f"possui a trigger {dep.source_name}"
+                text = f"has trigger {dep.source_name}"
             elif dep.relation_type == "PLSQL_DEPENDENCY":
-                text = f"é manipulada pelo código PL/SQL {dep.source_name}"
+                text = f"is referenced by PL/SQL code {dep.source_name}"
             elif dep.relation_type == "SYNONYM_FOR":
-                text = f"possui o sinônimo {dep.source_name} apontando para si"
+                text = f"has synonym {dep.source_name} pointing to it"
             elif dep.relation_type == "REFERENCED_BY":
-                text = f"é referenciada pelo objeto {dep.source_type.lower()} {dep.source_name}"
+                text = f"is referenced by {dep.source_type.lower()} object {dep.source_name}"
             elif dep.relation_type == "DEPENDS_ON":
-                text = f"depende do objeto {dep.target_type.lower()} {dep.target_name}"
+                text = f"depends on {dep.target_type.lower()} object {dep.target_name}"
             else:
-                text = f"possui vínculo com {dep.target_name} ({dep.relation_type})"
+                text = f"has relationship with {dep.target_name} ({dep.relation_type})"
 
             if text and text not in seen_dep_texts:
                 seen_dep_texts.add(text)
                 dep_descriptions.append(text)
 
         if dep_descriptions:
-            parts.append(" Impacto relacional: " + ", ".join(dep_descriptions[:10]) + ".")
+            parts.append(" Relational impact: " + ", ".join(dep_descriptions[:10]) + ".")
 
     return "".join(parts)
 
@@ -320,36 +320,36 @@ def _render_trace_xray_and_graph(
     lines.extend(
         [
             "",
-            "## 🔍 Raio-X de Impacto Técnico e Risco",
+            "## 🔍 Technical Impact & Risk X-Ray",
             "",
             f"> [!{risk_badge_color}]",
-            "> **Análise de Risco de Alteração:**",
-            f"> - **Nível de Risco:** `{risk_level}` ({dep_count} conexões mapeadas no grafo)",
-            f"> - **Objetos Consumidos (Upstream):** `{len(set(parents))}` ({', '.join(sorted(set(parents))) if parents else 'Nenhum'})",
-            f"> - **Tabelas Filhas (Downstream):** `{len(set(children))}` ({', '.join(sorted(set(children))) if children else 'Nenhuma'})",
-            f"> - **Consumidores Ativos (Chamadores):** `{len(set(consumers))}` ({', '.join(sorted(set(consumers))) if consumers else 'Nenhum'})",
+            "> **Change Risk Analysis:**",
+            f"> - **Risk Level:** `{risk_level}` ({dep_count} connections mapped in graph)",
+            f"> - **Consumed Objects (Upstream):** `{len(set(parents))}` ({', '.join(sorted(set(parents))) if parents else 'None'})",
+            f"> - **Child Tables (Downstream):** `{len(set(children))}` ({', '.join(sorted(set(children))) if children else 'None'})",
+            f"> - **Active Consumers (Callers):** `{len(set(consumers))}` ({', '.join(sorted(set(consumers))) if consumers else 'None'})",
             "",
         ]
     )
 
     if trace_result.extracted_notes or trace_result.extracted_tasks:
-        lines.extend(["## 💡 Notas e Regras Extraídas do Código (Engenharia)", "", "> [!NOTE]", "> **Rastreabilidade e Regras Internas:**"])
+        lines.extend(["## 💡 Extracted Code Notes & Rules (Engineering)", "", "> [!NOTE]", "> **Traceability & Internal Rules:**"])
         if trace_result.extracted_notes:
-            lines.append("> - **Regras do Código:**")
+            lines.append("> - **Code Rules:**")
             for note in trace_result.extracted_notes:
                 lines.append(f">   - {note}")
         if trace_result.extracted_tasks:
             tasks_str = ", ".join([f"`{t}`" for t in trace_result.extracted_tasks])
-            lines.append(f"> - **Tarefas / Demandas Vinculadas:** {tasks_str}")
+            lines.append(f"> - **Linked Tasks / Issues:** {tasks_str}")
         lines.append("")
 
     if trace_result.dependencies:
-        lines.extend(["## Grafo de Linhagem e Relacionamentos", ""])
+        lines.extend(["## Lineage & Relationship Graph", ""])
         lines.append(generate_mermaid_graph(focal_name, trace_result.dependencies))
         lines.append("")
 
     semantic_text = generate_semantic_rag_text(trace_result, annotation=annotation)
-    lines.extend(["## 🧠 Resumo Narrativo Semântico (RAG Ready)", "", semantic_text, ""])
+    lines.extend(["## 🧠 Semantic Narrative Summary (RAG Ready)", "", semantic_text, ""])
 
     return lines
 
@@ -365,31 +365,31 @@ def render_table_markdown(
     ann_cols = annotation.columns if annotation else {}
     lines = []
     lines.extend(_build_rag_frontmatter(trace_result, annotation))
-    lines.extend([f"# TABLE: {table.name}", "", "## Visão geral", ""])
+    lines.extend([f"# TABLE: {table.name}", "", "## Overview", ""])
     lines.extend(_render_audit_meta(table))
-    table_desc = (annotation and annotation.description) or table.comment or table_doc or "Sem descrição técnica no dicionário Oracle."
+    table_desc = (annotation and annotation.description) or table.comment or table_doc or "No technical description in Oracle dictionary."
     lines.append(table_desc.replace("\r\n", " ").replace("\n", " "))
     lines.extend(_render_business_rules(annotation))
 
-    lines.extend(["", "## Colunas", "", "| Coluna | Tipo | Nulo | Padrão | Comentário |", "|---|---|---|---|---|"])
+    lines.extend(["", "## Columns", "", "| Column | Type | Nullable | Default | Comment |", "|---|---|---|---|---|"])
 
     for column in table.columns:
         raw_comment = ann_cols.get(column.name) or column_docs.get(column.name) or column.comment or ""
         comment_clean = raw_comment.replace("\r\n", " ").replace("\n", " ").replace("|", "\\|")
         default_clean = (column.default or "").replace("\r\n", " ").replace("\n", " ").replace("|", "\\|")
-        lines.append(f"| {column.name} | {column.data_type} | {'SIM' if column.nullable else 'NÃO'} | {default_clean} | {comment_clean} |")
+        lines.append(f"| {column.name} | {column.data_type} | {'YES' if column.nullable else 'NO'} | {default_clean} | {comment_clean} |")
 
-    lines.extend(["", "## Chave primária", ""])
-    lines.append(", ".join(table.primary_keys) if table.primary_keys else "Não definida")
+    lines.extend(["", "## Primary Key", ""])
+    lines.append(", ".join(table.primary_keys) if table.primary_keys else "Not defined")
 
-    lines.extend(["", "## Chaves estrangeiras", ""])
+    lines.extend(["", "## Foreign Keys", ""])
     if table.foreign_keys:
-        lines.append("| Constraint | Coluna | Referência |")
+        lines.append("| Constraint | Column | Reference |")
         lines.append("|---|---|---|")
         for fk in table.foreign_keys:
             lines.append(f"| {fk.name} | {fk.column} | {fk.referenced_table}.{fk.referenced_column} |")
     else:
-        lines.append("Nenhuma")
+        lines.append("None")
 
     lines.extend(_render_trace_xray_and_graph(trace_result, annotation))
     lines.extend(_render_manual_section(table_doc))
@@ -407,21 +407,21 @@ def render_view_markdown(
     ann_cols = annotation.columns if annotation else {}
     lines = []
     lines.extend(_build_rag_frontmatter(trace_result, annotation))
-    lines.extend([f"# VIEW: {view.name}", "", "## Visão geral", ""])
-    desc = (annotation and annotation.description) or view.comment or view_doc or "Visão (View) do banco de dados Oracle."
+    lines.extend([f"# VIEW: {view.name}", "", "## Overview", ""])
+    desc = (annotation and annotation.description) or view.comment or view_doc or "Oracle database View."
     lines.append(desc.replace("\r\n", " ").replace("\n", " "))
     lines.extend(_render_business_rules(annotation))
 
-    lines.extend(["", "## Colunas", "", "| Coluna | Tipo | Nulo | Padrão | Comentário |", "|---|---|---|---|---|"])
+    lines.extend(["", "## Columns", "", "| Column | Type | Nullable | Default | Comment |", "|---|---|---|---|---|"])
 
     for column in view.columns:
         raw_comment = ann_cols.get(column.name) or column_docs.get(column.name) or column.comment or ""
         comment_clean = raw_comment.replace("\r\n", " ").replace("\n", " ").replace("|", "\\|")
         default_clean = (column.default or "").replace("\r\n", " ").replace("\n", " ").replace("|", "\\|")
-        lines.append(f"| {column.name} | {column.data_type} | {'SIM' if column.nullable else 'NÃO'} | {default_clean} | {comment_clean} |")
+        lines.append(f"| {column.name} | {column.data_type} | {'YES' if column.nullable else 'NO'} | {default_clean} | {comment_clean} |")
 
     if view.text:
-        lines.extend(["", "## Definição SQL", "", "```sql", view.text.strip(), "```"])
+        lines.extend(["", "## SQL Definition", "", "```sql", view.text.strip(), "```"])
 
     lines.extend(_render_trace_xray_and_graph(trace_result, annotation))
     lines.extend(_render_manual_section(view_doc))
@@ -436,34 +436,34 @@ def render_mview_markdown(
 ) -> str:
     lines = []
     lines.extend(_build_rag_frontmatter(trace_result, annotation))
-    lines.extend([f"# MATERIALIZED VIEW: {mview.name}", "", "## Visão geral", ""])
-    desc = (annotation and annotation.description) or mview.comment or mview_doc or "Visão Materializada (Materialized View) do Oracle."
+    lines.extend([f"# MATERIALIZED VIEW: {mview.name}", "", "## Overview", ""])
+    desc = (annotation and annotation.description) or mview.comment or mview_doc or "Oracle Materialized View."
     lines.append(desc.replace("\r\n", " ").replace("\n", " "))
     lines.extend(_render_business_rules(annotation))
 
     lines.extend(
         [
             "",
-            "## Propriedades",
+            "## Properties",
             "",
-            "| Propriedade | Valor |",
+            "| Property | Value |",
             "|---|---|",
-            f"| Modo de Atualização | {mview.refresh_mode or 'N/A'} |",
-            f"| Tipo de Atualização | {mview.refresh_type or 'N/A'} |",
-            f"| Atualizável | {'SIM' if mview.updatable else 'NÃO'} |",
+            f"| Refresh Mode | {mview.refresh_mode or 'N/A'} |",
+            f"| Refresh Type | {mview.refresh_type or 'N/A'} |",
+            f"| Updatable | {'YES' if mview.updatable else 'NO'} |",
         ]
     )
 
     if mview.columns:
         ann_cols = annotation.columns if annotation else {}
-        lines.extend(["", "## Colunas", "", "| Coluna | Tipo | Nulo | Comentário |", "|---|---|---|---|"])
+        lines.extend(["", "## Columns", "", "| Column | Type | Nullable | Comment |", "|---|---|---|---|"])
         for column in mview.columns:
             raw_comment = ann_cols.get(column.name) or column.comment or ""
             comment_clean = raw_comment.replace("\r\n", " ").replace("\n", " ").replace("|", "\\|")
-            lines.append(f"| {column.name} | {column.data_type} | {'SIM' if column.nullable else 'NÃO'} | {comment_clean} |")
+            lines.append(f"| {column.name} | {column.data_type} | {'YES' if column.nullable else 'NO'} | {comment_clean} |")
 
     if mview.query:
-        lines.extend(["", "## Consulta SQL", "", "```sql", mview.query.strip(), "```"])
+        lines.extend(["", "## SQL Query", "", "```sql", mview.query.strip(), "```"])
 
     lines.extend(_render_trace_xray_and_graph(trace_result, annotation))
     lines.extend(_render_manual_section(mview_doc))
@@ -478,18 +478,18 @@ def render_subprogram_markdown(
 ) -> str:
     lines = []
     lines.extend(_build_rag_frontmatter(trace_result, annotation))
-    lines.extend([f"# {sub.subprogram_type.upper()}: {sub.package_name}.{sub.name}", "", "## Visão geral", ""])
+    lines.extend([f"# {sub.subprogram_type.upper()}: {sub.package_name}.{sub.name}", "", "## Overview", ""])
     desc = (
         (annotation and annotation.description)
         or sub.comment
         or sub_doc
-        or f"Sub-rotina PL/SQL (`{sub.name}`) pertencente ao pacote `{sub.package_name}`."
+        or f"PL/SQL routine (`{sub.name}`) belonging to package `{sub.package_name}`."
     )
     lines.append(desc.replace("\r\n", " ").replace("\n", " "))
     lines.extend(_render_business_rules(annotation))
 
     if sub.source:
-        lines.extend(["", "## Código-fonte PL/SQL", "", "```sql", sub.source.strip(), "```"])
+        lines.extend(["", "## PL/SQL Source Code", "", "```sql", sub.source.strip(), "```"])
 
     lines.extend(_render_trace_xray_and_graph(trace_result, annotation))
     lines.extend(_render_manual_section(sub_doc))
@@ -504,23 +504,23 @@ def render_code_object_markdown(
 ) -> str:
     lines = []
     lines.extend(_build_rag_frontmatter(trace_result, annotation))
-    lines.extend([f"# {code_obj.object_type.upper()}: {code_obj.name}", "", "## Visão geral", ""])
+    lines.extend([f"# {code_obj.object_type.upper()}: {code_obj.name}", "", "## Overview", ""])
     desc = (
         (annotation and annotation.description)
         or code_obj.comment
         or code_doc
-        or f"Objeto PL/SQL ({code_obj.object_type}) armazenado no Oracle."
+        or f"PL/SQL object ({code_obj.object_type}) stored in Oracle."
     )
     lines.append(desc.replace("\r\n", " ").replace("\n", " "))
     lines.extend(_render_business_rules(annotation))
 
     if code_obj.subprograms:
-        lines.extend(["", "## Sub-rotinas desmembradas", "", "| Tipo | Nome | Arquivo |", "|---|---|---|"])
+        lines.extend(["", "## Disassembled Subprograms", "", "| Type | Name | File |", "|---|---|---|"])
         for sub in code_obj.subprograms:
             lines.append(f"| {sub.subprogram_type} | {sub.name} | `{code_obj.name}/{sub.name}.md` |")
 
     if code_obj.source:
-        lines.extend(["", "## Código-fonte do Pacote", "", "```sql", code_obj.source.strip(), "```"])
+        lines.extend(["", "## Package Source Code", "", "```sql", code_obj.source.strip(), "```"])
 
     lines.extend(_render_trace_xray_and_graph(trace_result, annotation))
     lines.extend(_render_manual_section(code_doc))
@@ -539,28 +539,28 @@ def render_trigger_markdown(
         [
             f"# TRIGGER: {trigger.name}",
             "",
-            "## Visão geral",
+            "## Overview",
             "",
-            (annotation and annotation.description) or f"Trigger associado à tabela `{trigger.table_name or 'N/A'}`.",
+            (annotation and annotation.description) or f"Trigger associated with table `{trigger.table_name or 'N/A'}`.",
         ]
     )
     lines.extend(_render_business_rules(annotation))
     lines.extend(
         [
             "",
-            "## Propriedades",
+            "## Properties",
             "",
-            "| Propriedade | Valor |",
+            "| Property | Value |",
             "|---|---|",
-            f"| Tabela Alvo | {trigger.table_name or 'N/A'} |",
-            f"| Tipo | {trigger.trigger_type or 'N/A'} |",
-            f"| Evento | {trigger.triggering_event or 'N/A'} |",
+            f"| Target Table | {trigger.table_name or 'N/A'} |",
+            f"| Type | {trigger.trigger_type or 'N/A'} |",
+            f"| Event | {trigger.triggering_event or 'N/A'} |",
             f"| Status | {trigger.status or 'N/A'} |",
         ]
     )
 
     if trigger.trigger_body:
-        lines.extend(["", "## Código do Trigger", "", "```sql", trigger.trigger_body.strip(), "```"])
+        lines.extend(["", "## Trigger Code", "", "```sql", trigger.trigger_body.strip(), "```"])
 
     lines.extend(_render_trace_xray_and_graph(trace_result, annotation))
     lines.extend(_render_manual_section(trigger_doc))
@@ -575,22 +575,22 @@ def render_sequence_markdown(
     lines = [
         f"# SEQUENCE: {sequence.name}",
         "",
-        "## Visão geral",
+        "## Overview",
         "",
-        (annotation and annotation.description) or "Sequência de valores numéricos do Oracle.",
+        (annotation and annotation.description) or "Oracle numeric sequence.",
     ]
     lines.extend(_render_business_rules(annotation))
     lines.extend(
         [
             "",
-            "## Propriedades",
+            "## Properties",
             "",
-            "| Propriedade | Valor |",
+            "| Property | Value |",
             "|---|---|",
-            f"| Valor Mínimo | {sequence.min_value if sequence.min_value is not None else 'N/A'} |",
-            f"| Valor Máximo | {sequence.max_value if sequence.max_value is not None else 'N/A'} |",
-            f"| Incremento | {sequence.increment_by if sequence.increment_by is not None else 'N/A'} |",
-            f"| Último Número | {sequence.last_number if sequence.last_number is not None else 'N/A'} |",
+            f"| Minimum Value | {sequence.min_value if sequence.min_value is not None else 'N/A'} |",
+            f"| Maximum Value | {sequence.max_value if sequence.max_value is not None else 'N/A'} |",
+            f"| Increment | {sequence.increment_by if sequence.increment_by is not None else 'N/A'} |",
+            f"| Last Number | {sequence.last_number if sequence.last_number is not None else 'N/A'} |",
         ]
     )
     lines.extend(_render_manual_section(seq_doc))
@@ -602,25 +602,25 @@ def render_index_markdown(
     idx_doc: str = "",
     annotation: ObjectAnnotation | None = None,
 ) -> str:
-    cols = ", ".join(index.columns) if index.columns else "Nenhuma"
+    cols = ", ".join(index.columns) if index.columns else "None"
     lines = [
         f"# INDEX: {index.name}",
         "",
-        "## Visão geral",
+        "## Overview",
         "",
-        (annotation and annotation.description) or f"Índice criado na tabela `{index.table_name}` ({index.uniqueness}).",
+        (annotation and annotation.description) or f"Index created on table `{index.table_name}` ({index.uniqueness}).",
     ]
     lines.extend(_render_business_rules(annotation))
     lines.extend(
         [
             "",
-            "## Propriedades",
+            "## Properties",
             "",
-            "| Propriedade | Valor |",
+            "| Property | Value |",
             "|---|---|",
-            f"| Tabela Alvo | {index.table_name} |",
-            f"| Unicidade | {index.uniqueness} |",
-            f"| Colunas Indexadas | {cols} |",
+            f"| Target Table | {index.table_name} |",
+            f"| Uniqueness | {index.uniqueness} |",
+            f"| Indexed Columns | {cols} |",
         ]
     )
     lines.extend(_render_manual_section(idx_doc))
@@ -635,21 +635,21 @@ def render_synonym_markdown(
     lines = [
         f"# SYNONYM: {synonym.name}",
         "",
-        "## Visão geral",
+        "## Overview",
         "",
-        (annotation and annotation.description) or f"Sinônimo que aponta para `{synonym.table_owner or ''}.{synonym.table_name or ''}`.",
+        (annotation and annotation.description) or f"Synonym pointing to `{synonym.table_owner or ''}.{synonym.table_name or ''}`.",
     ]
     lines.extend(_render_business_rules(annotation))
     lines.extend(
         [
             "",
-            "## Propriedades",
+            "## Properties",
             "",
-            "| Propriedade | Valor |",
+            "| Property | Value |",
             "|---|---|",
-            f"| Owner Alvo | {synonym.table_owner or 'N/A'} |",
-            f"| Objeto Alvo | {synonym.table_name or 'N/A'} |",
-            f"| DB Link | {synonym.db_link or 'Nenhum'} |",
+            f"| Target Owner | {synonym.table_owner or 'N/A'} |",
+            f"| Target Object | {synonym.table_name or 'N/A'} |",
+            f"| DB Link | {synonym.db_link or 'None'} |",
         ]
     )
     lines.extend(_render_manual_section(syn_doc))
@@ -694,26 +694,26 @@ def render_schema_index_markdown(
     schema_name = schema.schema_name or "DEFAULT"
 
     lines = [
-        f"# Catálogo e Matriz de Governança do Schema: `{schema_name}`",
+        f"# Schema Catalog & Governance Matrix: `{schema_name}`",
         "",
-        "Este documento consolida o inventário de objetos, a matriz de risco de alteração e os links diretos para a documentação técnica unificada gerada pelo **LEAI**.",
+        "This document consolidates the object inventory, change risk matrix, and links to unified technical documentation generated by **LEAI**.",
         "",
-        "## 📊 Resumo Quantitativo de Objetos",
+        "## 📊 Object Quantitative Summary",
         "",
-        "| Tipo de Objeto | Quantidade |",
+        "| Object Type | Quantity |",
         "|---|---|",
-        f"| Tabelas | {len(schema.tables)} |",
+        f"| Tables | {len(schema.tables)} |",
         f"| Views | {len(schema.views)} |",
         f"| Materialized Views | {len(schema.mviews)} |",
-        f"| Objetos de Código (Packages/Procedures) | {len(schema.code_objects)} |",
+        f"| Code Objects (Packages/Procedures) | {len(schema.code_objects)} |",
         f"| Triggers | {len(schema.triggers)} |",
         f"| Sequences | {len(schema.sequences)} |",
         f"| Indexes | {len(schema.indexes)} |",
-        f"| Sinônimos | {len(schema.synonyms)} |",
+        f"| Synonyms | {len(schema.synonyms)} |",
         "",
-        "## 🔍 Matriz de Risco de Alteração e Linhagem",
+        "## 🔍 Change Risk Matrix & Lineage",
         "",
-        "| Objeto | Tipo | Risco | Conexões | Colunas / PK | Tags | Documentação |",
+        "| Object | Type | Risk | Connections | Columns / PK | Tags | Documentation |",
         "|---|---|---|---|---|---|---|",
     ]
 
@@ -723,11 +723,11 @@ def render_schema_index_markdown(
         dep_count = len(tr.dependencies) if tr else 0
         risk = _calculate_risk_level(dep_count)
         risk_emoji = "🔴" if risk in ("CRITICAL", "HIGH") else ("🟡" if risk == "MEDIUM" else "🟢")
-        pk_str = f"PK: {', '.join(t.primary_keys)}" if t.primary_keys else "Sem PK"
+        pk_str = f"PK: {', '.join(t.primary_keys)}" if t.primary_keys else "No PK"
         cols_str = f"{len(t.columns)} cols ({pk_str})"
         tags_str = f"`{', '.join(ann.tags)}`" if (ann and ann.tags) else "-"
         lines.append(
-            f"| `{t.name}` | Table | {risk_emoji} `{risk}` | {dep_count} | {cols_str} | {tags_str} | [Ver Detalhes](tables/{t.name}.md) |"
+            f"| `{t.name}` | Table | {risk_emoji} `{risk}` | {dep_count} | {cols_str} | {tags_str} | [View Details](tables/{t.name}.md) |"
         )
 
     for v in sorted(schema.views, key=lambda x: x.name):
@@ -739,7 +739,7 @@ def render_schema_index_markdown(
         cols_str = f"{len(v.columns)} cols"
         tags_str = f"`{', '.join(ann.tags)}`" if (ann and ann.tags) else "-"
         lines.append(
-            f"| `{v.name}` | View | {risk_emoji} `{risk}` | {dep_count} | {cols_str} | {tags_str} | [Ver Detalhes](views/{v.name}.md) |"
+            f"| `{v.name}` | View | {risk_emoji} `{risk}` | {dep_count} | {cols_str} | {tags_str} | [View Details](views/{v.name}.md) |"
         )
 
     for mv in sorted(schema.mviews, key=lambda x: x.name):
@@ -751,7 +751,7 @@ def render_schema_index_markdown(
         cols_str = f"{len(mv.columns)} cols"
         tags_str = f"`{', '.join(ann.tags)}`" if (ann and ann.tags) else "-"
         lines.append(
-            f"| `{mv.name}` | MView | {risk_emoji} `{risk}` | {dep_count} | {cols_str} | {tags_str} | [Ver Detalhes](mviews/{mv.name}.md) |"
+            f"| `{mv.name}` | MView | {risk_emoji} `{risk}` | {dep_count} | {cols_str} | {tags_str} | [View Details](mviews/{mv.name}.md) |"
         )
 
     for co in sorted(schema.code_objects, key=lambda x: x.name):
@@ -761,10 +761,10 @@ def render_schema_index_markdown(
         risk = _calculate_risk_level(dep_count)
         risk_emoji = "🔴" if risk in ("CRITICAL", "HIGH") else ("🟡" if risk == "MEDIUM" else "🟢")
         obj_dir = co.object_type.lower().replace(" ", "_") + "s"
-        subs_str = f"{len(co.subprograms)} rotinas" if co.subprograms else "Código PL/SQL"
+        subs_str = f"{len(co.subprograms)} routines" if co.subprograms else "PL/SQL Code"
         tags_str = f"`{', '.join(ann.tags)}`" if (ann and ann.tags) else "-"
         lines.append(
-            f"| `{co.name}` | {co.object_type} | {risk_emoji} `{risk}` | {dep_count} | {subs_str} | {tags_str} | [Ver Detalhes]({obj_dir}/{co.name}.md) |"
+            f"| `{co.name}` | {co.object_type} | {risk_emoji} `{risk}` | {dep_count} | {subs_str} | {tags_str} | [View Details]({obj_dir}/{co.name}.md) |"
         )
 
     return "\n".join(lines)
@@ -1377,9 +1377,9 @@ def render_dossier_markdown(
         yaml_frontmatter,
         "---",
         "",
-        f"# DOSSIÊ DE IMPACTO E DOCUMENTAÇÃO FOCAL: {focal_name}",
+        f"# TECHNICAL IMPACT & FOCAL DOCUMENTATION DOSSIER: {focal_name}",
         "",
-        f"**Tipo de Objeto:** `{focal_type}`",
+        f"**Object Type:** `{focal_type}`",
     ]
 
     if focal_obj:
@@ -1390,10 +1390,10 @@ def render_dossier_markdown(
     lines.extend(
         [
             f"> [!{risk_badge_color}]",
-            "> **Raio-X de Impacto Técnico:**",
-            f"> - **Nível de Risco de Alteração:** `{risk_level}` ({dep_count} conexões no grafo)",
-            f"> - **Tabelas Pais (Upstream):** `{len(set(parents))}` | **Tabelas Filhas (Downstream):** `{len(set(children))}`",
-            f"> - **Consumidores Ativos (Views/Procs/Triggers):** `{len(set(consumers))}`",
+            "> **Technical Impact X-Ray:**",
+            f"> - **Change Risk Level:** `{risk_level}` ({dep_count} graph connections)",
+            f"> - **Parent Tables (Upstream):** `{len(set(parents))}` | **Child Tables (Downstream):** `{len(set(children))}`",
+            f"> - **Active Consumers (Views/Procs/Triggers):** `{len(set(consumers))}`",
             "",
         ]
     )
@@ -1401,80 +1401,80 @@ def render_dossier_markdown(
     desc = (
         (annotation and annotation.description)
         or getattr(focal_obj, "comment", None)
-        or f"Análise minuciosa e rastreamento de linhagem técnica para o objeto `{focal_name}`."
+        or f"Detailed analysis and technical lineage tracking for object `{focal_name}`."
     )
-    lines.extend(["## Visão geral de negócio", "", desc])
+    lines.extend(["## Business Overview", "", desc])
     lines.extend(_render_business_rules(annotation))
 
     # 3. Semantic Narrative Summary (RAG Ready)
     semantic_text = generate_semantic_rag_text(trace_result, annotation=annotation)
-    lines.extend(["", "## 🧠 Resumo Narrativo Semântico (RAG Ready)", "", semantic_text])
+    lines.extend(["", "## 🧠 Semantic Narrative Summary (RAG Ready)", "", semantic_text])
 
     # 4. Mermaid Lineage Graph
-    lines.extend(["", "## Grafo de Linhagem e Relacionamentos", ""])
+    lines.extend(["", "## Lineage & Relationship Graph", ""])
     if trace_result.dependencies:
         lines.append(generate_mermaid_graph(focal_name, trace_result.dependencies))
     else:
-        lines.append("*Nenhuma dependência direta identificada no catálogo/snapshot.*")
+        lines.append("*No direct dependencies identified in snapshot/catalog.*")
 
     # 5. Dependency Table
-    lines.extend(["", "## Mapa de Dependências e Impacto", ""])
+    lines.extend(["", "## Dependency & Impact Map", ""])
     if trace_result.dependencies:
-        lines.append("| Nível | Objeto Origem | Tipo | Relação | Objeto Alvo | Tipo | Detalhes |")
+        lines.append("| Level | Source Object | Type | Relation | Target Object | Type | Details |")
         lines.append("|---|---|---|---|---|---|---|")
         for dep in sorted(trace_result.dependencies, key=lambda d: (d.depth, d.source_name)):
             lines.append(
-                f"| **Nível {dep.depth}** | `{dep.source_name}` | {dep.source_type} | `{dep.relation_type}` | `{dep.target_name}` | {dep.target_type} | {dep.details or ''} |"
+                f"| **Level {dep.depth}** | `{dep.source_name}` | {dep.source_type} | `{dep.relation_type}` | `{dep.target_name}` | {dep.target_type} | {dep.details or ''} |"
             )
     else:
-        lines.append("Nenhuma dependência registrada.")
+        lines.append("No recorded dependencies.")
 
     # 6. Focal Object Details
     if isinstance(focal_obj, TableMeta):
         lines.extend(
-            ["", "## Estrutura de Colunas do Objeto Focal", "", "| Coluna | Tipo | Nulo | Padrão | Comentário |", "|---|---|---|---|---|"]
+            ["", "## Focal Object Column Structure", "", "| Column | Type | Nullable | Default | Comment |", "|---|---|---|---|---|"]
         )
         ann_cols = annotation.columns if annotation else {}
         for col in focal_obj.columns:
             comm = ann_cols.get(col.name) or col.comment or ""
-            lines.append(f"| {col.name} | {col.data_type} | {'SIM' if col.nullable else 'NÃO'} | {col.default or ''} | {comm} |")
+            lines.append(f"| {col.name} | {col.data_type} | {'YES' if col.nullable else 'NO'} | {col.default or ''} | {comm} |")
 
-        lines.extend(["", "### Chaves Primárias", ", ".join(focal_obj.primary_keys) if focal_obj.primary_keys else "Não definida"])
-        lines.extend(["", "### Chaves Estrangeiras de Saída"])
+        lines.extend(["", "### Primary Keys", ", ".join(focal_obj.primary_keys) if focal_obj.primary_keys else "Not defined"])
+        lines.extend(["", "### Outbound Foreign Keys"])
         if focal_obj.foreign_keys:
             for fk in focal_obj.foreign_keys:
-                lines.append(f"- `{fk.name}`: Coluna `{fk.column}` aponta para `{fk.referenced_table}.{fk.referenced_column}`")
+                lines.append(f"- `{fk.name}`: Column `{fk.column}` points to `{fk.referenced_table}.{fk.referenced_column}`")
         else:
-            lines.append("Nenhuma")
+            lines.append("None")
     elif isinstance(focal_obj, ViewMeta) and focal_obj.text:
-        lines.extend(["", "## Definição SQL da View", "```sql", focal_obj.text.strip(), "```"])
+        lines.extend(["", "## View SQL Definition", "```sql", focal_obj.text.strip(), "```"])
     elif isinstance(focal_obj, CodeObjectMeta) and focal_obj.source:
-        lines.extend(["", "## Código-Fonte PL/SQL", "```sql", focal_obj.source.strip(), "```"])
+        lines.extend(["", "## PL/SQL Source Code", "```sql", focal_obj.source.strip(), "```"])
 
     # 7. Related Objects Details
     if trace_result.related_tables or trace_result.related_views or trace_result.related_code_objects or trace_result.related_triggers:
-        lines.extend(["", "## Detalhes dos Objetos Relacionados", ""])
+        lines.extend(["", "## Related Objects Details", ""])
 
         if trace_result.related_tables:
-            lines.append("### 📊 Tabelas Conectadas")
+            lines.append("### 📊 Connected Tables")
             for t in trace_result.related_tables:
-                lines.append(f"- **`{t.name}`**: {len(t.columns)} colunas, {len(t.foreign_keys)} FKs ({t.comment or 'Sem comentário'})")
+                lines.append(f"- **`{t.name}`**: {len(t.columns)} columns, {len(t.foreign_keys)} FKs ({t.comment or 'No comment'})")
 
         if trace_result.related_views:
             lines.append("")
-            lines.append("### 👁️ Views Conectadas")
+            lines.append("### 👁️ Connected Views")
             for v in trace_result.related_views:
-                lines.append(f"- **`{v.name}`**: {len(v.columns)} colunas ({v.comment or 'Sem comentário'})")
+                lines.append(f"- **`{v.name}`**: {len(v.columns)} columns ({v.comment or 'No comment'})")
 
         if trace_result.related_triggers:
             lines.append("")
-            lines.append("### ⚡ Triggers Conectados")
+            lines.append("### ⚡ Connected Triggers")
             for trg in trace_result.related_triggers:
-                lines.append(f"- **`{trg.name}`** (Disparo: `{trg.trigger_type} {trg.triggering_event}` na tabela `{trg.table_name}`)")
+                lines.append(f"- **`{trg.name}`** (Trigger: `{trg.trigger_type} {trg.triggering_event}` on table `{trg.table_name}`)")
 
         if trace_result.related_code_objects:
             lines.append("")
-            lines.append("### ⚙️ Packages / Procedures / Functions Conectadas")
+            lines.append("### ⚙️ Connected Packages / Procedures / Functions")
             for co in trace_result.related_code_objects:
                 lines.append(f"- **`{co.name}`** ({co.object_type})")
 

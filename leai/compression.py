@@ -81,7 +81,7 @@ def extract_package_skeleton(package_source: str) -> str:
         # If not matched by detailed regex, return first 1500 minified characters
         return minify_plsql_source(package_source)[:1500]
 
-    return "PACKAGE SKELETON (Assinaturas dos Subprogramas):\n" + "\n".join(lines)
+    return "PACKAGE SKELETON (Subprogram Signatures):\n" + "\n".join(lines)
 
 
 def compact_schema_notation(schema: SchemaMetadata, max_tables: int = 40) -> str:
@@ -107,7 +107,7 @@ def compact_schema_notation(schema: SchemaMetadata, max_tables: int = 40) -> str
     view_names = [v.name for v in schema.views[:30]]
     pkg_names = [co.name for co in schema.code_objects[:30]]
 
-    result_parts = [f"Schema '{schema.schema_name}':", "Tabelas: " + "; ".join(table_lines)]
+    result_parts = [f"Schema '{schema.schema_name}':", "Tables: " + "; ".join(table_lines)]
     if view_names:
         result_parts.append("Views: " + ", ".join(view_names))
     if pkg_names:

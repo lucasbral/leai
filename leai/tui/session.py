@@ -184,55 +184,196 @@ class InteractiveTUISession:
             f"Tokens: <b><style fg='#89b4fa'>{tokens_str}</style></b> "
         )
 
-    def print_welcome_banner(self) -> None:
-        """Displays sleek OpenCode header banner."""
-        total_tables = sum(len(s.tables) for s in self.schemas)
-        total_views = sum(len(s.views) for s in self.schemas)
-        total_code = sum(len(s.code_objects) for s in self.schemas)
-        total_triggers = sum(len(s.triggers) for s in self.schemas)
-        schemas_count = len(self.schemas)
-        model_display = f"{self.provider_name.upper()} ({self.model_name})"
-
+    def _generate_starter_suggestions(self) -> list[str]:
+        """Generates dynamic, contextual starter queries based on loaded database objects."""
         if not self.schemas:
-            target_str = ", ".join(self.config.schemas) if (self.config.schemas and not self.config.is_all_schemas) else "ALL"
-            header_content = (
-                f"[bold #cba6f7]Leai[/bold #cba6f7] [dim #9399b2]v{self._get_version()}[/dim #9399b2]\n"
-                f"[dim #6c7086]Oracle Database DOC Assistant & Copilot[/dim #6c7086]\n\n"
-                f"[bold #cdd6f4]Target Schemas:[/bold #cdd6f4] [bold #f9e2af]{target_str}[/bold #f9e2af]  •  "
-                f"[bold #cdd6f4]AI Model:[/bold #cdd6f4] [bold #a6e3a1]{model_display}[/bold #a6e3a1]\n\n"
-                f"[yellow]⚠️  Nenhum snapshot de banco encontrado em `{self.config.rawPath}`.[/yellow]\n"
-                f"  👉 Digite [bold #74c7ec]/extract[/bold #74c7ec] para conectar ao Oracle e extrair os metadados.\n"
-                f"  👉 Digite [bold #74c7ec]/trace <OBJETO>[/bold #74c7ec] para executar rastreamento de linhagem focal.\n"
-                f"  👉 Digite [bold #74c7ec]/help[/bold #74c7ec] para a lista completa de comandos."
-            )
-        else:
-            if schemas_count == 1:
-                schema_badge = f"[bold #f9e2af]{self.schemas[0].schema_name}[/bold #f9e2af]"
-                catalog_title = f"[dim #9399b2]Catálogo ({self.schemas[0].schema_name}):[/dim #9399b2]"
-            else:
-                s_names = [s.schema_name for s in self.schemas]
-                preview = ", ".join(s_names[:8]) + (f" (+{schemas_count - 8} mais)" if schemas_count > 8 else "")
-                schema_badge = f"[bold #f9e2af]{preview}[/bold #f9e2af] [dim #9399b2]({schemas_count} schemas)[/dim #9399b2]"
-                catalog_title = f"[dim #9399b2]Catálogo ({schemas_count} schemas):[/dim #9399b2]"
+            return [
+                "Run [bold #74c7ec]/extract[/bold #74c7ec] to pull live database metadata from Oracle",
+                "How do I configure database credentials and schemas in [bold #74c7ec]leai.yml[/bold #74c7ec]?",
+                "Type [bold #74c7ec]/help[/bold #74c7ec] to view all available commands and keyboard shortcuts",
+            ]
 
-            header_content = (
-                f"[bold #cba6f7]Leai[/bold #cba6f7] [dim #9399b2]v{self._get_version()}[/dim #9399b2]\n"
-                f"[dim #6c7086]Oracle Database DOC Assistant & Copilot[/dim #6c7086]\n\n"
-                f"[bold #cdd6f4]Schema{'s' if schemas_count > 1 else ''}:[/bold #cdd6f4] {schema_badge}  •  "
-                f"[bold #cdd6f4]AI Model:[/bold #cdd6f4] [bold #a6e3a1]{model_display}[/bold #a6e3a1]\n"
-                f"{catalog_title} [bold #74c7ec]{total_tables}[/bold #74c7ec] Tabelas • [bold #74c7ec]{total_views}[/bold #74c7ec] Views • [bold #74c7ec]{total_code}[/bold #74c7ec] Rotinas • [bold #74c7ec]{total_triggers}[/bold #74c7ec] Triggers\n\n"
-                f"[dim #9399b2]Atalhos:[/dim #9399b2] Digite qualquer pergunta ou use [bold #74c7ec]@OBJETO[/bold #74c7ec] para autocompletar tabelas/packages, ou [bold #74c7ec]/help[/bold #74c7ec] para comandos."
-            )
+        all_tables = [t.name for s in self.schemas for t in s.tables]
+        all_views = [v.name for s in self.schemas for v in s.views]
+        all_code = [co.name for s in self.schemas for co in s.code_objects]
+
+        suggestions = []
+        if all_tables:
+            tbl = all_tables[0]
+            suggestions.append(f"Explain the functional purpose, columns, and business rules of [bold #74c7ec]@{tbl}[/bold #74c7ec]")
+
+        if all_code:
+            routine = all_code[0]
+            suggestions.append(f"Trace change risk and upstream/downstream dependencies for [bold #74c7ec]@{routine}[/bold #74c7ec]")
+        elif all_views:
+            vw = all_views[0]
+            suggestions.append(f"What tables and filters are used in the view definition of [bold #74c7ec]@{vw}[/bold #74c7ec]?")
+        elif len(all_tables) > 1:
+            tbl2 = all_tables[1]
+            suggestions.append(f"How does [bold #74c7ec]@{tbl2}[/bold #74c7ec] relate to other tables in the schema?")
+
+        if all_tables and len(all_tables) > 2:
+            tbl3 = all_tables[2]
+            suggestions.append(f"Find all foreign keys and connected objects pointing to [bold #74c7ec]@{tbl3}[/bold #74c7ec]")
+        else:
+            suggestions.append("Show me a summary of tables with the highest change risk score")
+
+        return suggestions[:3]
+
+    def print_welcome_banner(self) -> None:
+        """Displays sleek, modern OpenCode-style developer dashboard."""
+        version = self._get_version()
+
+        # 1. ASCII Art Header with Catppuccin Gradient
+        ascii_logo = (
+            "[bold #cba6f7] ██╗     ███████╗ █████╗ ██╗[/bold #cba6f7]\n"
+            "[bold #b4befe] ██║     ██╔════╝██╔══██╗██║[/bold #b4befe]\n"
+            "[bold #89b4fa] ██║     █████╗  ███████║██║[/bold #89b4fa]\n"
+            "[bold #74c7ec] ██║     ██╔══╝  ██╔══██║██║[/bold #74c7ec]\n"
+            "[bold #89dceb] ███████╗███████╗██║  ██║██║[/bold #89dceb]\n"
+            "[bold #94e2d5] ╚══════╝╚══════╝╚═╝  ╚═╝╚═╝[/bold #94e2d5]"
+        )
+
+        header_grid = Table.grid(expand=True)
+        header_grid.add_column(ratio=3)
+        header_grid.add_column(ratio=2, justify="right")
+
+        header_left = f"{ascii_logo}\n[dim #6c7086]Oracle Database Docs[/dim #6c7086]"
+
+        header_right = (
+            f"\n[bold #cba6f7]LEAI CLI[/bold #cba6f7] [bold green]v{version}[/bold green]\n"
+            f"[dim #9399b2]Type queries directly or [/dim #9399b2][bold #74c7ec]/help[/bold #74c7ec][dim #9399b2] for commands[/dim #9399b2]"
+        )
+        header_grid.add_row(header_left, header_right)
 
         console.print()
         console.print(
             Panel(
-                header_content,
+                header_grid,
                 box=box.ROUNDED,
                 border_style="#cba6f7",
                 padding=(1, 2),
             )
         )
+
+        # 2. Side-by-Side Status Cards
+        total_tables = sum(len(s.tables) for s in self.schemas)
+        total_views = sum(len(s.views) for s in self.schemas)
+        total_code = sum(len(s.code_objects) for s in self.schemas)
+        total_triggers = sum(len(s.triggers) for s in self.schemas)
+        schemas_count = len(self.schemas)
+
+        def _fmt_path(p: Path | str) -> str:
+            try:
+                p_obj = Path(p).resolve()
+                cwd = Path.cwd().resolve()
+                if p_obj == cwd:
+                    return "./"
+                if p_obj.is_relative_to(cwd):
+                    return f"./{p_obj.relative_to(cwd)}"
+                return str(p_obj)
+            except Exception:
+                return str(p)
+
+        raw_display = _fmt_path(self.config.rawPath)
+        ann_display = _fmt_path(self.config.annotationsPath)
+
+        # 2. Unified Status Table (Rounded, perfectly aligned across all terminal sizes)
+        status_table = Table(
+            expand=True,
+            box=box.ROUNDED,
+            border_style="#89b4fa",
+            show_header=True,
+            header_style="bold",
+            pad_edge=True,
+            padding=(0, 1),
+        )
+        status_table.add_column("[bold #89b4fa]◈ Database & Catalog[/bold #89b4fa]", ratio=1)
+        status_table.add_column("[bold #a6e3a1]◈ AI Copilot & Engine[/bold #a6e3a1]", ratio=1)
+
+        # Left Column: Database Status
+        if not self.schemas:
+            target_str = ", ".join(self.config.schemas) if (self.config.schemas and not self.config.is_all_schemas) else "ALL"
+            db_lines = [
+                f"[bold #cdd6f4]Schemas:[/bold #cdd6f4] [bold #f9e2af]{target_str}[/bold #f9e2af]",
+                f"[bold #cdd6f4]Snapshot:[/bold #cdd6f4] [dim]{raw_display}[/dim]",
+                "[bold yellow]! No database snapshot loaded[/bold yellow]",
+                "Run [bold #74c7ec]/extract[/bold #74c7ec] to connect & pull metadata",
+            ]
+        else:
+            if schemas_count == 1:
+                schema_badge = f"[bold #f9e2af]{self.schemas[0].schema_name}[/bold #f9e2af] [dim](1 active)[/dim]"
+            else:
+                s_names = [s.schema_name for s in self.schemas]
+                preview = ", ".join(s_names[:4]) + (f" (+{schemas_count - 4} more)" if schemas_count > 4 else "")
+                schema_badge = f"[bold #f9e2af]{preview}[/bold #f9e2af] [dim]({schemas_count} schemas)[/dim]"
+
+            db_lines = [
+                f"[bold #cdd6f4]Schemas:[/bold #cdd6f4] {schema_badge}",
+                f"[bold #cdd6f4]Catalog:[/bold #cdd6f4] [bold #74c7ec]{total_tables}[/bold #74c7ec] Tables • [bold #74c7ec]{total_views}[/bold #74c7ec] Views",
+                f"[bold #cdd6f4]Objects:[/bold #cdd6f4] [bold #74c7ec]{total_code}[/bold #74c7ec] Routines • [bold #74c7ec]{total_triggers}[/bold #74c7ec] Triggers",
+                f"[bold #cdd6f4]Snapshot:[/bold #cdd6f4] [dim]{raw_display}[/dim] [bold green]● Ready[/bold green]",
+            ]
+
+        # Right Column: AI Status
+        provider_name = (self.provider_name or self.config.ai.default_provider or "openai").upper()
+        model_name = self.model_name or "default"
+        is_client_ok = self.client is not None
+        client_status = "[bold green]● Connected[/bold green]" if is_client_ok else "[bold yellow]! Not Configured[/bold yellow]"
+
+        chunks_dir = self.config.docPath / "chunks"
+        chunk_count = len(list(chunks_dir.glob("*.json"))) if chunks_dir.exists() else 0
+        chunk_info = f"[bold #74c7ec]{chunk_count}[/bold #74c7ec] chunks indexed" if chunk_count > 0 else "[dim]Run /compile to index[/dim]"
+
+        ai_lines = [
+            f"[bold #cdd6f4]Provider:[/bold #cdd6f4] [bold #a6e3a1]{provider_name}[/bold #a6e3a1] [dim]({model_name})[/dim]",
+            f"[bold #cdd6f4]Status:[/bold #cdd6f4] {client_status} [dim](Temp: {self.config.ai.temperature:.2f})[/dim]",
+            f"[bold #cdd6f4]RAG Memory:[/bold #cdd6f4] {chunk_info}",
+            f"[bold #cdd6f4]Annotations:[/bold #cdd6f4] [dim]{ann_display}[/dim]",
+        ]
+
+        status_table.add_row("\n".join(db_lines), "\n".join(ai_lines))
+        console.print(status_table)
+
+        # 3. Essential Actions & Shortcuts Cheat-sheet
+        actions_grid = Table.grid(expand=True, padding=(0, 2))
+        actions_grid.add_column(ratio=1)
+        actions_grid.add_column(ratio=1)
+
+        actions_grid.add_row(
+            "  [bold #74c7ec]@OBJECT[/bold #74c7ec]     [dim]Autocomplete objects[/dim]",
+            "  [bold #74c7ec]/doc @OBJ[/bold #74c7ec]   [dim]Edit annotations in CLI[/dim]",
+        )
+        actions_grid.add_row(
+            "  [bold #74c7ec]/extract[/bold #74c7ec]    [dim]Pull Oracle metadata[/dim]",
+            "  [bold #74c7ec]/serve[/bold #74c7ec]      [dim]Open Web Studio editor[/dim]",
+        )
+        actions_grid.add_row(
+            "  [bold #74c7ec]/compile[/bold #74c7ec]    [dim]Generate RAG & MD docs[/dim]",
+            "  [bold #74c7ec]/models[/bold #74c7ec]     [dim]Switch AI providers[/dim]",
+        )
+        actions_grid.add_row(
+            "  [bold #74c7ec]/trace @OBJ[/bold #74c7ec] [dim]Lineage impact graph[/dim]",
+            "  [bold #74c7ec]/help[/bold #74c7ec]       [dim]Full command guide[/dim]",
+        )
+
+        actions_panel = Panel(
+            actions_grid,
+            title="[bold #fab387]⚡ Quick Actions & Keybindings[/bold #fab387]",
+            title_align="left",
+            box=box.ROUNDED,
+            border_style="#fab387",
+            padding=(0, 1),
+        )
+        console.print(actions_panel)
+
+        # 4. Contextual Starter Suggestions
+        suggestions = self._generate_starter_suggestions()
+        if suggestions:
+            console.print("[dim #f9e2af]💡 Suggested questions to get started:[/dim #f9e2af]")
+            for s in suggestions:
+                console.print(f"   [dim #6c7086]•[/dim #6c7086] {s}")
+            console.print()
 
     def _get_version(self) -> str:
         try:
@@ -297,12 +438,12 @@ class InteractiveTUISession:
                 console.print(
                     Panel(
                         "[bold cyan]Chat Assistant Mode[/bold cyan]\n\n"
-                        "Você não precisa digitar [bold cyan]/chat[/bold cyan]! Qualquer pergunta digitada diretamente no terminal é respondida pela IA com contexto de banco de dados e RAG.\n\n"
-                        "[dim]Exemplos:[/dim]\n"
-                        "  • [yellow]Quais são as tabelas de folha de pagamento?[/yellow]\n"
-                        "  • [yellow]@EMPLOYEES quais colunas são chaves primárias?[/yellow]\n"
-                        "  • [yellow]Gere uma query SQL para listar aniversariantes do mês.[/yellow]",
-                        title="[bold green]✦ IA Copilot[/bold green]",
+                        "You don't need to type [bold cyan]/chat[/bold cyan]! Any question typed directly in the terminal is answered by the AI with database context and RAG.\n\n"
+                        "[dim]Examples:[/dim]\n"
+                        "  • [yellow]Which tables are related to payroll?[/yellow]\n"
+                        "  • [yellow]@EMPLOYEES which columns are primary keys?[/yellow]\n"
+                        "  • [yellow]Generate a SQL query to list active employees by department.[/yellow]",
+                        title="[bold green]✦ AI Copilot[/bold green]",
                         border_style="cyan",
                     )
                 )
@@ -878,50 +1019,50 @@ class InteractiveTUISession:
 
     def _render_help(self) -> None:
         table = Table(show_header=True, header_style="bold #74c7ec", box=box.ROUNDED)
-        table.add_column("Comando", style="bold #f9e2af", width=22)
-        table.add_column("Categoria", style="dim #9399b2", width=14)
-        table.add_column("Descrição", style="#cdd6f4")
+        table.add_column("Command", style="bold #f9e2af", width=22)
+        table.add_column("Category", style="dim #9399b2", width=14)
+        table.add_column("Description", style="#cdd6f4")
 
         # Documentation & Studio
-        table.add_row("/doc [obj]", "Documentação", "Editor interativo no terminal de anotações YAML e docs")
-        table.add_row("/enrich [obj]", "AI Studio", "Auto-enriquece descrições e regras de negócio com IA")
-        table.add_row("/compile [obj]", "Pipeline", "Compila markdowns finais em docs/ (suporta objeto único)")
-        table.add_row("/annotate", "Pipeline", "Sincroniza stubs de anotação YAML em annotations/")
-        table.add_row("/extract [s|ALL]", "Pipeline", "Conecta ao Oracle e extrai snapshot novo de metadados")
-        table.add_row("/serve [port|stop]", "Web Studio", "Inicia o Web Studio com editor web e sincronização em tempo real")
+        table.add_row("/doc [obj]", "Documentation", "Interactive terminal editor for YAML annotations and docs")
+        table.add_row("/enrich [obj]", "AI Studio", "Auto-enrich descriptions and business rules with AI")
+        table.add_row("/compile [obj]", "Pipeline", "Compile final Markdown files into docs/ (supports single object)")
+        table.add_row("/annotate", "Pipeline", "Synchronize YAML annotation stubs into annotations/")
+        table.add_row("/extract [s|ALL]", "Pipeline", "Connect to Oracle and extract a fresh metadata snapshot")
+        table.add_row("/serve [port|stop]", "Web Studio", "Launch Web Studio with browser editor and live sync")
 
         # Exploration & Lineage
-        table.add_row("/trace <obj>", "Linhagem", "Executa rastreamento de dependências e raio-x com Mermaid")
-        table.add_row("/tables", "Inspeção", "Lista todas as tabelas com contagem de colunas e PKs")
-        table.add_row("/schema [s]", "Inspeção", "Exibe visão geral detalhada do catálogo do banco")
-        table.add_row("/changes [d]", "Inspeção", "Inspeciona objetos modificados nos últimos N dias (padrão: 7)")
+        table.add_row("/trace <obj>", "Lineage", "Run dependency tracing and X-ray architecture graph")
+        table.add_row("/tables", "Inspection", "List all tables with column counts and primary keys")
+        table.add_row("/schema [s]", "Inspection", "Display detailed catalog overview for schema")
+        table.add_row("/changes [d]", "Inspection", "Inspect objects modified in the last N days (default: 7)")
 
         # AI & Configuration
-        table.add_row("/models [p]", "Config IA", "Lista os modelos de IA disponíveis na API")
-        table.add_row("/model <p> [m]", "Config IA", "Altera provedor (openai, gemini, grok, etc.) e modelo")
-        table.add_row("/check", "Diagnóstico", "Verifica conexão Oracle, snapshots, docs e status da IA")
-        table.add_row("/init", "Setup", "Verifica ou inicializa o arquivo de configuração leai.yml")
+        table.add_row("/models [p]", "AI Config", "List available AI models from the provider API")
+        table.add_row("/model <p> [m]", "AI Config", "Switch provider (openai, gemini, grok, etc.) and model")
+        table.add_row("/check", "Diagnostics", "Check Oracle connection, snapshots, docs, and AI status")
+        table.add_row("/init", "Setup", "Check or initialize the leai.yml configuration file")
 
         # Session & Utilities
-        table.add_row("/audit [last|session|export]", "Auditoria", "Inspeciona trace de ferramentas da IA, latência e logs")
-        table.add_row("/tools", "Auditoria", "Visualizador rápido de entradas/saídas da última chamada de ferramenta")
-        table.add_row("/save [file.md]", "Sessão", "Exporta transcrição da conversa para arquivo Markdown")
-        table.add_row("/clear", "Sessão", "Limpa a memória do chat e reseta a tela do terminal")
-        table.add_row("/chat <msg>", "Copilot", "Envia pergunta para a IA (ou apenas digite diretamente)")
-        table.add_row("/help", "Referência", "Exibe este guia de comandos interativo")
-        table.add_row("/exit, /quit", "Sessão", "Encerra o copilot interativo")
+        table.add_row("/audit [last|session|export]", "Audit", "Inspect AI tool traces, reasoning, latency, and logs")
+        table.add_row("/tools", "Audit", "Quick viewer for tool input/output payload inspection")
+        table.add_row("/save [file.md]", "Session", "Export conversation transcript to a Markdown file")
+        table.add_row("/clear", "Session", "Reset chat memory and clear terminal screen")
+        table.add_row("/chat <msg>", "Copilot", "Send a query to the AI assistant (or type directly)")
+        table.add_row("/help", "Reference", "Display this interactive command guide")
+        table.add_row("/exit, /quit", "Session", "Exit interactive copilot session")
 
         console.print()
         console.print(
             Panel(
                 table,
-                title="[bold #cba6f7]✦ Referência de Comandos Interativos do LEAI[/bold #cba6f7]",
+                title="[bold #cba6f7]✦ LEAI Interactive Command Reference[/bold #cba6f7]",
                 box=box.ROUNDED,
                 border_style="#74c7ec",
             )
         )
         console.print(
-            "[dim #9399b2]Dica: Digite qualquer pergunta diretamente, use [bold #74c7ec]@OBJETO[/bold #74c7ec] para autocompletar menções ou [bold #74c7ec]/[/bold #74c7ec] para comandos.[/dim #9399b2]\n"
+            "[dim #9399b2]Tip: Type any question directly, use [bold #74c7ec]@OBJECT[/bold #74c7ec] to autocomplete mentions, or [bold #74c7ec]/[/bold #74c7ec] for commands.[/dim #9399b2]\n"
         )
 
     def _render_models_table(self, provider_name: str | None = None, interactive: bool = True) -> None:
@@ -933,16 +1074,16 @@ class InteractiveTUISession:
                 else get_llm_client(self.config, provider_override=target_prov)
             )
             with console.status(
-                f"[#74c7ec]Buscando modelos disponíveis na API [bold #f9e2af]{target_prov.upper()}[/bold #f9e2af]...[/#74c7ec]",
+                f"[#74c7ec]Fetching available models from [bold #f9e2af]{target_prov.upper()}[/bold #f9e2af] API...[/#74c7ec]",
                 spinner="dots",
             ):
                 models_list = temp_client.list_models()
         except Exception as exc:
-            console.print(f"[red]Não foi possível buscar modelos para {target_prov.upper()}:[/red] {exc}\n")
+            console.print(f"[red]Could not fetch models for {target_prov.upper()}:[/red] {exc}\n")
             return
 
         if not models_list:
-            console.print(f"[yellow]Nenhum modelo retornado para {target_prov.upper()}.[/yellow]\n")
+            console.print(f"[yellow]No models returned for {target_prov.upper()}.[/yellow]\n")
             return
 
         table = Table(show_header=True, header_style="bold #74c7ec", box=box.ROUNDED)
@@ -950,7 +1091,7 @@ class InteractiveTUISession:
         table.add_column("Status", justify="center", width=8)
         table.add_column("Model ID", style="bold #f9e2af")
         table.add_column("Display Name", style="#cdd6f4")
-        table.add_column("Descrição / Notas", style="dim #9399b2")
+        table.add_column("Description / Notes", style="dim #9399b2")
 
         for idx, m in enumerate(models_list, 1):
             m_id = m.get("id", "")
@@ -962,7 +1103,7 @@ class InteractiveTUISession:
         console.print(
             Panel(
                 table,
-                title=f"[bold #cba6f7]✦ Modelos Disponíveis para {target_prov.upper()} ({len(models_list)} Total)[/bold #cba6f7]",
+                title=f"[bold #cba6f7]✦ Available Models for {target_prov.upper()} ({len(models_list)} Total)[/bold #cba6f7]",
                 box=box.ROUNDED,
                 border_style="#74c7ec",
             )
@@ -1232,7 +1373,7 @@ class InteractiveTUISession:
         )
         if tool_count > 0:
             console.print(
-                "[dim #6c7086]💡 Digite [bold #74c7ec]/audit[/bold #74c7ec] ou [bold #74c7ec]/tools[/bold #74c7ec] para inspecionar parâmetros, SQL e respostas brutas das ferramentas.[/dim #6c7086]\n"
+                "[dim #6c7086]💡 Type [bold #74c7ec]/audit[/bold #74c7ec] or [bold #74c7ec]/tools[/bold #74c7ec] to inspect tool parameters, SQL queries, and raw responses.[/dim #6c7086]\n"
             )
         else:
             console.print()
