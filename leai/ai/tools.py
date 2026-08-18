@@ -256,9 +256,31 @@ def _extract_search_tokens(query: str) -> list[str]:
             tokens.add(w[:6])
             tokens.add(w[:7])
             tokens.add(w[:8])
-            for suffix in ("AMENTO", "IMENTO", "ACOES", "ICOES", "ACAO", "ICAO", "ADO", "ADA", "ADOS", "ADAS", "AL", "AIS", "AR", "ER", "IR", "OS", "AS", "ES", "IS", "OR", "ORES"):
+            for suffix in (
+                "AMENTO",
+                "IMENTO",
+                "ACOES",
+                "ICOES",
+                "ACAO",
+                "ICAO",
+                "ADO",
+                "ADA",
+                "ADOS",
+                "ADAS",
+                "AL",
+                "AIS",
+                "AR",
+                "ER",
+                "IR",
+                "OS",
+                "AS",
+                "ES",
+                "IS",
+                "OR",
+                "ORES",
+            ):
                 if w.endswith(suffix) and len(w) - len(suffix) >= 4:
-                    tokens.add(w[:-len(suffix)])
+                    tokens.add(w[: -len(suffix)])
 
     return [t for t in tokens if len(t) >= 3]
 
@@ -365,7 +387,11 @@ def search_business_documentation(
                 # Columns check
                 if fields_filter in ("all", "columns", "cols") and ann.columns:
                     for col_name, col_desc in ann.columns.items():
-                        desc_str = col_desc if isinstance(col_desc, str) else (col_desc.get("description", "") if isinstance(col_desc, dict) else str(col_desc))
+                        desc_str = (
+                            col_desc
+                            if isinstance(col_desc, str)
+                            else (col_desc.get("description", "") if isinstance(col_desc, dict) else str(col_desc))
+                        )
                         norm_col = _normalize_text(f"{col_name} {desc_str}")
                         if any(t in norm_col for t in tokens):
                             score += 40
@@ -383,17 +409,19 @@ def search_business_documentation(
                 if score > 0:
                     item_key = f"{schema_name}.{obj_name}"
                     seen_keys.add(item_key)
-                    results.append({
-                        "object_name": obj_name,
-                        "object_type": obj_type,
-                        "schema": schema_name,
-                        "relevance_score": score,
-                        "matched_fields": matched_fields,
-                        "description": ann.description or "",
-                        "matched_snippets": snippets[:5],
-                        "business_rules": ann.business_rules,
-                        "tags": ann.tags,
-                    })
+                    results.append(
+                        {
+                            "object_name": obj_name,
+                            "object_type": obj_type,
+                            "schema": schema_name,
+                            "relevance_score": score,
+                            "matched_fields": matched_fields,
+                            "description": ann.description or "",
+                            "matched_snippets": snippets[:5],
+                            "business_rules": ann.business_rules,
+                            "tags": ann.tags,
+                        }
+                    )
             except Exception:
                 continue
 
@@ -404,7 +432,15 @@ def search_business_documentation(
             [("TABLE", t.name, t.comment, [(c.name, c.comment) for c in t.columns]) for t in s.tables]
             + [("VIEW", v.name, v.comment, [(c.name, c.comment) for c in v.columns]) for v in s.views]
             + [("MVIEW", mv.name, mv.comment, [(c.name, c.comment) for c in mv.columns]) for mv in s.mviews]
-            + [("PACKAGE" if co.object_type.upper() == "PACKAGE" else co.object_type.upper(), co.name, co.comment, [(sp.name, sp.comment) for sp in co.subprograms]) for co in s.code_objects]
+            + [
+                (
+                    "PACKAGE" if co.object_type.upper() == "PACKAGE" else co.object_type.upper(),
+                    co.name,
+                    co.comment,
+                    [(sp.name, sp.comment) for sp in co.subprograms],
+                )
+                for co in s.code_objects
+            ]
             + [("TRIGGER", tr.name, None, []) for tr in s.triggers]
             + [("SYNONYM", syn.name, None, []) for syn in s.synonyms]
         )
@@ -449,17 +485,19 @@ def search_business_documentation(
 
             if score > 0:
                 seen_keys.add(item_key)
-                results.append({
-                    "object_name": oname.upper(),
-                    "object_type": otype,
-                    "schema": s_name,
-                    "relevance_score": score,
-                    "matched_fields": matched_fields,
-                    "description": ocomment or "",
-                    "matched_snippets": snippets[:5],
-                    "business_rules": [],
-                    "tags": [],
-                })
+                results.append(
+                    {
+                        "object_name": oname.upper(),
+                        "object_type": otype,
+                        "schema": s_name,
+                        "relevance_score": score,
+                        "matched_fields": matched_fields,
+                        "description": ocomment or "",
+                        "matched_snippets": snippets[:5],
+                        "business_rules": [],
+                        "tags": [],
+                    }
+                )
 
     # Sort results by relevance_score descending
     results.sort(key=lambda x: x["relevance_score"], reverse=True)
@@ -507,14 +545,16 @@ def search_database_objects(
                 haystack = f"{t.name} {t.comment or ''} {ann_desc} {cols_text}"
                 if _matches_text(haystack):
                     matched_cols = [c.name for c in t.columns if _matches_text(f"{c.name} {c.comment or ''}")]
-                    results.append({
-                        "name": t.name,
-                        "type": "TABLE",
-                        "schema": s_name,
-                        "comment": t.comment or (ann_desc if ann_desc else None),
-                        "column_count": len(t.columns),
-                        "matched_columns": matched_cols[:5],
-                    })
+                    results.append(
+                        {
+                            "name": t.name,
+                            "type": "TABLE",
+                            "schema": s_name,
+                            "comment": t.comment or (ann_desc if ann_desc else None),
+                            "column_count": len(t.columns),
+                            "matched_columns": matched_cols[:5],
+                        }
+                    )
 
         # Views
         if not target_types or "VIEW" in target_types or "VIEWS" in target_types:
@@ -523,13 +563,15 @@ def search_database_objects(
                 haystack = f"{v.name} {v.comment or ''} {cols_text}"
                 if _matches_text(haystack):
                     matched_cols = [c.name for c in v.columns if _matches_text(f"{c.name} {c.comment or ''}")]
-                    results.append({
-                        "name": v.name,
-                        "type": "VIEW",
-                        "schema": s_name,
-                        "comment": v.comment,
-                        "matched_columns": matched_cols[:5],
-                    })
+                    results.append(
+                        {
+                            "name": v.name,
+                            "type": "VIEW",
+                            "schema": s_name,
+                            "comment": v.comment,
+                            "matched_columns": matched_cols[:5],
+                        }
+                    )
 
         # Materialized Views
         if not target_types or any(t in target_types for t in ("MVIEW", "MVIEWS", "MATERIALIZED VIEW", "MATERIALIZED VIEWS")):
@@ -537,51 +579,61 @@ def search_database_objects(
                 cols_text = " ".join(f"{c.name} {c.comment or ''}" for c in mv.columns)
                 haystack = f"{mv.name} {mv.comment or ''} {cols_text}"
                 if _matches_text(haystack):
-                    results.append({
-                        "name": mv.name,
-                        "type": "MATERIALIZED VIEW",
-                        "schema": s_name,
-                        "comment": mv.comment,
-                    })
+                    results.append(
+                        {
+                            "name": mv.name,
+                            "type": "MATERIALIZED VIEW",
+                            "schema": s_name,
+                            "comment": mv.comment,
+                        }
+                    )
 
         # Code Objects (Packages, Procedures, Functions)
         for co in s.code_objects:
             c_type = co.object_type.upper()
             if not target_types or c_type in target_types or f"{c_type}S" in target_types:
                 if _matches_text(f"{co.name} {co.comment or ''}"):
-                    results.append({
-                        "name": co.name,
-                        "type": c_type,
-                        "schema": s_name,
-                        "subprograms_count": len(co.subprograms),
-                        "comment": co.comment,
-                    })
+                    results.append(
+                        {
+                            "name": co.name,
+                            "type": c_type,
+                            "schema": s_name,
+                            "subprograms_count": len(co.subprograms),
+                            "comment": co.comment,
+                        }
+                    )
 
             # Subprograms inside packages
             for sp in co.subprograms:
                 sp_full = f"{co.name}.{sp.name}"
-                if not target_types or any(t in target_types for t in (sp.subprogram_type.upper(), f"{sp.subprogram_type.upper()}S", "SUBPROGRAM", "SUBPROGRAMS")):
+                if not target_types or any(
+                    t in target_types for t in (sp.subprogram_type.upper(), f"{sp.subprogram_type.upper()}S", "SUBPROGRAM", "SUBPROGRAMS")
+                ):
                     if _matches_text(f"{sp.name} {sp_full} {sp.comment or ''}"):
-                        results.append({
-                            "name": sp_full,
-                            "type": f"{co.object_type}.{sp.subprogram_type}",
-                            "schema": s_name,
-                            "package": co.name,
-                            "subprogram": sp.name,
-                            "comment": sp.comment,
-                        })
+                        results.append(
+                            {
+                                "name": sp_full,
+                                "type": f"{co.object_type}.{sp.subprogram_type}",
+                                "schema": s_name,
+                                "package": co.name,
+                                "subprogram": sp.name,
+                                "comment": sp.comment,
+                            }
+                        )
 
         # Triggers
         if not target_types or "TRIGGER" in target_types or "TRIGGERS" in target_types:
             for trg in s.triggers:
                 if _matches_text(f"{trg.name} {trg.table_name or ''}"):
-                    results.append({
-                        "name": trg.name,
-                        "type": "TRIGGER",
-                        "schema": s_name,
-                        "table_name": trg.table_name,
-                        "event": f"{trg.trigger_type} {trg.triggering_event}",
-                    })
+                    results.append(
+                        {
+                            "name": trg.name,
+                            "type": "TRIGGER",
+                            "schema": s_name,
+                            "table_name": trg.table_name,
+                            "event": f"{trg.trigger_type} {trg.triggering_event}",
+                        }
+                    )
 
         # Synonyms
         if not target_types or "SYNONYM" in target_types or "SYNONYMS" in target_types:
@@ -591,15 +643,22 @@ def search_database_objects(
                     target_desc = f"{syn.table_owner or ''}.{syn.table_name or ''}"
                     if target_info and target_info.get("target_type") != "UNKNOWN":
                         target_desc += f" ({target_info['target_type']})"
-                    results.append({
-                        "name": syn.name,
-                        "type": "SYNONYM",
-                        "schema": s_name,
-                        "points_to": target_desc,
-                    })
+                    results.append(
+                        {
+                            "name": syn.name,
+                            "type": "SYNONYM",
+                            "schema": s_name,
+                            "points_to": target_desc,
+                        }
+                    )
 
     # Return top 25 matches sorted by closest name match
-    results.sort(key=lambda x: (0 if _normalize_text(x["name"]) == q_norm else (1 if _normalize_text(x["name"]).startswith(q_norm) else 2), x["name"]))
+    results.sort(
+        key=lambda x: (
+            0 if _normalize_text(x["name"]) == q_norm else (1 if _normalize_text(x["name"]).startswith(q_norm) else 2),
+            x["name"],
+        )
+    )
     return results[:25]
 
 
@@ -665,19 +724,21 @@ def search_column_comments(
                     comment = (ann and ann.columns.get(c.name)) or c.comment or ""
                     matched, score = _score_and_match(f"{comment} {t.comment or ''}", c.name)
                     if matched:
-                        matches.append({
-                            "schema": s_name,
-                            "table_name": t.name,
-                            "qualified_name": f"{s_name}.{t.name}",
-                            "object_type": "TABLE",
-                            "column_name": c.name,
-                            "data_type": c.data_type,
-                            "nullable": c.nullable,
-                            "is_pk": c.name in pk_cols,
-                            "comment": comment or "(Sem comentário)",
-                            "table_comment": t.comment or "",
-                            "_score": score,
-                        })
+                        matches.append(
+                            {
+                                "schema": s_name,
+                                "table_name": t.name,
+                                "qualified_name": f"{s_name}.{t.name}",
+                                "object_type": "TABLE",
+                                "column_name": c.name,
+                                "data_type": c.data_type,
+                                "nullable": c.nullable,
+                                "is_pk": c.name in pk_cols,
+                                "comment": comment or "(Sem comentário)",
+                                "table_comment": t.comment or "",
+                                "_score": score,
+                            }
+                        )
 
         # 2. Views
         if not target_types or any(t in target_types for t in ("VIEW", "VIEWS")):
@@ -697,19 +758,21 @@ def search_column_comments(
                     comment = (ann and ann.columns.get(c.name)) or c.comment or ""
                     matched, score = _score_and_match(f"{comment} {v.comment or ''}", c.name)
                     if matched:
-                        matches.append({
-                            "schema": s_name,
-                            "table_name": v.name,
-                            "qualified_name": f"{s_name}.{v.name}",
-                            "object_type": "VIEW",
-                            "column_name": c.name,
-                            "data_type": c.data_type,
-                            "nullable": c.nullable,
-                            "is_pk": False,
-                            "comment": comment or "(Sem comentário)",
-                            "table_comment": v.comment or "",
-                            "_score": score,
-                        })
+                        matches.append(
+                            {
+                                "schema": s_name,
+                                "table_name": v.name,
+                                "qualified_name": f"{s_name}.{v.name}",
+                                "object_type": "VIEW",
+                                "column_name": c.name,
+                                "data_type": c.data_type,
+                                "nullable": c.nullable,
+                                "is_pk": False,
+                                "comment": comment or "(Sem comentário)",
+                                "table_comment": v.comment or "",
+                                "_score": score,
+                            }
+                        )
 
         # 3. Materialized Views
         if not target_types or any(t in target_types for t in ("MVIEW", "MVIEWS", "MATERIALIZED VIEW", "MATERIALIZED VIEWS")):
@@ -722,19 +785,21 @@ def search_column_comments(
                     comment = c.comment or ""
                     matched, score = _score_and_match(f"{comment} {mv.comment or ''}", c.name)
                     if matched:
-                        matches.append({
-                            "schema": s_name,
-                            "table_name": mv.name,
-                            "qualified_name": f"{s_name}.{mv.name}",
-                            "object_type": "MATERIALIZED VIEW",
-                            "column_name": c.name,
-                            "data_type": c.data_type,
-                            "nullable": c.nullable,
-                            "is_pk": False,
-                            "comment": comment or "(Sem comentário)",
-                            "table_comment": mv.comment or "",
-                            "_score": score,
-                        })
+                        matches.append(
+                            {
+                                "schema": s_name,
+                                "table_name": mv.name,
+                                "qualified_name": f"{s_name}.{mv.name}",
+                                "object_type": "MATERIALIZED VIEW",
+                                "column_name": c.name,
+                                "data_type": c.data_type,
+                                "nullable": c.nullable,
+                                "is_pk": False,
+                                "comment": comment or "(Sem comentário)",
+                                "table_comment": mv.comment or "",
+                                "_score": score,
+                            }
+                        )
 
     matches.sort(key=lambda x: (-x["_score"], x["table_name"], x["column_name"]))
     for m in matches:
@@ -773,22 +838,26 @@ def get_table_schema(
                 cols_info = []
                 for c in t.columns:
                     col_doc = (ann and ann.columns.get(c.name)) or c.comment or ""
-                    cols_info.append({
-                        "name": c.name,
-                        "type": c.data_type,
-                        "nullable": c.nullable,
-                        "is_pk": c.name in pk_cols,
-                        "description": col_doc,
-                    })
+                    cols_info.append(
+                        {
+                            "name": c.name,
+                            "type": c.data_type,
+                            "nullable": c.nullable,
+                            "is_pk": c.name in pk_cols,
+                            "description": col_doc,
+                        }
+                    )
 
                 fks_info = []
                 for fk in t.foreign_keys:
-                    fks_info.append({
-                        "name": fk.name,
-                        "column": fk.column,
-                        "references_table": fk.referenced_table,
-                        "references_column": fk.referenced_column,
-                    })
+                    fks_info.append(
+                        {
+                            "name": fk.name,
+                            "column": fk.column,
+                            "references_table": fk.referenced_table,
+                            "references_column": fk.referenced_column,
+                        }
+                    )
 
                 return {
                     "table_name": t.name,
@@ -817,13 +886,15 @@ def get_table_schema(
                 cols_info = []
                 for c in v.columns:
                     col_doc = (ann and ann.columns.get(c.name)) or c.comment or ""
-                    cols_info.append({
-                        "name": c.name,
-                        "type": c.data_type,
-                        "nullable": c.nullable,
-                        "is_pk": False,
-                        "description": col_doc,
-                    })
+                    cols_info.append(
+                        {
+                            "name": c.name,
+                            "type": c.data_type,
+                            "nullable": c.nullable,
+                            "is_pk": False,
+                            "description": col_doc,
+                        }
+                    )
 
                 return {
                     "table_name": v.name,
@@ -846,13 +917,15 @@ def get_table_schema(
             if mv.name.upper() == target_name:
                 cols_info = []
                 for c in mv.columns:
-                    cols_info.append({
-                        "name": c.name,
-                        "type": c.data_type,
-                        "nullable": c.nullable,
-                        "is_pk": False,
-                        "description": c.comment or "",
-                    })
+                    cols_info.append(
+                        {
+                            "name": c.name,
+                            "type": c.data_type,
+                            "nullable": c.nullable,
+                            "is_pk": False,
+                            "description": c.comment or "",
+                        }
+                    )
 
                 return {
                     "table_name": mv.name,
@@ -1030,18 +1103,25 @@ def trace_object_lineage(
 
     links_summary = []
     for dep in trace_res.dependencies:
-        links_summary.append({
-            "source": dep.source_name,
-            "source_type": dep.source_type,
-            "target": dep.target_name,
-            "target_type": dep.target_type,
-            "relation": dep.relation_type,
-            "details": dep.details,
-            "depth": dep.depth,
-        })
+        links_summary.append(
+            {
+                "source": dep.source_name,
+                "source_type": dep.source_type,
+                "target": dep.target_name,
+                "target_type": dep.target_type,
+                "relation": dep.relation_type,
+                "details": dep.details,
+                "depth": dep.depth,
+            }
+        )
 
     obj_name = target_name
-    parents = [d.target_name for d in trace_res.dependencies if d.target_name != obj_name and d.relation_type in ("FK_REFERENCES", "DEPENDS_ON", "READS/SELECTS", "EXECUTES/CALLS", "SYNONYM_FOR")]
+    parents = [
+        d.target_name
+        for d in trace_res.dependencies
+        if d.target_name != obj_name
+        and d.relation_type in ("FK_REFERENCES", "DEPENDS_ON", "READS/SELECTS", "EXECUTES/CALLS", "SYNONYM_FOR")
+    ]
     children = [d.source_name for d in trace_res.dependencies if d.source_name != obj_name and d.relation_type in ("FK_REFERENCED_BY",)]
     consumers = [
         d.source_name
@@ -1099,14 +1179,16 @@ def grep_plsql_code(
                     snippet_start = max(0, idx - 3)
                     snippet_end = min(len(lines), idx + 3)
                     snippet = "\n".join(lines[snippet_start:snippet_end])
-                    matches.append({
-                        "object_name": co.name,
-                        "object_type": co.object_type,
-                        "schema": s_name,
-                        "line_number": idx,
-                        "matching_line": line.strip(),
-                        "context_snippet": snippet,
-                    })
+                    matches.append(
+                        {
+                            "object_name": co.name,
+                            "object_type": co.object_type,
+                            "schema": s_name,
+                            "line_number": idx,
+                            "matching_line": line.strip(),
+                            "context_snippet": snippet,
+                        }
+                    )
                     if len(matches) >= max_results:
                         return matches
 
@@ -1119,14 +1201,16 @@ def grep_plsql_code(
                     snippet_start = max(0, idx - 2)
                     snippet_end = min(len(lines), idx + 2)
                     snippet = "\n".join(lines[snippet_start:snippet_end])
-                    matches.append({
-                        "object_name": trg.name,
-                        "object_type": "TRIGGER",
-                        "schema": s_name,
-                        "line_number": idx,
-                        "matching_line": line.strip(),
-                        "context_snippet": snippet,
-                    })
+                    matches.append(
+                        {
+                            "object_name": trg.name,
+                            "object_type": "TRIGGER",
+                            "schema": s_name,
+                            "line_number": idx,
+                            "matching_line": line.strip(),
+                            "context_snippet": snippet,
+                        }
+                    )
                     if len(matches) >= max_results:
                         return matches
 
@@ -1159,7 +1243,9 @@ def execute_tool_call(
                 config=config,
             )
         elif tool_name == "search_database_objects":
-            res = search_database_objects(schemas, query=arguments.get("query", ""), object_type=arguments.get("object_type"), config=config)
+            res = search_database_objects(
+                schemas, query=arguments.get("query", ""), object_type=arguments.get("object_type"), config=config
+            )
         elif tool_name == "get_table_schema":
             res = get_table_schema(schemas, config=config, table_name=arguments.get("table_name", ""))
         elif tool_name == "get_subprogram_source":
@@ -1255,4 +1341,3 @@ def summarize_tool_result(tool_name: str, arguments: dict[str, Any], raw_output:
         return "OK"
     except Exception:
         return "Concluído"
-

@@ -380,17 +380,38 @@ leai chat -p ollama -m qwen2.5-coder:14b
 ```
 
 #### 🎮 Interactive In-Session Features (OpenCode Style):
-- **Smart Autocomplete:** Type `/` to browse slash commands or `@` to autocomplete database tables, views, and procedures (`@EMPLOYEES`).
-- `/trace <obj>`: Generates instant inline dependency lineage & Mermaid graph directly inside chat.
-- `/tables`: Renders formatted table list with column counts and primary keys.
-- `/schema`: Shows catalog overview and object counts.
-- `/changes [days]`: Audits recent database modifications without leaving chat.
-- `/models [prov]`: Lists all available AI models returned by the provider API with interactive selection by number (`1`, `2`, `3...`).
-- `/model <prov> [m]`: Switches AI provider and model on the fly.
-- `/save [file.md]`: Exports the complete transcript into a Markdown file.
-- `/clear`: Clears conversation history, context memory, and resets the terminal screen.
-- `/help`: Displays interactive command guide.
-- `/exit` or `/quit`: Closes the chat session.
+- **🎨 Catppuccin Mocha Visual Theme:** Rounded border cards, clean status indicators, and syntax highlighting for SQL, PL/SQL, JSON and Diffs.
+- **⚡ Live Reasoning & Tool Call Timeline:** Step-by-step progress tracking with animated spinners, execution durations, and compact result summaries.
+- **🌊 Token-by-Token Streaming:** Real-time markdown streaming across OpenAI, Gemini, and Anthropic providers.
+- **⌨️ Smart Autocomplete & Multiline:**
+  - Type `/` to browse and autocomplete slash commands with inline descriptions.
+  - Type `@` to autocomplete database objects (`@EMPLOYEES`) with type badges (`[TABLE]`, `[VIEW]`, `[PACKAGE]`, `[PROCEDURE]`).
+  - Press `Alt+Enter` or `Escape+Enter` to insert newlines for multiline prompts, and `Enter` to send.
+  - Search command history with `Ctrl+R` or arrow keys.
+
+#### 📋 Complete In-Session Slash Commands:
+| Command | Category | Description |
+| :--- | :--- | :--- |
+| `/doc [obj]` | Documentation | Interactive in-terminal YAML annotation & documentation editor. |
+| `/enrich [obj]` | AI Studio | Auto-enrich business descriptions & rules with LLM. |
+| `/compile [obj]` | Pipeline | Compile final Markdown docs in `docs/` (supports single object). |
+| `/annotate` | Pipeline | Synchronize YAML annotation stubs in `annotations/`. |
+| `/extract [s\|ALL]` | Pipeline | Connect to Oracle and extract fresh raw metadata snapshot. |
+| `/serve [port\|stop]`| Web Studio | Launch interactive Web Studio with in-browser editor & real-time sync. |
+| `/trace <obj>` | Lineage | Perform inline dependency lineage & impact X-ray with Mermaid. |
+| `/tables` | Inspection | List all tables with column counts and primary keys. |
+| `/schema [s]` | Inspection | Show comprehensive overview of all catalog objects. |
+| `/changes [d]` | Inspection | Inspect database objects modified in last N days (Default: `7`). |
+| `/models [p]` | AI Config | List all available AI models returned by provider API with selection. |
+| `/model <p> [m]` | AI Config | Switch AI provider (`openai`, `gemini`, `anthropic`, `grok`, etc.) and model. |
+| `/audit [last\|session\|export]` | Audit & Logs | Inspect AI tool call trace, latency & session audit log. |
+| `/tools` | Audit & Logs | Quick viewer for last turn's tool execution inputs/outputs. |
+| `/save [file.md]` | Session | Export current conversation transcript to Markdown. |
+| `/check` | Diagnostics | Verify Oracle connection, metadata snapshots, docs and AI status. |
+| `/init` | Setup | Check or initialize `leai.yml` configuration file. |
+| `/clear` | Session | Clear conversation memory and reset terminal screen. |
+| `/help` | Reference | Display interactive commands reference. |
+| `/exit`, `/quit` | Session | Exit LEAI interactive copilot. |
 
 ---
 

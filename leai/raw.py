@@ -147,9 +147,28 @@ def load_raw_schemas(raw_path: Path, target_schemas: list[str] | None = None) ->
         return []
 
     # Check if raw_path contains subdirectories representing multiple schemas
-    subdirs = [d for d in raw_path.iterdir() if d.is_dir() and d.name not in {
-        "tables", "views", "mviews", "procedures", "functions", "packages", "package_bodys", "types", "type_bodys", "triggers", "sequences", "indexes", "synonyms", "chunks"
-    }]
+    subdirs = [
+        d
+        for d in raw_path.iterdir()
+        if d.is_dir()
+        and d.name
+        not in {
+            "tables",
+            "views",
+            "mviews",
+            "procedures",
+            "functions",
+            "packages",
+            "package_bodys",
+            "types",
+            "type_bodys",
+            "triggers",
+            "sequences",
+            "indexes",
+            "synonyms",
+            "chunks",
+        }
+    ]
 
     if subdirs:
         schemas: list[SchemaMetadata] = []
@@ -164,28 +183,183 @@ def load_raw_schemas(raw_path: Path, target_schemas: list[str] | None = None) ->
 
 
 ORACLE_RESERVED_WORDS = {
-    "ACCESS", "ADD", "ALL", "ALTER", "AND", "ANY", "AS", "ASC", "AUDIT", "BETWEEN",
-    "BY", "CHAR", "CHECK", "CLUSTER", "COLUMN", "COMMENT", "COMPRESS", "CONNECT",
-    "CREATE", "CURRENT", "DATE", "DECIMAL", "DEFAULT", "DELETE", "DESC", "DISTINCT",
-    "DROP", "ELSE", "EXCLUSIVE", "EXISTS", "FILE", "FLOAT", "FOR", "FROM", "GRANT",
-    "GROUP", "HAVING", "IDENTIFIED", "IMMEDIATE", "IN", "INCREMENT", "INDEX", "INITIAL",
-    "INSERT", "INTEGER", "INTERSECT", "INTO", "IS", "LEVEL", "LIKE", "LOCK", "LONG",
-    "MAXEXTENTS", "MINUS", "MLSLABEL", "MODE", "MODIFY", "NOAUDIT", "NOCOMPRESS", "NOT",
-    "NOWAIT", "NULL", "NUMBER", "OF", "OFFLINE", "ON", "ONLINE", "OPTION", "OR", "ORDER",
-    "PCTFREE", "PRIOR", "PRIVILEGES", "PUBLIC", "RAW", "RENAME", "RESOURCE", "REVOKE",
-    "ROW", "ROWID", "ROWNUM", "ROWS", "SELECT", "SESSION", "SET", "SHARE", "SIZE",
-    "SMALLINT", "START", "SUCCESSFUL", "SYNONYM", "SYSDATE", "TABLE", "THEN", "TO",
-    "TRIGGER", "UID", "UNION", "UNIQUE", "UPDATE", "USER", "VALIDATE", "VALUES",
-    "VARCHAR", "VARCHAR2", "VIEW", "WHENEVER", "WHERE", "WITH",
+    "ACCESS",
+    "ADD",
+    "ALL",
+    "ALTER",
+    "AND",
+    "ANY",
+    "AS",
+    "ASC",
+    "AUDIT",
+    "BETWEEN",
+    "BY",
+    "CHAR",
+    "CHECK",
+    "CLUSTER",
+    "COLUMN",
+    "COMMENT",
+    "COMPRESS",
+    "CONNECT",
+    "CREATE",
+    "CURRENT",
+    "DATE",
+    "DECIMAL",
+    "DEFAULT",
+    "DELETE",
+    "DESC",
+    "DISTINCT",
+    "DROP",
+    "ELSE",
+    "EXCLUSIVE",
+    "EXISTS",
+    "FILE",
+    "FLOAT",
+    "FOR",
+    "FROM",
+    "GRANT",
+    "GROUP",
+    "HAVING",
+    "IDENTIFIED",
+    "IMMEDIATE",
+    "IN",
+    "INCREMENT",
+    "INDEX",
+    "INITIAL",
+    "INSERT",
+    "INTEGER",
+    "INTERSECT",
+    "INTO",
+    "IS",
+    "LEVEL",
+    "LIKE",
+    "LOCK",
+    "LONG",
+    "MAXEXTENTS",
+    "MINUS",
+    "MLSLABEL",
+    "MODE",
+    "MODIFY",
+    "NOAUDIT",
+    "NOCOMPRESS",
+    "NOT",
+    "NOWAIT",
+    "NULL",
+    "NUMBER",
+    "OF",
+    "OFFLINE",
+    "ON",
+    "ONLINE",
+    "OPTION",
+    "OR",
+    "ORDER",
+    "PCTFREE",
+    "PRIOR",
+    "PRIVILEGES",
+    "PUBLIC",
+    "RAW",
+    "RENAME",
+    "RESOURCE",
+    "REVOKE",
+    "ROW",
+    "ROWID",
+    "ROWNUM",
+    "ROWS",
+    "SELECT",
+    "SESSION",
+    "SET",
+    "SHARE",
+    "SIZE",
+    "SMALLINT",
+    "START",
+    "SUCCESSFUL",
+    "SYNONYM",
+    "SYSDATE",
+    "TABLE",
+    "THEN",
+    "TO",
+    "TRIGGER",
+    "UID",
+    "UNION",
+    "UNIQUE",
+    "UPDATE",
+    "USER",
+    "VALIDATE",
+    "VALUES",
+    "VARCHAR",
+    "VARCHAR2",
+    "VIEW",
+    "WHENEVER",
+    "WHERE",
+    "WITH",
     # PL/SQL specific keywords
-    "BEGIN", "BODY", "BULK", "CALL", "CASE", "CLOSE", "COLLECT", "COMMIT", "CONSTANT",
-    "CONTINUE", "COUNT", "CURSOR", "DECLARE", "DO", "ELSIF", "END", "EXCEPTION", "EXECUTE",
-    "EXIT", "EXTEND", "FALSE", "FETCH", "FIRST", "FORALL", "FUNCTION", "GOTO", "IF",
-    "INDEXBY", "LAST", "LIMIT", "LOOP", "NEXT", "OPEN", "OTHERS", "OUT", "PACKAGE",
-    "PARTITION", "PRAGMA", "PROCEDURE", "RAISE", "RANGE", "RECORD", "REF",
-    "RETURN", "RETURNING", "REVERSE", "ROLLBACK", "ROWTYPE", "SAVEPOINT", "SUBTYPE",
-    "TRUNC", "TYPE", "TRUE", "WHEN", "WHILE", "MAX", "MIN", "SUM", "AVG", "NVL",
-    "TO_CHAR", "TO_DATE", "TO_NUMBER", "UPPER", "LOWER", "SUBSTR", "INSTR"
+    "BEGIN",
+    "BODY",
+    "BULK",
+    "CALL",
+    "CASE",
+    "CLOSE",
+    "COLLECT",
+    "COMMIT",
+    "CONSTANT",
+    "CONTINUE",
+    "COUNT",
+    "CURSOR",
+    "DECLARE",
+    "DO",
+    "ELSIF",
+    "END",
+    "EXCEPTION",
+    "EXECUTE",
+    "EXIT",
+    "EXTEND",
+    "FALSE",
+    "FETCH",
+    "FIRST",
+    "FORALL",
+    "FUNCTION",
+    "GOTO",
+    "IF",
+    "INDEXBY",
+    "LAST",
+    "LIMIT",
+    "LOOP",
+    "NEXT",
+    "OPEN",
+    "OTHERS",
+    "OUT",
+    "PACKAGE",
+    "PARTITION",
+    "PRAGMA",
+    "PROCEDURE",
+    "RAISE",
+    "RANGE",
+    "RECORD",
+    "REF",
+    "RETURN",
+    "RETURNING",
+    "REVERSE",
+    "ROLLBACK",
+    "ROWTYPE",
+    "SAVEPOINT",
+    "SUBTYPE",
+    "TRUNC",
+    "TYPE",
+    "TRUE",
+    "WHEN",
+    "WHILE",
+    "MAX",
+    "MIN",
+    "SUM",
+    "AVG",
+    "NVL",
+    "TO_CHAR",
+    "TO_DATE",
+    "TO_NUMBER",
+    "UPPER",
+    "LOWER",
+    "SUBSTR",
+    "INSTR",
 }
 
 
@@ -223,11 +397,13 @@ def extract_code_semantic_comments(code: str) -> tuple[list[str], list[str]]:
         comment_text = None
         if "--" in stripped:
             idx = stripped.find("--")
-            comment_text = stripped[idx + 2:].strip()
+            comment_text = stripped[idx + 2 :].strip()
 
         if comment_text:
             clean_comm = re.sub(r"^[-=*#/_\s]+|[-=*#/_\s]+$", "", comment_text).strip()
-            if len(clean_comm) > 3 and not re.fullmatch(r"(?:TAREFA|TASK|CHAMADO|BUG|JIRA|ISSUE|DEMANDA|CARD)[-:\s#]*[A-Za-z0-9_-]+", clean_comm, re.IGNORECASE):
+            if len(clean_comm) > 3 and not re.fullmatch(
+                r"(?:TAREFA|TASK|CHAMADO|BUG|JIRA|ISSUE|DEMANDA|CARD)[-:\s#]*[A-Za-z0-9_-]+", clean_comm, re.IGNORECASE
+            ):
                 current_block.append(clean_comm)
             else:
                 if current_block:
@@ -363,9 +539,7 @@ class RawDependencyIndex:
                     v_name = v.name.upper()
                     for w in words & all_names:
                         if w != v_name:
-                            self.text_references[w].append(
-                                (v_name, "VIEW", "READS/SELECTS", "View realiza consulta SQL sobre o objeto")
-                            )
+                            self.text_references[w].append((v_name, "VIEW", "READS/SELECTS", "View realiza consulta SQL sobre o objeto"))
 
             for mv in s.mviews:
                 if mv.query:
@@ -386,7 +560,12 @@ class RawDependencyIndex:
                     for w in words & all_names:
                         if w != co_name:
                             self.text_references[w].append(
-                                (co_name, co.object_type.upper(), "PLSQL_DEPENDENCY", f"Objeto {co.object_type} manipula ou referencia {w} no código-fonte")
+                                (
+                                    co_name,
+                                    co.object_type.upper(),
+                                    "PLSQL_DEPENDENCY",
+                                    f"Objeto {co.object_type} manipula ou referencia {w} no código-fonte",
+                                )
                             )
 
             for trg in s.triggers:
@@ -469,7 +648,12 @@ def trace_raw_dependencies(
 
     notes: list[str] = []
     tasks: list[str] = []
-    source_to_scan = getattr(focal_obj, "source", None) or getattr(focal_obj, "trigger_body", None) or getattr(focal_obj, "text", None) or getattr(focal_obj, "query", None)
+    source_to_scan = (
+        getattr(focal_obj, "source", None)
+        or getattr(focal_obj, "trigger_body", None)
+        or getattr(focal_obj, "text", None)
+        or getattr(focal_obj, "query", None)
+    )
     if source_to_scan:
         notes, tasks = extract_code_semantic_comments(source_to_scan)
 
@@ -789,5 +973,3 @@ def trace_subprogram_dependencies(
             result.related_triggers.append(idx.triggers_map[name])
 
     return result
-
-

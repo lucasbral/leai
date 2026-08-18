@@ -11,6 +11,7 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.history import FileHistory, InMemoryHistory
+from prompt_toolkit.key_binding import KeyBindings
 from rich import box
 from rich.console import Console
 from rich.markdown import Markdown
@@ -74,6 +75,7 @@ def _create_progress_bar() -> Progress:
 
 def _format_tokens(total: int, last: int | None = None) -> str:
     """Formats token count with k/M suffixes and last turn delta."""
+
     def _fmt(n: int) -> str:
         if n >= 1_000_000:
             return f"{n / 1_000_000:.1f}M"
@@ -117,6 +119,13 @@ class InteractiveTUISession:
             self.history = InMemoryHistory()
 
         is_tty = hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
+        kb = KeyBindings()
+
+        @kb.add("escape", "enter")
+        def _(event):
+            """Inserts newline on Alt+Enter or Escape+Enter."""
+            event.current_buffer.insert_text("\n")
+
         if is_tty:
             try:
                 self.prompt_session = PromptSession(
@@ -125,10 +134,12 @@ class InteractiveTUISession:
                     style=PT_STYLE,
                     auto_suggest=AutoSuggestFromHistory(),
                     complete_while_typing=True,
+                    key_bindings=kb,
                 )
             except Exception:
                 from prompt_toolkit.input import DummyInput
                 from prompt_toolkit.output import DummyOutput
+
                 self.prompt_session = PromptSession(
                     history=self.history,
                     completer=self.completer,
@@ -141,6 +152,7 @@ class InteractiveTUISession:
         else:
             from prompt_toolkit.input import DummyInput
             from prompt_toolkit.output import DummyOutput
+
             self.prompt_session = PromptSession(
                 history=self.history,
                 completer=self.completer,
@@ -156,7 +168,7 @@ class InteractiveTUISession:
         return self.client.model if self.client else "offline"
 
     def _get_bottom_toolbar(self) -> HTML:
-        """Renders dynamic OpenCode bottom status bar."""
+        """Renders dynamic OpenCode bottom status bar with Catppuccin badges."""
         schemas_count = len(self.schemas)
         schema_text = f"{schemas_count} schemas" if schemas_count > 1 else (self.schemas[0].schema_name if self.schemas else "None")
         msg_count = len(self.session.messages)
@@ -164,9 +176,9 @@ class InteractiveTUISession:
         tokens_str = _format_tokens(self.session.total_tokens, self.session.last_turn_tokens)
 
         return HTML(
-            f" <b>LEAI</b> │ "
+            f" <b><style fg='#cba6f7'>✦ LEAI</style></b> │ "
             f"Schema: <b><style fg='#f9e2af'>{schema_text}</style></b> │ "
-            f"Model: <b><style fg='#a6e3a1'>{self.provider_name}:{self.model_name}</style></b> │ "
+            f"Model: <b><style fg='#a6e3a1'>{self.provider_name.upper()}:{self.model_name}</style></b> │ "
             f"Latency: <style fg='#9399b2'>{latency_str}</style> │ "
             f"History: <b>{msg_count}</b> msgs │ "
             f"Tokens: <b><style fg='#89b4fa'>{tokens_str}</style></b> "
@@ -184,32 +196,32 @@ class InteractiveTUISession:
         if not self.schemas:
             target_str = ", ".join(self.config.schemas) if (self.config.schemas and not self.config.is_all_schemas) else "ALL"
             header_content = (
-                f"[bold cyan]Leai[/bold cyan] [dim]v{self._get_version()}[/dim]\n"
-                f"[dim]Oracle Database DOC Assistant[/dim]\n\n"
-                f"[bold white]Target Schemas:[/bold white] [bold yellow]{target_str}[/bold yellow]\n"
-                f"[bold white]AI Model:[/bold white] [bold green]{model_display}[/bold green]\n\n"
-                f"[yellow]⚠️  No database snapshots found in `{self.config.rawPath}`.[/yellow]\n"
-                f"  👉 Type [bold cyan]/extract[/bold cyan] to connect to Oracle and extract database metadata.\n"
-                f"  👉 Type [bold cyan]/trace <OBJECT>[/bold cyan] to perform an online focal trace on an object.\n"
-                f"  👉 Type [bold cyan]/help[/bold cyan] for the complete command reference."
+                f"[bold #cba6f7]Leai[/bold #cba6f7] [dim #9399b2]v{self._get_version()}[/dim #9399b2]\n"
+                f"[dim #6c7086]Oracle Database DOC Assistant & Copilot[/dim #6c7086]\n\n"
+                f"[bold #cdd6f4]Target Schemas:[/bold #cdd6f4] [bold #f9e2af]{target_str}[/bold #f9e2af]  •  "
+                f"[bold #cdd6f4]AI Model:[/bold #cdd6f4] [bold #a6e3a1]{model_display}[/bold #a6e3a1]\n\n"
+                f"[yellow]⚠️  Nenhum snapshot de banco encontrado em `{self.config.rawPath}`.[/yellow]\n"
+                f"  👉 Digite [bold #74c7ec]/extract[/bold #74c7ec] para conectar ao Oracle e extrair os metadados.\n"
+                f"  👉 Digite [bold #74c7ec]/trace <OBJETO>[/bold #74c7ec] para executar rastreamento de linhagem focal.\n"
+                f"  👉 Digite [bold #74c7ec]/help[/bold #74c7ec] para a lista completa de comandos."
             )
         else:
             if schemas_count == 1:
-                schema_badge = f"[bold yellow]{self.schemas[0].schema_name}[/bold yellow]"
-                catalog_title = f"[dim]Catalog Index ({self.schemas[0].schema_name}):[/dim]"
+                schema_badge = f"[bold #f9e2af]{self.schemas[0].schema_name}[/bold #f9e2af]"
+                catalog_title = f"[dim #9399b2]Catálogo ({self.schemas[0].schema_name}):[/dim #9399b2]"
             else:
                 s_names = [s.schema_name for s in self.schemas]
-                preview = ", ".join(s_names[:8]) + (f" (+{schemas_count - 8} more)" if schemas_count > 8 else "")
-                schema_badge = f"[bold yellow]{preview}[/bold yellow] [dim]({schemas_count} schemas)[/dim]"
-                catalog_title = f"[dim]Catalog Index ({schemas_count} schemas):[/dim]"
+                preview = ", ".join(s_names[:8]) + (f" (+{schemas_count - 8} mais)" if schemas_count > 8 else "")
+                schema_badge = f"[bold #f9e2af]{preview}[/bold #f9e2af] [dim #9399b2]({schemas_count} schemas)[/dim #9399b2]"
+                catalog_title = f"[dim #9399b2]Catálogo ({schemas_count} schemas):[/dim #9399b2]"
 
             header_content = (
-                f"[bold cyan]Leai[/bold cyan] [dim]v{self._get_version()}[/dim]\n"
-                f"[dim]Oracle Database DOC Assistant[/dim]\n\n"
-                f"[bold white]Active Schema{'s' if schemas_count > 1 else ''}:[/bold white] {schema_badge}  •  "
-                f"[bold white]AI Model:[/bold white] [bold green]{model_display}[/bold green]\n"
-                f"{catalog_title} [cyan]{total_tables}[/cyan] Tables • [cyan]{total_views}[/cyan] Views • [cyan]{total_code}[/cyan] Code Objects • [cyan]{total_triggers}[/cyan] Triggers\n\n"
-                f"[dim]Quick Start:[/dim] Type [bold cyan]/doc[/bold cyan] to document objects, [bold cyan]/extract[/bold cyan] to sync metadata, or ask questions directly to AI."
+                f"[bold #cba6f7]Leai[/bold #cba6f7] [dim #9399b2]v{self._get_version()}[/dim #9399b2]\n"
+                f"[dim #6c7086]Oracle Database DOC Assistant & Copilot[/dim #6c7086]\n\n"
+                f"[bold #cdd6f4]Schema{'s' if schemas_count > 1 else ''}:[/bold #cdd6f4] {schema_badge}  •  "
+                f"[bold #cdd6f4]AI Model:[/bold #cdd6f4] [bold #a6e3a1]{model_display}[/bold #a6e3a1]\n"
+                f"{catalog_title} [bold #74c7ec]{total_tables}[/bold #74c7ec] Tabelas • [bold #74c7ec]{total_views}[/bold #74c7ec] Views • [bold #74c7ec]{total_code}[/bold #74c7ec] Rotinas • [bold #74c7ec]{total_triggers}[/bold #74c7ec] Triggers\n\n"
+                f"[dim #9399b2]Atalhos:[/dim #9399b2] Digite qualquer pergunta ou use [bold #74c7ec]@OBJETO[/bold #74c7ec] para autocompletar tabelas/packages, ou [bold #74c7ec]/help[/bold #74c7ec] para comandos."
             )
 
         console.print()
@@ -217,7 +229,7 @@ class InteractiveTUISession:
             Panel(
                 header_content,
                 box=box.ROUNDED,
-                border_style="cyan",
+                border_style="#cba6f7",
                 padding=(1, 2),
             )
         )
@@ -225,6 +237,7 @@ class InteractiveTUISession:
     def _get_version(self) -> str:
         try:
             from leai import __version__
+
             return __version__
         except Exception:
             return "0.1.6"
@@ -324,7 +337,17 @@ class InteractiveTUISession:
             if len(parts) < 2:
                 # List models for current provider
                 self._render_models_table(self.provider_name)
-            elif len(parts) == 2 and parts[1].lower() in ("openai", "gemini", "anthropic", "grok", "xai", "deepseek", "qwen", "kimi", "ollama"):
+            elif len(parts) == 2 and parts[1].lower() in (
+                "openai",
+                "gemini",
+                "anthropic",
+                "grok",
+                "xai",
+                "deepseek",
+                "qwen",
+                "kimi",
+                "ollama",
+            ):
                 # List models for specified provider
                 self._render_models_table(parts[1].lower())
             else:
@@ -343,7 +366,9 @@ class InteractiveTUISession:
                     self.client = get_llm_client(self.config, provider_override=new_prov, model_override=new_model)
                     self.provider_name = new_prov
                     self.session.client = self.client
-                    console.print(f"[green]✓ Switched AI client to [bold]{new_prov.upper()}[/bold] (Model: [bold cyan]{self.client.model}[/bold cyan])[/green]")
+                    console.print(
+                        f"[green]✓ Switched AI client to [bold]{new_prov.upper()}[/bold] (Model: [bold cyan]{self.client.model}[/bold cyan])[/green]"
+                    )
                 except Exception as exc:
                     console.print(f"[red]Failed to switch model:[/red] {exc}")
             return True
@@ -389,6 +414,7 @@ class InteractiveTUISession:
     def _run_extract(self, schemas_arg: list[str] | None = None) -> None:
         """Extracts metadata snapshots from Oracle into rawPath."""
         import oracledb
+
         if not self.config.dsn:
             console.print("[red]✕ DSN is not configured in leai.yml or LEAI_DSN env var.[/red]\n")
             return
@@ -407,7 +433,9 @@ class InteractiveTUISession:
                     connection.close()
 
             is_multi = len(target_schemas) > 1 or extract_cfg.is_all_schemas
-            console.print(f"[cyan]Extracting metadata for schema(s):[/cyan] [bold yellow]{', '.join(target_schemas)}[/bold yellow] ({len(target_schemas)} total)\n")
+            console.print(
+                f"[cyan]Extracting metadata for schema(s):[/cyan] [bold yellow]{', '.join(target_schemas)}[/bold yellow] ({len(target_schemas)} total)\n"
+            )
 
             total_tables = 0
             total_views = 0
@@ -508,7 +536,10 @@ class InteractiveTUISession:
                         or any(mv.name.upper() == target_clean for mv in s.mviews)
                         or any(
                             co.name.upper() == target_clean
-                            or any(sub.name.upper() == target_clean or f"{co.name.upper()}.{sub.name.upper()}" == target_clean for sub in co.subprograms)
+                            or any(
+                                sub.name.upper() == target_clean or f"{co.name.upper()}.{sub.name.upper()}" == target_clean
+                                for sub in co.subprograms
+                            )
                             for co in s.code_objects
                         )
                         or any(tr.name.upper() == target_clean for tr in s.triggers)
@@ -520,7 +551,9 @@ class InteractiveTUISession:
 
             if not target_schemas_list:
                 avail_schemas_str = ", ".join(s.schema_name for s in self.schemas)
-                console.print(f"[yellow]! Object '[bold cyan]{object_name}[/bold cyan]' was not found in loaded schemas ({avail_schemas_str}).[/yellow]\n")
+                console.print(
+                    f"[yellow]! Object '[bold cyan]{object_name}[/bold cyan]' was not found in loaded schemas ({avail_schemas_str}).[/yellow]\n"
+                )
                 return
         else:
             target_schemas_list = self.schemas
@@ -745,6 +778,7 @@ class InteractiveTUISession:
         if self.web_server:
             console.print(f"[green]✓ LEAI Web Studio is already running at [bold cyan]{self.web_url}[/bold cyan][/green]")
             import webbrowser
+
             webbrowser.open(self.web_url)
             console.print("[dim]Type [bold cyan]/serve stop[/bold cyan] to shut down the server.[/dim]\n")
             return
@@ -780,13 +814,16 @@ class InteractiveTUISession:
     def _run_check(self) -> None:
         """Runs diagnostics on Oracle connection, schemas snapshot, and AI provider."""
         import oracledb
+
         console.print("[cyan]✦ Running LEAI Environment Diagnostics...[/cyan]\n")
 
         # 1. Check schemas snapshot
         if self.schemas:
             s_names = ", ".join(s.schema_name for s in self.schemas)
             total_objs = sum(len(s.tables) + len(s.views) + len(s.code_objects) for s in self.schemas)
-            console.print(f"[green]✓ Metadata Snapshot Loaded:[/green] [bold]{len(self.schemas)} schemas[/bold] ({s_names}) • {total_objs:,} objects")
+            console.print(
+                f"[green]✓ Metadata Snapshot Loaded:[/green] [bold]{len(self.schemas)} schemas[/bold] ({s_names}) • {total_objs:,} objects"
+            )
         else:
             console.print(f"[yellow]! No schema metadata snapshot loaded from {self.config.rawPath}[/yellow]")
 
@@ -794,6 +831,7 @@ class InteractiveTUISession:
         if self.config.dsn:
             try:
                 from leai.oracle import _build_connect_kwargs
+
                 conn = oracledb.connect(**_build_connect_kwargs(self.config.dsn))
                 cur = conn.cursor()
                 cur.execute("SELECT * FROM v$version WHERE ROWNUM = 1")
@@ -809,7 +847,9 @@ class InteractiveTUISession:
         # 3. Check AI Provider
         try:
             if self.client:
-                console.print(f"[green]✓ Active AI Provider:[/green] [bold yellow]{self.provider_name.upper()}[/bold yellow] (Model: [bold cyan]{self.client.model}[/bold cyan])")
+                console.print(
+                    f"[green]✓ Active AI Provider:[/green] [bold yellow]{self.provider_name.upper()}[/bold yellow] (Model: [bold cyan]{self.client.model}[/bold cyan])"
+                )
             else:
                 console.print("[yellow]! AI Client not initialized[/yellow]")
         except Exception as exc:
@@ -818,7 +858,9 @@ class InteractiveTUISession:
         # 4. Check Documentation Directory
         doc_count = len(list(self.config.docPath.glob("**/*.md"))) if self.config.docPath.exists() else 0
         ann_count = len(list(self.config.annotationsPath.glob("**/*.yml"))) if self.config.annotationsPath.exists() else 0
-        console.print(f"[green]✓ Documentation Store:[/green] [cyan]{ann_count}[/cyan] annotations in [bold]{self.config.annotationsPath}[/bold] • [cyan]{doc_count}[/cyan] docs in [bold]{self.config.docPath}[/bold]\n")
+        console.print(
+            f"[green]✓ Documentation Store:[/green] [cyan]{ann_count}[/cyan] annotations in [bold]{self.config.annotationsPath}[/bold] • [cyan]{doc_count}[/cyan] docs in [bold]{self.config.docPath}[/bold]\n"
+        )
 
     def _run_init(self) -> None:
         """Informs or initializes leai.yml."""
@@ -835,73 +877,96 @@ class InteractiveTUISession:
             console.print(f"[green]✓ Configuration file created at:[/green] [bold cyan]{out_file.resolve()}[/bold cyan]\n")
 
     def _render_help(self) -> None:
-        table = Table(show_header=True, header_style="bold cyan", box=box.ROUNDED)
-        table.add_column("Command", style="bold yellow", width=22)
-        table.add_column("Category", style="dim", width=14)
-        table.add_column("Description", style="white")
+        table = Table(show_header=True, header_style="bold #74c7ec", box=box.ROUNDED)
+        table.add_column("Comando", style="bold #f9e2af", width=22)
+        table.add_column("Categoria", style="dim #9399b2", width=14)
+        table.add_column("Descrição", style="#cdd6f4")
 
         # Documentation & Studio
-        table.add_row("/doc [obj]", "Documentation", "Interactive in-terminal YAML annotation & documentation editor")
-        table.add_row("/enrich [obj]", "AI Studio", "Auto-enrich business descriptions & rules with LLM")
-        table.add_row("/compile [obj]", "Pipeline", "Compile final Markdown docs in docs/ (supports single object)")
-        table.add_row("/annotate", "Pipeline", "Synchronize YAML annotation stubs in annotations/")
-        table.add_row("/extract [s|ALL]", "Pipeline", "Connect to Oracle and extract fresh raw metadata snapshot")
-        table.add_row("/serve [port|stop]", "Web Studio", "Launch interactive Web Studio with in-browser editor & real-time sync")
+        table.add_row("/doc [obj]", "Documentação", "Editor interativo no terminal de anotações YAML e docs")
+        table.add_row("/enrich [obj]", "AI Studio", "Auto-enriquece descrições e regras de negócio com IA")
+        table.add_row("/compile [obj]", "Pipeline", "Compila markdowns finais em docs/ (suporta objeto único)")
+        table.add_row("/annotate", "Pipeline", "Sincroniza stubs de anotação YAML em annotations/")
+        table.add_row("/extract [s|ALL]", "Pipeline", "Conecta ao Oracle e extrai snapshot novo de metadados")
+        table.add_row("/serve [port|stop]", "Web Studio", "Inicia o Web Studio com editor web e sincronização em tempo real")
 
         # Exploration & Lineage
-        table.add_row("/trace <obj>", "Lineage", "Perform inline dependency lineage & impact X-ray with Mermaid")
-        table.add_row("/tables", "Inspection", "List all tables with column counts and primary keys")
-        table.add_row("/schema [s]", "Inspection", "Show comprehensive overview of all catalog objects")
-        table.add_row("/changes [d]", "Inspection", "Inspect database objects modified in last N days (default: 7)")
+        table.add_row("/trace <obj>", "Linhagem", "Executa rastreamento de dependências e raio-x com Mermaid")
+        table.add_row("/tables", "Inspeção", "Lista todas as tabelas com contagem de colunas e PKs")
+        table.add_row("/schema [s]", "Inspeção", "Exibe visão geral detalhada do catálogo do banco")
+        table.add_row("/changes [d]", "Inspeção", "Inspeciona objetos modificados nos últimos N dias (padrão: 7)")
 
         # AI & Configuration
-        table.add_row("/models [p]", "AI Config", "List all available AI models returned by API key")
-        table.add_row("/model <p> [m]", "AI Config", "Switch AI provider (openai, gemini, grok, etc.) and model")
-        table.add_row("/check", "Diagnostics", "Verify Oracle connection, metadata snapshots, docs and AI status")
-        table.add_row("/init", "Setup", "Check or initialize leai.yml configuration file")
+        table.add_row("/models [p]", "Config IA", "Lista os modelos de IA disponíveis na API")
+        table.add_row("/model <p> [m]", "Config IA", "Altera provedor (openai, gemini, grok, etc.) e modelo")
+        table.add_row("/check", "Diagnóstico", "Verifica conexão Oracle, snapshots, docs e status da IA")
+        table.add_row("/init", "Setup", "Verifica ou inicializa o arquivo de configuração leai.yml")
 
         # Session & Utilities
-        table.add_row("/audit [last|session|export]", "Audit & Logs", "Inspect AI tool call trace, latency & session audit log")
-        table.add_row("/tools", "Audit & Logs", "Quick viewer for last turn's tool execution inputs/outputs")
-        table.add_row("/save [file.md]", "Session", "Export current conversation transcript to Markdown")
-        table.add_row("/clear", "Session", "Clear session memory and reset terminal screen")
-        table.add_row("/chat <msg>", "Copilot", "Ask AI Copilot directly (or simply type any question)")
-        table.add_row("/help", "Reference", "Display this interactive commands reference")
-        table.add_row("/exit, /quit", "Session", "Exit LEAI interactive copilot")
+        table.add_row("/audit [last|session|export]", "Auditoria", "Inspeciona trace de ferramentas da IA, latência e logs")
+        table.add_row("/tools", "Auditoria", "Visualizador rápido de entradas/saídas da última chamada de ferramenta")
+        table.add_row("/save [file.md]", "Sessão", "Exporta transcrição da conversa para arquivo Markdown")
+        table.add_row("/clear", "Sessão", "Limpa a memória do chat e reseta a tela do terminal")
+        table.add_row("/chat <msg>", "Copilot", "Envia pergunta para a IA (ou apenas digite diretamente)")
+        table.add_row("/help", "Referência", "Exibe este guia de comandos interativo")
+        table.add_row("/exit, /quit", "Sessão", "Encerra o copilot interativo")
 
         console.print()
-        console.print(Panel(table, title="[bold cyan]✦ LEAI Interactive Commands Reference[/bold cyan]", box=box.ROUNDED, border_style="cyan"))
-        console.print("[dim]Tip: Type any question directly for AI Copilot, or use [bold cyan]@OBJECT_NAME[/bold cyan] for autocompleted object mentions.[/dim]\n")
+        console.print(
+            Panel(
+                table,
+                title="[bold #cba6f7]✦ Referência de Comandos Interativos do LEAI[/bold #cba6f7]",
+                box=box.ROUNDED,
+                border_style="#74c7ec",
+            )
+        )
+        console.print(
+            "[dim #9399b2]Dica: Digite qualquer pergunta diretamente, use [bold #74c7ec]@OBJETO[/bold #74c7ec] para autocompletar menções ou [bold #74c7ec]/[/bold #74c7ec] para comandos.[/dim #9399b2]\n"
+        )
 
     def _render_models_table(self, provider_name: str | None = None, interactive: bool = True) -> None:
         target_prov = (provider_name or self.provider_name or "openai").lower()
         try:
-            temp_client = self.client if target_prov == (self.provider_name or "").lower() else get_llm_client(self.config, provider_override=target_prov)
-            with console.status(f"[cyan]Fetching available models from [bold yellow]{target_prov.upper()}[/bold yellow] API...[/cyan]", spinner="dots"):
+            temp_client = (
+                self.client
+                if target_prov == (self.provider_name or "").lower()
+                else get_llm_client(self.config, provider_override=target_prov)
+            )
+            with console.status(
+                f"[#74c7ec]Buscando modelos disponíveis na API [bold #f9e2af]{target_prov.upper()}[/bold #f9e2af]...[/#74c7ec]",
+                spinner="dots",
+            ):
                 models_list = temp_client.list_models()
         except Exception as exc:
-            console.print(f"[red]Could not fetch models for {target_prov.upper()}:[/red] {exc}\n")
+            console.print(f"[red]Não foi possível buscar modelos para {target_prov.upper()}:[/red] {exc}\n")
             return
 
         if not models_list:
-            console.print(f"[yellow]No models returned for {target_prov.upper()}.[/yellow]\n")
+            console.print(f"[yellow]Nenhum modelo retornado para {target_prov.upper()}.[/yellow]\n")
             return
 
-        table = Table(show_header=True, header_style="bold cyan", box=box.ROUNDED)
-        table.add_column("#", justify="right", style="cyan", width=4)
+        table = Table(show_header=True, header_style="bold #74c7ec", box=box.ROUNDED)
+        table.add_column("#", justify="right", style="#74c7ec", width=4)
         table.add_column("Status", justify="center", width=8)
-        table.add_column("Model ID", style="bold yellow")
-        table.add_column("Display Name", style="white")
-        table.add_column("Description / Notes", style="dim")
+        table.add_column("Model ID", style="bold #f9e2af")
+        table.add_column("Display Name", style="#cdd6f4")
+        table.add_column("Descrição / Notas", style="dim #9399b2")
 
         for idx, m in enumerate(models_list, 1):
             m_id = m.get("id", "")
-            is_active = (target_prov == (self.provider_name or "").lower() and m_id == self.client.model)
-            status_badge = "[bold green]ACTIVE[/bold green]" if is_active else "[dim]-[/dim]"
+            is_active = target_prov == (self.provider_name or "").lower() and m_id == self.client.model
+            status_badge = "[bold #a6e3a1]ACTIVE[/bold #a6e3a1]" if is_active else "[dim #6c7086]-[/dim #6c7086]"
             table.add_row(f"[{idx}]", status_badge, m_id, m.get("name", m_id), m.get("description", m.get("note", "")))
 
         console.print()
-        console.print(Panel(table, title=f"[bold cyan]✦ Available Models for {target_prov.upper()} ({len(models_list)} Total)[/bold cyan]", box=box.ROUNDED, border_style="cyan"))
+        console.print(
+            Panel(
+                table,
+                title=f"[bold #cba6f7]✦ Modelos Disponíveis para {target_prov.upper()} ({len(models_list)} Total)[/bold #cba6f7]",
+                box=box.ROUNDED,
+                border_style="#74c7ec",
+            )
+        )
 
         if interactive:
             console.print(f"[dim]Type a number (1-{len(models_list)}) or Model ID to switch, or press Enter to keep current:[/dim]")
@@ -921,7 +986,9 @@ class InteractiveTUISession:
                         self.client = get_llm_client(self.config, provider_override=target_prov, model_override=selected_model)
                         self.provider_name = target_prov
                         self.session.client = self.client
-                        console.print(f"[green]✓ Switched AI client to [bold]{target_prov.upper()}[/bold] (Model: [bold cyan]{self.client.model}[/bold cyan])[/green]\n")
+                        console.print(
+                            f"[green]✓ Switched AI client to [bold]{target_prov.upper()}[/bold] (Model: [bold cyan]{self.client.model}[/bold cyan])[/green]\n"
+                        )
                     else:
                         console.print(f"[red]Invalid selection: '{choice}'[/red]\n")
             except (KeyboardInterrupt, EOFError):
@@ -949,7 +1016,9 @@ class InteractiveTUISession:
                 table.add_row(s_name, t.name, str(len(t.columns)), pks, comm)
 
         console.print()
-        console.print(Panel(table, title=f"[bold green]✦ Database Tables ({total} Total)[/bold green]", box=box.ROUNDED, border_style="green"))
+        console.print(
+            Panel(table, title=f"[bold green]✦ Database Tables ({total} Total)[/bold green]", box=box.ROUNDED, border_style="green")
+        )
         console.print()
 
     def _render_schema_summary(self) -> None:
@@ -1020,7 +1089,14 @@ class InteractiveTUISession:
             table.add_row(*row)
 
         console.print()
-        console.print(Panel(table, title=f"[bold green]✦ Objects Modified in the Last {days} Days ({len(results)} Found)[/bold green]", box=box.ROUNDED, border_style="green"))
+        console.print(
+            Panel(
+                table,
+                title=f"[bold green]✦ Objects Modified in the Last {days} Days ({len(results)} Found)[/bold green]",
+                box=box.ROUNDED,
+                border_style="green",
+            )
+        )
         console.print()
 
     def _render_trace(self, object_name: str) -> None:
@@ -1064,7 +1140,9 @@ class InteractiveTUISession:
     def _send_ai_prompt(self, user_input: str) -> None:
         """Queries AI Assistant with live step-by-step tool feedback, audit recording, and latency metrics."""
         if not self.client:
-            console.print("[yellow]! No active AI client configured. Type [bold cyan]/model[/bold cyan] to configure a provider.[/yellow]\n")
+            console.print(
+                "[yellow]! No active AI client configured. Type [bold cyan]/model[/bold cyan] to configure a provider.[/yellow]\n"
+            )
             return
 
         start_t = time.perf_counter()
@@ -1073,28 +1151,49 @@ class InteractiveTUISession:
             items = []
             for k, v in args.items():
                 v_str = repr(v) if not isinstance(v, (dict, list)) else json.dumps(v, ensure_ascii=False)
-                if len(v_str) > 28:
-                    v_str = v_str[:25] + "..."
+                if len(v_str) > 32:
+                    v_str = v_str[:29] + "..."
                 items.append(f"{k}={v_str}")
             return ", ".join(items)
 
+        # 1. Print User message in OpenCode format
+        console.print()
+        console.print(
+            Panel(
+                f"[bold #cdd6f4]{user_input}[/bold #cdd6f4]",
+                title="[bold #89b4fa]👤 User[/bold #89b4fa]",
+                title_align="left",
+                border_style="#45475a",
+                box=box.ROUNDED,
+                padding=(0, 1),
+            )
+        )
+
         def _on_tool_start(t_name: str, t_args: dict, step_idx: int = 1) -> None:
             args_str = _format_args_preview(t_args)
-            console.print(f"  [bold yellow]⚡ [{step_idx}][/bold yellow] [bold cyan]{t_name}[/bold cyan]({args_str}) [dim]➔ Executando...[/dim]")
+            console.print(
+                f"  [bold #fab387]⚡ [{step_idx}][/bold #fab387] [bold #74c7ec]{t_name}[/bold #74c7ec][#a6adc8]({args_str})[/#a6adc8] [dim #6c7086]➔ Executando...[/dim #6c7086]"
+            )
 
         def _on_tool_end(t_name: str, t_output: str, summary: str = "", dur: float = 0.0) -> None:
             sum_text = summary or "OK"
             dur_text = f" ({dur:.2f}s)" if dur > 0 else ""
-            console.print(f"     [bold green]✓[/bold green] [dim]{sum_text}{dur_text}[/dim]")
+            console.print(f"     [bold #a6e3a1]✓[/bold #a6e3a1] [#bac2de]{sum_text}[/#bac2de][dim #6c7086]{dur_text}[/dim #6c7086]")
+
+        streamed_chunks: list[str] = []
+
+        def _on_token(token: str) -> None:
+            streamed_chunks.append(token)
 
         with console.status(
-            f"[cyan]Thinking with [bold yellow]{self.provider_name.upper()}[/bold yellow] ([bold green]{self.client.model}[/bold green])...[/cyan]",
+            f"[#74c7ec]Pensando com [bold #f9e2af]{self.provider_name.upper()}[/bold #f9e2af] ([bold #a6e3a1]{self.client.model}[/bold #a6e3a1])...[/#74c7ec]",
             spinner="dots",
         ):
             reply, detected = self.session.send(
                 user_input,
                 on_tool_start=_on_tool_start,
                 on_tool_end=_on_tool_end,
+                on_token=_on_token,
             )
         self.last_latency = time.perf_counter() - start_t
 
@@ -1114,23 +1213,27 @@ class InteractiveTUISession:
         tool_count = len(turn_audit.tools_executed)
         tool_badge = f" • {tool_count} tool{'s' if tool_count > 1 else ''}" if tool_count > 0 else ""
         subtitle_str = (
-            f"[dim]⚡ {self.last_latency:.2f}s{turn_tok_str}{tool_badge} • {self.provider_name.upper()} ({self.client.model})"
-            f"{' • RAG: ' + ', '.join(detected) if detected else ''}[/dim]"
+            f"[dim #9399b2]⚡ {self.last_latency:.2f}s{turn_tok_str}{tool_badge} • {self.provider_name.upper()} ({self.client.model})"
+            f"{' • RAG: ' + ', '.join(detected) if detected else ''}[/dim #9399b2]"
         )
 
         console.print()
         console.print(
             Panel(
-                Markdown(reply),
-                title="[bold green]✦ LEAI Assistant[/bold green]",
+                Markdown(reply, code_theme="monokai"),
+                title="[bold #a6e3a1]✦ LEAI Assistant[/bold #a6e3a1]",
+                title_align="left",
                 subtitle=subtitle_str,
+                subtitle_align="right",
                 box=box.ROUNDED,
-                border_style="cyan",
+                border_style="#74c7ec",
                 padding=(1, 2),
             )
         )
         if tool_count > 0:
-            console.print("[dim]Tip: Type [bold cyan]/audit[/bold cyan] to inspect tool inputs, raw database responses, and audit logs.[/dim]\n")
+            console.print(
+                "[dim #6c7086]💡 Digite [bold #74c7ec]/audit[/bold #74c7ec] ou [bold #74c7ec]/tools[/bold #74c7ec] para inspecionar parâmetros, SQL e respostas brutas das ferramentas.[/dim #6c7086]\n"
+            )
         else:
             console.print()
 
@@ -1161,7 +1264,9 @@ class InteractiveTUISession:
                 t_table.add_column("Execution Count", justify="right", style="green")
                 for t_name, count in sorted(summary["tool_usage_breakdown"].items(), key=lambda x: x[1], reverse=True):
                     t_table.add_row(t_name, str(count))
-                console.print(Panel(t_table, title="[bold green]✦ Tool Execution Breakdown[/bold green]", box=box.ROUNDED, border_style="green"))
+                console.print(
+                    Panel(t_table, title="[bold green]✦ Tool Execution Breakdown[/bold green]", box=box.ROUNDED, border_style="green")
+                )
             console.print()
             return
 
@@ -1186,7 +1291,7 @@ class InteractiveTUISession:
             f"[bold white]Turn ID:[/bold white] [bold cyan]#{last_turn.turn_id}[/bold cyan]  •  "
             f"[bold white]Timestamp:[/bold white] {last_turn.timestamp}  •  "
             f"[bold white]Model:[/bold white] [bold green]{last_turn.provider}:{last_turn.model}[/bold green]\n"
-            f"[bold white]Prompt:[/bold white] [yellow]\"{last_turn.user_prompt}\"[/yellow]\n"
+            f'[bold white]Prompt:[/bold white] [yellow]"{last_turn.user_prompt}"[/yellow]\n'
             f"[bold white]Latency:[/bold white] {last_turn.latency_seconds}s  •  "
             f"[bold white]Tokens:[/bold white] {last_turn.tokens_used:,}  •  "
             f"[bold white]Tools Used:[/bold white] [bold]{len(last_turn.tools_executed)}[/bold]"

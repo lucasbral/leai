@@ -37,6 +37,18 @@ class BaseLLMClient(ABC):
     def generate_chat(self, messages: list[dict[str, str]], system_prompt: str | None = None) -> str:
         """Generates a response considering the full multi-turn message history."""
 
+    def stream_chat(
+        self,
+        messages: list[dict[str, Any]],
+        system_prompt: str | None = None,
+        on_chunk: Any = None,
+    ) -> str:
+        """Streams a chat response token-by-token. Default fallback invokes generate_chat."""
+        res = self.generate_chat(messages, system_prompt=system_prompt)
+        if on_chunk and callable(on_chunk) and res:
+            on_chunk(res)
+        return res
+
     def generate_chat_with_tools(
         self,
         messages: list[dict[str, Any]],
@@ -50,4 +62,3 @@ class BaseLLMClient(ABC):
     def list_models(self) -> list[dict[str, str]]:
         """Queries the provider API and returns the list of available models for the configured API key."""
         return [{"id": self.model or "default", "name": self.model or "default"}]
-

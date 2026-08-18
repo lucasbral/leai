@@ -55,13 +55,23 @@ class LeaiCompleter(Completer):
             if s_name:
                 s_names.add(s_name)
             for t in s.tables:
-                pk_str = f", PK: {', '.join(t.primary_keys)}" if t.primary_keys else ""
-                objs.append((s_name, t.name, "Table", f"{len(t.columns)} cols{pk_str}"))
+                pk_str = f" • PK: {', '.join(t.primary_keys)}" if t.primary_keys else ""
+                objs.append((s_name, t.name, "TABLE", f"{len(t.columns)} cols{pk_str}"))
             for v in s.views:
-                objs.append((s_name, v.name, "View", f"{len(v.columns)} cols"))
+                objs.append((s_name, v.name, "VIEW", f"{len(v.columns)} cols"))
             for mv in s.mviews:
-                objs.append((s_name, mv.name, "MView", f"{len(mv.columns)} cols"))
+                objs.append((s_name, mv.name, "MVIEW", f"{len(mv.columns)} cols"))
             for co in s.code_objects:
+                ot_up = co.object_type.upper()
+                if "PACKAGE" in ot_up:
+                    badge = "PACKAGE"
+                elif "PROCEDURE" in ot_up:
+                    badge = "PROCEDURE"
+                elif "FUNCTION" in ot_up:
+                    badge = "FUNCTION"
+                else:
+                    badge = ot_up
+
                 if co.subprograms:
                     sub_count = len(co.subprograms)
                     label = "routines"
@@ -71,13 +81,13 @@ class LeaiCompleter(Completer):
                 else:
                     sub_count = 0
                     label = "code"
-                objs.append((s_name, co.name, co.object_type.title(), f"{sub_count} {label}"))
+                objs.append((s_name, co.name, badge, f"{sub_count} {label}"))
             for tr in s.triggers:
-                objs.append((s_name, tr.name, "Trigger", f"on {tr.table_name or 'DB'}"))
+                objs.append((s_name, tr.name, "TRIGGER", f"on {tr.table_name or 'DB'}"))
             for sq in s.sequences:
-                objs.append((s_name, sq.name, "Sequence", ""))
+                objs.append((s_name, sq.name, "SEQUENCE", ""))
             for sn in s.synonyms:
-                objs.append((s_name, sn.name, "Synonym", f"-> {sn.table_name or ''}"))
+                objs.append((s_name, sn.name, "SYNONYM", f"-> {sn.table_name or ''}"))
 
         # Deduplicate preserving order
         seen = set()
@@ -91,9 +101,7 @@ class LeaiCompleter(Completer):
 
         # Collect configured schemas from config.schemas
         cfg_schemas = [
-            s.strip().upper()
-            for s in getattr(self.config, "schemas", []) or []
-            if s and not getattr(self.config, "is_all_schemas", False)
+            s.strip().upper() for s in getattr(self.config, "schemas", []) or [] if s and not getattr(self.config, "is_all_schemas", False)
         ]
         self._schemas_list = sorted(list(set(cfg_schemas or s_names)))
 
@@ -257,7 +265,7 @@ class LeaiCompleter(Completer):
             for s_name, name, otype, details in self._db_objects:
                 qualified = f"{s_name}.{name}" if s_name else name
                 if name.startswith(query) or qualified.startswith(query):
-                    meta_desc = f"{s_name} [{otype}] ({details})" if (s_name and details) else f"[{otype}] {details}".strip()
+                    meta_desc = f"{s_name} [{otype}] {details}".strip() if s_name else f"[{otype}] {details}".strip()
                     yield Completion(
                         text=f"@{name}",
                         start_position=-len(word_before_cursor),

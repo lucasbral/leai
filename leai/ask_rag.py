@@ -101,7 +101,9 @@ def build_rag_context(
 
                 # Render dossier in Markdown with Mermaid and Frontmatter
                 dossier_text = render_dossier_markdown(trace_res, annotation=ann)
-                context_parts.append(f"\n--- INÍCIO DO DOSSIÊ FOCAL: {target_trace} ---\n{dossier_text}\n--- FIM DO DOSSIÊ FOCAL: {target_trace} ---")
+                context_parts.append(
+                    f"\n--- INÍCIO DO DOSSIÊ FOCAL: {target_trace} ---\n{dossier_text}\n--- FIM DO DOSSIÊ FOCAL: {target_trace} ---"
+                )
 
     # 4. Add high-level macro catalog summary in compact notation (low token consumption)
     context_parts.append("\n### [CATÁLOGO COMPACTO DO SCHEMA]")
@@ -111,4 +113,3 @@ def build_rag_context(
 
     full_context = "\n\n".join(context_parts)
     return full_context, detected_entities
-

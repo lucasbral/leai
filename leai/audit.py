@@ -186,7 +186,7 @@ class SessionAuditLogger:
 
         for idx, turn in enumerate(self.turns, 1):
             lines.append(f"### Turn {idx}: `{turn.timestamp}`")
-            lines.append(f"- **User Prompt:** *\"{turn.user_prompt}\"*")
+            lines.append(f'- **User Prompt:** *"{turn.user_prompt}"*')
             lines.append(f"- **AI Model:** `{turn.provider}:{turn.model}`")
             lines.append(f"- **Turn Latency:** `{turn.latency_seconds}s` • **Tokens:** `{turn.tokens_used:,}`")
             if turn.rag_entities:

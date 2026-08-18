@@ -57,6 +57,7 @@ class ConfigAndDocsTests(unittest.TestCase):
             root = Path(tmp)
             cfg_file = root / "leai_env.yml"
             import os
+
             os.environ["TEST_LEAI_DB_HOST"] = "oracle.empresa.com"
             os.environ["TEST_LEAI_SCHEMA"] = "prod_schema"
 
@@ -114,8 +115,12 @@ class ConfigAndDocsTests(unittest.TestCase):
             ann_dir = root / "annotations"
             docs_dir = root / "docs"
 
-            schema_hr = SchemaMetadata(schema_name="HR", tables=[TableMeta(name="EMPLOYEES", columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)])])
-            schema_sales = SchemaMetadata(schema_name="SALES", tables=[TableMeta(name="ORDERS", columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)])])
+            schema_hr = SchemaMetadata(
+                schema_name="HR", tables=[TableMeta(name="EMPLOYEES", columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)])]
+            )
+            schema_sales = SchemaMetadata(
+                schema_name="SALES", tables=[TableMeta(name="ORDERS", columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)])]
+            )
 
             save_raw_schema(schema_hr, raw_dir, multi_schema=True)
             save_raw_schema(schema_sales, raw_dir, multi_schema=True)
@@ -232,8 +237,18 @@ class ConfigAndDocsTests(unittest.TestCase):
                 name="PKG_FOLHA",
                 object_type="PACKAGE BODY",
                 subprograms=[
-                    SubprogramMeta(package_name="PKG_FOLHA", name="CALCULA_INSS", subprogram_type="PROCEDURE", source="PROCEDURE CALCULA_INSS IS BEGIN NULL; END;"),
-                    SubprogramMeta(package_name="PKG_FOLHA", name="CALCULA_IRRF", subprogram_type="FUNCTION", source="FUNCTION CALCULA_IRRF RETURN NUMBER IS BEGIN RETURN 0; END;"),
+                    SubprogramMeta(
+                        package_name="PKG_FOLHA",
+                        name="CALCULA_INSS",
+                        subprogram_type="PROCEDURE",
+                        source="PROCEDURE CALCULA_INSS IS BEGIN NULL; END;",
+                    ),
+                    SubprogramMeta(
+                        package_name="PKG_FOLHA",
+                        name="CALCULA_IRRF",
+                        subprogram_type="FUNCTION",
+                        source="FUNCTION CALCULA_IRRF RETURN NUMBER IS BEGIN RETURN 0; END;",
+                    ),
                 ],
             )
             schema = SchemaMetadata(code_objects=[code_pkg])
@@ -314,6 +329,7 @@ class ConfigAndDocsTests(unittest.TestCase):
             )
 
             from leai.annotations import ensure_annotation_stub
+
             # Simulate new 'EMAIL' column coming from RAW/database
             ann = ensure_annotation_stub(ann_file, column_names=["COD", "EMAIL"])
 
@@ -385,6 +401,7 @@ class ConfigAndDocsTests(unittest.TestCase):
             schema = SchemaMetadata(tables=[tbl])
 
             from leai.docs import sync_schema_annotations
+
             gen_ann = sync_schema_annotations(schema, ann_dir)
             self.assertEqual(len(gen_ann), 1)
             self.assertTrue((ann_dir / "tables" / "TBL1.yml").exists())
@@ -398,9 +415,7 @@ class ConfigAndDocsTests(unittest.TestCase):
                 ColumnMeta(name="ID", data_type="NUMBER", nullable=False),
                 ColumnMeta(name="DEP_ID", data_type="NUMBER", nullable=False),
             ],
-            foreign_keys=[
-                ForeignKeyMeta(name="FK_FUNC_DEP", column="DEP_ID", referenced_table="DEPARTAMENTOS", referenced_column="ID")
-            ],
+            foreign_keys=[ForeignKeyMeta(name="FK_FUNC_DEP", column="DEP_ID", referenced_table="DEPARTAMENTOS", referenced_column="ID")],
         )
         dep = TableMeta(
             name="DEPENDENTES",
@@ -408,9 +423,7 @@ class ConfigAndDocsTests(unittest.TestCase):
                 ColumnMeta(name="ID", data_type="NUMBER", nullable=False),
                 ColumnMeta(name="FUNC_ID", data_type="NUMBER", nullable=False),
             ],
-            foreign_keys=[
-                ForeignKeyMeta(name="FK_DEP_FUNC", column="FUNC_ID", referenced_table="FUNCIONARIOS", referenced_column="ID")
-            ],
+            foreign_keys=[ForeignKeyMeta(name="FK_DEP_FUNC", column="FUNC_ID", referenced_table="FUNCIONARIOS", referenced_column="ID")],
         )
         vw = ViewMeta(name="VW_FOLHA", text="SELECT f.ID, f.DEP_ID FROM FUNCIONARIOS f")
         trg = TriggerMeta(name="TRG_FUNC_AUDIT", table_name="FUNCIONARIOS", trigger_type="BEFORE INSERT", triggering_event="INSERT")
@@ -422,6 +435,7 @@ class ConfigAndDocsTests(unittest.TestCase):
         )
 
         from leai.raw import trace_raw_dependencies
+
         res = trace_raw_dependencies([schema], "FUNCIONARIOS")
 
         self.assertEqual(res.focal_name, "FUNCIONARIOS")
@@ -438,8 +452,8 @@ class ConfigAndDocsTests(unittest.TestCase):
         self.assertIn("TRIGGER_ON", rel_types)
 
         self.assertEqual(len(res.related_tables), 2)  # DEPARTAMENTOS and DEPENDENTES
-        self.assertEqual(len(res.related_views), 1)   # VW_FOLHA
-        self.assertEqual(len(res.related_triggers), 1) # TRG_FUNC_AUDIT
+        self.assertEqual(len(res.related_views), 1)  # VW_FOLHA
+        self.assertEqual(len(res.related_triggers), 1)  # TRG_FUNC_AUDIT
 
     def test_dossier_markdown_and_mermaid_generation(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -482,6 +496,7 @@ class ConfigAndDocsTests(unittest.TestCase):
             self.assertTrue(written_json.exists())
 
             import json
+
             chunk_data = json.loads(written_json.read_text(encoding="utf-8"))
             self.assertEqual(chunk_data["entity"], "FUNCIONARIOS")
             self.assertEqual(chunk_data["chunk_id"], "trace_funcionarios")
@@ -492,22 +507,34 @@ class ConfigAndDocsTests(unittest.TestCase):
         emp = TableMeta(name="EMPRESAS", columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)])
         dept = TableMeta(
             name="DEPARTAMENTOS",
-            columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False), ColumnMeta(name="EMP_ID", data_type="NUMBER", nullable=False)],
+            columns=[
+                ColumnMeta(name="ID", data_type="NUMBER", nullable=False),
+                ColumnMeta(name="EMP_ID", data_type="NUMBER", nullable=False),
+            ],
             foreign_keys=[ForeignKeyMeta(name="FK_DEP_EMP", column="EMP_ID", referenced_table="EMPRESAS", referenced_column="ID")],
         )
         func = TableMeta(
             name="FUNCIONARIOS",
-            columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False), ColumnMeta(name="DEP_ID", data_type="NUMBER", nullable=False)],
+            columns=[
+                ColumnMeta(name="ID", data_type="NUMBER", nullable=False),
+                ColumnMeta(name="DEP_ID", data_type="NUMBER", nullable=False),
+            ],
             foreign_keys=[ForeignKeyMeta(name="FK_FUNC_DEP", column="DEP_ID", referenced_table="DEPARTAMENTOS", referenced_column="ID")],
         )
         dep = TableMeta(
             name="DEPENDENTES",
-            columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False), ColumnMeta(name="FUNC_ID", data_type="NUMBER", nullable=False)],
+            columns=[
+                ColumnMeta(name="ID", data_type="NUMBER", nullable=False),
+                ColumnMeta(name="FUNC_ID", data_type="NUMBER", nullable=False),
+            ],
             foreign_keys=[ForeignKeyMeta(name="FK_DEP_FUNC", column="FUNC_ID", referenced_table="FUNCIONARIOS", referenced_column="ID")],
         )
         hist = TableMeta(
             name="HISTORICO_DEP",
-            columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False), ColumnMeta(name="DEP_ID", data_type="NUMBER", nullable=False)],
+            columns=[
+                ColumnMeta(name="ID", data_type="NUMBER", nullable=False),
+                ColumnMeta(name="DEP_ID", data_type="NUMBER", nullable=False),
+            ],
             foreign_keys=[ForeignKeyMeta(name="FK_HIST_DEP", column="DEP_ID", referenced_table="DEPENDENTES", referenced_column="ID")],
         )
 
@@ -631,6 +658,7 @@ class ConfigAndDocsTests(unittest.TestCase):
             self.assertTrue((chunks_dir / "DEPARTMENTS.json").exists())
 
             import json
+
             emp_chunk = json.loads((chunks_dir / "EMPLOYEES.json").read_text(encoding="utf-8"))
             self.assertEqual(emp_chunk["entity"], "EMPLOYEES")
             self.assertIn("text_for_embedding", emp_chunk)
@@ -717,7 +745,3 @@ FUNCTION get_setor_func (p_numfunc IN NUMBER, p_numvinc IN NUMBER, p_data IN DAT
 
 if __name__ == "__main__":
     unittest.main()
-
-
-
-

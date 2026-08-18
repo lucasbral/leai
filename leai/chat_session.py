@@ -50,7 +50,7 @@ class ChatSession:
         self.messages.append({"role": "user", "content": content})
         # Limit history to prevent context window overflow
         if len(self.messages) > self.max_history_turns * 2:
-            self.messages = self.messages[-(self.max_history_turns * 2):]
+            self.messages = self.messages[-(self.max_history_turns * 2) :]
 
     def add_assistant_message(self, content: str) -> None:
         self.messages.append({"role": "assistant", "content": content})
@@ -100,6 +100,7 @@ class ChatSession:
         user_input: str,
         on_tool_start: Callable[[str, dict[str, Any]], None] | None = None,
         on_tool_end: Callable[[str, str], None] | None = None,
+        on_token: Callable[[str], None] | None = None,
     ) -> tuple[str, list[str]]:
         """Processes user input, runs agent tool execution loop, and retrieves AI response."""
         # 1. Update RAG context with the new question
@@ -126,6 +127,7 @@ class ChatSession:
             system_prompt=combined_sys,
             on_tool_start=on_tool_start,
             on_tool_end=on_tool_end,
+            on_token=on_token,
         )
         self.add_assistant_message(reply)
 

@@ -127,12 +127,28 @@ def generate_mermaid_graph(focal_name: str, dependencies: list[DependencyLink]) 
 
         if dep.source_name not in nodes:
             nodes[dep.source_name] = s_id
-            icon = "📊" if dep.source_type == "TABLE" else ("👁️" if "VIEW" in dep.source_type else ("⚡" if dep.source_type in ("TRIGGER", "SUBPROGRAM", "PROCEDURE", "FUNCTION") else "⚙️"))
+            icon = (
+                "📊"
+                if dep.source_type == "TABLE"
+                else (
+                    "👁️"
+                    if "VIEW" in dep.source_type
+                    else ("⚡" if dep.source_type in ("TRIGGER", "SUBPROGRAM", "PROCEDURE", "FUNCTION") else "⚙️")
+                )
+            )
             lines.append(f'    {s_id}["{icon} {dep.source_name} (L{dep.depth})"]')
 
         if dep.target_name not in nodes:
             nodes[dep.target_name] = t_id
-            icon = "📊" if dep.target_type == "TABLE" else ("👁️" if "VIEW" in dep.target_type else ("⚡" if dep.target_type in ("TRIGGER", "SUBPROGRAM", "PROCEDURE", "FUNCTION") else "⚙️"))
+            icon = (
+                "📊"
+                if dep.target_type == "TABLE"
+                else (
+                    "👁️"
+                    if "VIEW" in dep.target_type
+                    else ("⚡" if dep.target_type in ("TRIGGER", "SUBPROGRAM", "PROCEDURE", "FUNCTION") else "⚙️")
+                )
+            )
             lines.append(f'    {t_id}["{icon} {dep.target_name} (L{dep.depth})"]')
 
         label = dep.relation_type.replace("_", " ")
@@ -240,8 +256,14 @@ def _build_rag_frontmatter(
     dep_count = len(trace_result.dependencies)
     risk_level = _calculate_risk_level(dep_count)
 
-    parents = [d.target_name for d in trace_result.dependencies if d.target_name != focal_name and d.relation_type in ("FK_REFERENCES", "DEPENDS_ON", "READS/SELECTS", "EXECUTES/CALLS")]
-    children = [d.source_name for d in trace_result.dependencies if d.source_name != focal_name and d.relation_type in ("FK_REFERENCED_BY",)]
+    parents = [
+        d.target_name
+        for d in trace_result.dependencies
+        if d.target_name != focal_name and d.relation_type in ("FK_REFERENCES", "DEPENDS_ON", "READS/SELECTS", "EXECUTES/CALLS")
+    ]
+    children = [
+        d.source_name for d in trace_result.dependencies if d.source_name != focal_name and d.relation_type in ("FK_REFERENCED_BY",)
+    ]
     consumers = [
         d.source_name
         for d in trace_result.dependencies
@@ -280,8 +302,14 @@ def _render_trace_xray_and_graph(
     dep_count = len(trace_result.dependencies)
     risk_level = _calculate_risk_level(dep_count)
 
-    parents = [d.target_name for d in trace_result.dependencies if d.target_name != focal_name and d.relation_type in ("FK_REFERENCES", "DEPENDS_ON", "READS/SELECTS", "EXECUTES/CALLS")]
-    children = [d.source_name for d in trace_result.dependencies if d.source_name != focal_name and d.relation_type in ("FK_REFERENCED_BY",)]
+    parents = [
+        d.target_name
+        for d in trace_result.dependencies
+        if d.target_name != focal_name and d.relation_type in ("FK_REFERENCES", "DEPENDS_ON", "READS/SELECTS", "EXECUTES/CALLS")
+    ]
+    children = [
+        d.source_name for d in trace_result.dependencies if d.source_name != focal_name and d.relation_type in ("FK_REFERENCED_BY",)
+    ]
     consumers = [
         d.source_name
         for d in trace_result.dependencies
@@ -339,12 +367,7 @@ def render_table_markdown(
     lines.extend(_build_rag_frontmatter(trace_result, annotation))
     lines.extend([f"# TABLE: {table.name}", "", "## Visão geral", ""])
     lines.extend(_render_audit_meta(table))
-    table_desc = (
-        (annotation and annotation.description)
-        or table.comment
-        or table_doc
-        or "Sem descrição técnica no dicionário Oracle."
-    )
+    table_desc = (annotation and annotation.description) or table.comment or table_doc or "Sem descrição técnica no dicionário Oracle."
     lines.append(table_desc.replace("\r\n", " ").replace("\n", " "))
     lines.extend(_render_business_rules(annotation))
 
@@ -354,9 +377,7 @@ def render_table_markdown(
         raw_comment = ann_cols.get(column.name) or column_docs.get(column.name) or column.comment or ""
         comment_clean = raw_comment.replace("\r\n", " ").replace("\n", " ").replace("|", "\\|")
         default_clean = (column.default or "").replace("\r\n", " ").replace("\n", " ").replace("|", "\\|")
-        lines.append(
-            f"| {column.name} | {column.data_type} | {'SIM' if column.nullable else 'NÃO'} | {default_clean} | {comment_clean} |"
-        )
+        lines.append(f"| {column.name} | {column.data_type} | {'SIM' if column.nullable else 'NÃO'} | {default_clean} | {comment_clean} |")
 
     lines.extend(["", "## Chave primária", ""])
     lines.append(", ".join(table.primary_keys) if table.primary_keys else "Não definida")
@@ -366,9 +387,7 @@ def render_table_markdown(
         lines.append("| Constraint | Coluna | Referência |")
         lines.append("|---|---|---|")
         for fk in table.foreign_keys:
-            lines.append(
-                f"| {fk.name} | {fk.column} | {fk.referenced_table}.{fk.referenced_column} |"
-            )
+            lines.append(f"| {fk.name} | {fk.column} | {fk.referenced_table}.{fk.referenced_column} |")
     else:
         lines.append("Nenhuma")
 
@@ -399,9 +418,7 @@ def render_view_markdown(
         raw_comment = ann_cols.get(column.name) or column_docs.get(column.name) or column.comment or ""
         comment_clean = raw_comment.replace("\r\n", " ").replace("\n", " ").replace("|", "\\|")
         default_clean = (column.default or "").replace("\r\n", " ").replace("\n", " ").replace("|", "\\|")
-        lines.append(
-            f"| {column.name} | {column.data_type} | {'SIM' if column.nullable else 'NÃO'} | {default_clean} | {comment_clean} |"
-        )
+        lines.append(f"| {column.name} | {column.data_type} | {'SIM' if column.nullable else 'NÃO'} | {default_clean} | {comment_clean} |")
 
     if view.text:
         lines.extend(["", "## Definição SQL", "", "```sql", view.text.strip(), "```"])
@@ -488,7 +505,12 @@ def render_code_object_markdown(
     lines = []
     lines.extend(_build_rag_frontmatter(trace_result, annotation))
     lines.extend([f"# {code_obj.object_type.upper()}: {code_obj.name}", "", "## Visão geral", ""])
-    desc = (annotation and annotation.description) or code_obj.comment or code_doc or f"Objeto PL/SQL ({code_obj.object_type}) armazenado no Oracle."
+    desc = (
+        (annotation and annotation.description)
+        or code_obj.comment
+        or code_doc
+        or f"Objeto PL/SQL ({code_obj.object_type}) armazenado no Oracle."
+    )
     lines.append(desc.replace("\r\n", " ").replace("\n", " "))
     lines.extend(_render_business_rules(annotation))
 
@@ -513,13 +535,15 @@ def render_trigger_markdown(
 ) -> str:
     lines = []
     lines.extend(_build_rag_frontmatter(trace_result, annotation))
-    lines.extend([
-        f"# TRIGGER: {trigger.name}",
-        "",
-        "## Visão geral",
-        "",
-        (annotation and annotation.description) or f"Trigger associado à tabela `{trigger.table_name or 'N/A'}`.",
-    ])
+    lines.extend(
+        [
+            f"# TRIGGER: {trigger.name}",
+            "",
+            "## Visão geral",
+            "",
+            (annotation and annotation.description) or f"Trigger associado à tabela `{trigger.table_name or 'N/A'}`.",
+        ]
+    )
     lines.extend(_render_business_rules(annotation))
     lines.extend(
         [
@@ -965,7 +989,10 @@ def write_schema_docs(
     for code_obj in schema.code_objects:
         if not _is_code_obj_allowed(code_obj, allowed_types):
             continue
-        if target_clean_obj and not (_matches_target(code_obj.name) or any(_matches_target(sub.name) or _matches_target(f"{code_obj.name}.{sub.name}") for sub in code_obj.subprograms)):
+        if target_clean_obj and not (
+            _matches_target(code_obj.name)
+            or any(_matches_target(sub.name) or _matches_target(f"{code_obj.name}.{sub.name}") for sub in code_obj.subprograms)
+        ):
             continue
         processed_count += 1
         if progress_callback:
@@ -1254,7 +1281,10 @@ def generate_rag_json(trace_result: ObjectTraceResult, annotation: ObjectAnnotat
     if isinstance(focal_obj, TableMeta):
         columns_info = [{"name": c.name, "type": c.data_type, "nullable": c.nullable, "comment": c.comment} for c in focal_obj.columns]
         pks = focal_obj.primary_keys
-        fks = [{"name": fk.name, "column": fk.column, "referenced_table": fk.referenced_table, "referenced_column": fk.referenced_column} for fk in focal_obj.foreign_keys]
+        fks = [
+            {"name": fk.name, "column": fk.column, "referenced_table": fk.referenced_table, "referenced_column": fk.referenced_column}
+            for fk in focal_obj.foreign_keys
+        ]
 
     deps_info = [
         {
@@ -1316,10 +1346,15 @@ def render_dossier_markdown(
 
     parents = [d.target_name for d in trace_result.dependencies if d.relation_type in ("FK_REFERENCES", "DEPENDS_ON")]
     children = [d.source_name for d in trace_result.dependencies if d.relation_type == "FK_REFERENCED_BY"]
-    consumers = [d.source_name for d in trace_result.dependencies if d.relation_type in ("READS/SELECTS", "PLSQL_DEPENDENCY", "TRIGGER_ON", "REFERENCED_BY")]
+    consumers = [
+        d.source_name
+        for d in trace_result.dependencies
+        if d.relation_type in ("READS/SELECTS", "PLSQL_DEPENDENCY", "TRIGGER_ON", "REFERENCED_BY")
+    ]
 
     # 1. YAML Frontmatter for RAG / LLM
     import yaml
+
     rag_meta = {
         "rag_metadata": {
             "entity": focal_name,
@@ -1363,7 +1398,11 @@ def render_dossier_markdown(
         ]
     )
 
-    desc = (annotation and annotation.description) or getattr(focal_obj, "comment", None) or f"Análise minuciosa e rastreamento de linhagem técnica para o objeto `{focal_name}`."
+    desc = (
+        (annotation and annotation.description)
+        or getattr(focal_obj, "comment", None)
+        or f"Análise minuciosa e rastreamento de linhagem técnica para o objeto `{focal_name}`."
+    )
     lines.extend(["## Visão geral de negócio", "", desc])
     lines.extend(_render_business_rules(annotation))
 
@@ -1392,7 +1431,9 @@ def render_dossier_markdown(
 
     # 6. Focal Object Details
     if isinstance(focal_obj, TableMeta):
-        lines.extend(["", "## Estrutura de Colunas do Objeto Focal", "", "| Coluna | Tipo | Nulo | Padrão | Comentário |", "|---|---|---|---|---|"])
+        lines.extend(
+            ["", "## Estrutura de Colunas do Objeto Focal", "", "| Coluna | Tipo | Nulo | Padrão | Comentário |", "|---|---|---|---|---|"]
+        )
         ann_cols = annotation.columns if annotation else {}
         for col in focal_obj.columns:
             comm = ann_cols.get(col.name) or col.comment or ""
@@ -1457,6 +1498,3 @@ def write_dossier_doc(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(markdown, encoding="utf-8")
     return output_path
-
-
-

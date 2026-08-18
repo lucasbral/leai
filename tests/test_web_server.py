@@ -138,7 +138,11 @@ class WebServerTests(unittest.TestCase):
                 self.assertTrue(save_data["success"])
 
                 # Verify YAML file created with all 7 fields
-                saved_yaml = (cfg.annotationsPath / "tables" / "EMPLOYEES.yml") if (cfg.annotationsPath / "tables" / "EMPLOYEES.yml").exists() else (cfg.annotationsPath / "HR" / "tables" / "EMPLOYEES.yml")
+                saved_yaml = (
+                    (cfg.annotationsPath / "tables" / "EMPLOYEES.yml")
+                    if (cfg.annotationsPath / "tables" / "EMPLOYEES.yml").exists()
+                    else (cfg.annotationsPath / "HR" / "tables" / "EMPLOYEES.yml")
+                )
                 self.assertTrue(saved_yaml.exists())
                 yaml_content = saved_yaml.read_text(encoding="utf-8")
                 self.assertIn("Cadastro corporativo", yaml_content)
@@ -147,7 +151,11 @@ class WebServerTests(unittest.TestCase):
                 self.assertIn("DEPARTMENTS", yaml_content)
 
                 # Verify Markdown recompiled with all 7 fields
-                compiled_md = (cfg.docPath / "tables" / "EMPLOYEES.md") if (cfg.docPath / "tables" / "EMPLOYEES.md").exists() else (cfg.docPath / "HR" / "tables" / "EMPLOYEES.md")
+                compiled_md = (
+                    (cfg.docPath / "tables" / "EMPLOYEES.md")
+                    if (cfg.docPath / "tables" / "EMPLOYEES.md").exists()
+                    else (cfg.docPath / "HR" / "tables" / "EMPLOYEES.md")
+                )
                 self.assertTrue(compiled_md.exists())
                 md_content = compiled_md.read_text(encoding="utf-8")
                 self.assertIn("Cadastro corporativo", md_content)
@@ -158,7 +166,9 @@ class WebServerTests(unittest.TestCase):
                 # Verify GET /api/object returns all 7 fields
                 req_reload = urllib.request.urlopen(f"{url}/api/object?schema=HR&type=TABLE&name=EMPLOYEES")
                 reload_data = json.loads(req_reload.read().decode("utf-8"))
-                self.assertEqual(reload_data["annotations"]["use_cases"], ["Relatório mensal de folha", "SELECT * FROM EMPLOYEES WHERE STATUS = 'A'"])
+                self.assertEqual(
+                    reload_data["annotations"]["use_cases"], ["Relatório mensal de folha", "SELECT * FROM EMPLOYEES WHERE STATUS = 'A'"]
+                )
                 self.assertEqual(reload_data["annotations"]["warnings"], ["Tabela crítica com particionamento anual."])
                 self.assertEqual(reload_data["annotations"]["related_objects"], ["DEPARTMENTS", "SALARIES"])
 
@@ -195,14 +205,8 @@ class WebServerTests(unittest.TestCase):
                     "ai": {
                         "default_provider": "gemini",
                         "temperature": 0.35,
-                        "providers": {
-                            "gemini": {
-                                "model": "gemini-1.5-flash",
-                                "base_url": "",
-                                "api_key": "test-key-123"
-                            }
-                        }
-                    }
+                        "providers": {"gemini": {"model": "gemini-1.5-flash", "base_url": "", "api_key": "test-key-123"}},
+                    },
                 }
                 req_save_cfg = urllib.request.Request(
                     f"{url}/api/config",

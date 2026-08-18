@@ -39,7 +39,6 @@ class MockLLMClient(BaseLLMClient):
         return self.text_response
 
 
-
 class AIIntegrationTests(unittest.TestCase):
     def test_llm_factory_instantiates_correct_clients(self):
         cfg = LeaiConfig(
@@ -164,7 +163,6 @@ class AIIntegrationTests(unittest.TestCase):
             tables_count, code_count = enrich_schema_annotations([schema], cfg, client, overwrite=False)
             self.assertEqual(tables_count, 1)
             self.assertEqual(code_count, 0)
-
 
             saved_ann_file = ann_dir / "tables" / "CARGOS.yml"
             self.assertTrue(saved_ann_file.exists())

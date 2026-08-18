@@ -80,11 +80,13 @@ class AgentExecutionEngine:
         system_prompt: str | None = None,
         on_tool_start: Callable[[str, dict[str, Any], int], None] | None = None,
         on_tool_end: Callable[[str, str, str, float], None] | None = None,
+        on_token: Callable[[str], None] | None = None,
     ) -> str:
         """Executes the autonomous agent reasoning loop with tool calling up to MAX_AGENT_ITERATIONS."""
         sys_prompt = (system_prompt or AGENT_SYSTEM_PROMPT).strip()
         working_messages = list(messages)
         self.last_tool_audits = []
+        tools_ran = False
 
         for iteration in range(1, self.max_iterations + 1):
             # Call LLM with tool definitions
@@ -96,8 +98,16 @@ class AgentExecutionEngine:
 
             # If no tool calls were requested, we reached the final synthesis
             if not tool_calls:
+                # If tools ran previously and content is empty/brief, or for direct response
+                if not tools_ran and not content:
+                    # Try streaming chat directly
+                    if hasattr(self.client, "stream_chat") and callable(self.client.stream_chat):
+                        content = self.client.stream_chat(working_messages, system_prompt=sys_prompt, on_chunk=on_token)
+                elif on_token and callable(on_token) and content:
+                    on_token(content)
                 return content or "Não foi possível obter uma resposta do modelo."
 
+            tools_ran = True
             # If tool calls were returned, process them
             assistant_msg: dict[str, Any] = {
                 "role": "assistant",
@@ -109,7 +119,9 @@ class AgentExecutionEngine:
                         "thought_signature": tc.get("thought_signature"),
                         "function": {
                             "name": tc["name"],
-                            "arguments": json.dumps(tc["arguments"], ensure_ascii=False) if isinstance(tc["arguments"], dict) else str(tc["arguments"]),
+                            "arguments": json.dumps(tc["arguments"], ensure_ascii=False)
+                            if isinstance(tc["arguments"], dict)
+                            else str(tc["arguments"]),
                             "thought_signature": tc.get("thought_signature"),
                         },
                     }
@@ -158,16 +170,28 @@ class AgentExecutionEngine:
                     except TypeError:
                         on_tool_end(t_name, tool_output)
 
-                working_messages.append({
-                    "role": "tool",
-                    "tool_call_id": t_id,
-                    "name": t_name,
-                    "content": tool_output,
-                })
+                working_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": t_id,
+                        "name": t_name,
+                        "content": tool_output,
+                    }
+                )
 
-        # If max iterations reached, do a final direct synthesis call without tools
-        final_synth = self.client.generate_chat(
-            working_messages,
-            system_prompt=sys_prompt + "\n\nResuma e conclua a resposta final com base nas informações coletadas pelas ferramentas.",
-        )
+        # If tools ran or max iterations reached, synthesize final answer with streaming
+        synth_prompt = sys_prompt + "\n\nResuma e conclua a resposta final com base nas informações coletadas pelas ferramentas."
+        if hasattr(self.client, "stream_chat") and callable(self.client.stream_chat):
+            final_synth = self.client.stream_chat(
+                working_messages,
+                system_prompt=synth_prompt,
+                on_chunk=on_token,
+            )
+        else:
+            final_synth = self.client.generate_chat(
+                working_messages,
+                system_prompt=synth_prompt,
+            )
+            if on_token and callable(on_token) and final_synth:
+                on_token(final_synth)
         return final_synth

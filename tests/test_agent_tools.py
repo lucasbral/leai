@@ -279,7 +279,6 @@ END;"""
             self.assertIsInstance(parsed, list)
             self.assertEqual(parsed[0]["object_name"], "TGOVPE_FREQ_LIC_AFAST")
 
-
     def test_agent_execution_engine_multi_turn(self):
         self.assertEqual(MAX_AGENT_ITERATIONS, 10)
 

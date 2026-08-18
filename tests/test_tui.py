@@ -42,12 +42,8 @@ class TuiUnitTests(unittest.TestCase):
                     primary_keys=["ID"],
                 ),
             ],
-            views=[
-                ViewMeta(name="V_EMPLOYEES_SUMMARY", columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)])
-            ],
-            code_objects=[
-                CodeObjectMeta(name="PKG_PAYROLL", object_type="PACKAGE", source="PACKAGE BODY PKG_PAYROLL IS ... END;")
-            ],
+            views=[ViewMeta(name="V_EMPLOYEES_SUMMARY", columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)])],
+            code_objects=[CodeObjectMeta(name="PKG_PAYROLL", object_type="PACKAGE", source="PACKAGE BODY PKG_PAYROLL IS ... END;")],
         )
         self.config = LeaiConfig(
             schemas=["HR"],
@@ -240,6 +236,7 @@ class TuiUnitTests(unittest.TestCase):
 
             # Record turn
             from leai.audit import ToolExecutionAudit
+
             tool_rec = ToolExecutionAudit(
                 step=1,
                 tool_name="grep_plsql_code",
@@ -284,7 +281,14 @@ class TuiUnitTests(unittest.TestCase):
 
     def test_completer_new_slash_commands(self):
         completer = LeaiCompleter([self.schema])
-        for prefix, expected_cmd in [("/do", "/doc"), ("/ex", "/extract"), ("/co", "/compile"), ("/an", "/annotate"), ("/en", "/enrich"), ("/se", "/serve")]:
+        for prefix, expected_cmd in [
+            ("/do", "/doc"),
+            ("/ex", "/extract"),
+            ("/co", "/compile"),
+            ("/an", "/annotate"),
+            ("/en", "/enrich"),
+            ("/se", "/serve"),
+        ]:
             doc = Document(text=prefix, cursor_position=len(prefix))
             completions = list(completer.get_completions(doc, CompleteEvent()))
             texts = [c.text for c in completions]
@@ -299,6 +303,7 @@ class TuiUnitTests(unittest.TestCase):
 
     def test_doc_editor_full_flow(self):
         from leai.tui.doc_editor import DocEditor
+
         with tempfile.TemporaryDirectory() as tmpdir:
             self.config.annotationsPath = Path(tmpdir) / "annotations"
             self.config.docPath = Path(tmpdir) / "docs"
@@ -310,11 +315,20 @@ class TuiUnitTests(unittest.TestCase):
             # 4 -> Tags -> "RH, Core, Folha"
             # 7 -> Save -> "n" (do not recompile)
             inputs = [
-                "1", "Tabela principal de funcionarios",
-                "2", "1", "Identificador unico", "0",
-                "3", "+", "Salario nao pode ser negativo", "0",
-                "4", "RH, Core, Folha",
-                "7", "n",
+                "1",
+                "Tabela principal de funcionarios",
+                "2",
+                "1",
+                "Identificador unico",
+                "0",
+                "3",
+                "+",
+                "Salario nao pode ser negativo",
+                "0",
+                "4",
+                "RH, Core, Folha",
+                "7",
+                "n",
             ]
             input_iter = iter(inputs)
             editor = DocEditor(self.config, [self.schema], input_fn=lambda p: next(input_iter))
@@ -326,6 +340,7 @@ class TuiUnitTests(unittest.TestCase):
             ann_file = self.config.annotationsPath / "tables" / "EMPLOYEES.yml"
             self.assertTrue(ann_file.exists())
             from leai.annotations import load_annotation
+
             loaded = load_annotation(ann_file)
             self.assertEqual(loaded.description, "Tabela principal de funcionarios")
             self.assertEqual(loaded.columns.get("ID"), "Identificador unico")
@@ -424,6 +439,7 @@ class TuiUnitTests(unittest.TestCase):
     def test_doc_completeness_calculation(self):
         from leai.models import ObjectAnnotation
         from leai.tui.doc_editor import _calculate_doc_completeness
+
         ann = ObjectAnnotation(description="Table description", columns={"ID": "col desc"}, business_rules=["rule 1"], tags=["HR"])
         pct, bar_str = _calculate_doc_completeness(ann, ["ID"])
         self.assertEqual(pct, 100)
@@ -436,6 +452,7 @@ class TuiUnitTests(unittest.TestCase):
 
     def test_doc_editor_catalog_selection_by_index(self):
         from leai.tui.doc_editor import DocEditor
+
         with tempfile.TemporaryDirectory() as tmpdir:
             self.config.annotationsPath = Path(tmpdir) / "annotations"
             self.config.docPath = Path(tmpdir) / "docs"
@@ -460,6 +477,7 @@ class TuiUnitTests(unittest.TestCase):
             self.config.docPath = Path(tmpdir) / "docs"
 
             from leai.raw import save_raw_schema
+
             save_raw_schema(self.schema, self.config.rawPath)
 
             session = InteractiveTUISession([self.schema], self.config, self.mock_client)
@@ -483,11 +501,11 @@ class TuiUnitTests(unittest.TestCase):
 
     def test_format_tokens_helper(self):
         from leai.tui.session import _format_tokens
+
         self.assertEqual(_format_tokens(0), "0")
         self.assertEqual(_format_tokens(450), "450")
         self.assertEqual(_format_tokens(2450, 450), "2.5k (↑450)")
         self.assertEqual(_format_tokens(1_500_000, 250_000), "1.5M (↑250.0k)")
-
 
     def test_session_slash_check(self):
         session = InteractiveTUISession([self.schema], self.config, self.mock_client)

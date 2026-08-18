@@ -253,4 +253,3 @@ def enrich_schema_annotations(
                 code_count += 1
 
     return tables_count, code_count
-
