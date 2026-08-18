@@ -106,6 +106,84 @@ class OpenAICompatibleClient(BaseLLMClient):
         all_msgs.extend(messages)
         return self._send_request(all_msgs, response_format_json=False)
 
+    def stream_chat(
+        self,
+        messages: list[dict[str, Any]],
+        system_prompt: str | None = None,
+        on_chunk: Any = None,
+    ) -> str:
+        all_msgs = []
+        if system_prompt:
+            all_msgs.append({"role": "system", "content": system_prompt})
+        all_msgs.extend(messages)
+
+        url = f"{self.base_url}/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "LEAI-CLI",
+        }
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": all_msgs,
+            "temperature": self.temperature,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+
+        collected_text = []
+        usage_found = False
+
+        try:
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                for raw_line in resp:
+                    line = raw_line.decode("utf-8").strip()
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data_str = line[5:].strip()
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        chunk_json = json.loads(data_str)
+                        # Check usage
+                        if "usage" in chunk_json and chunk_json["usage"]:
+                            u = chunk_json["usage"]
+                            self.record_usage(
+                                prompt_tokens=u.get("prompt_tokens", 0),
+                                completion_tokens=u.get("completion_tokens", 0),
+                                total_tokens=u.get("total_tokens"),
+                            )
+                            usage_found = True
+                        choices = chunk_json.get("choices", [])
+                        if choices:
+                            delta = choices[0].get("delta", {})
+                            delta_content = delta.get("content") or ""
+                            if delta_content:
+                                collected_text.append(delta_content)
+                                if on_chunk and callable(on_chunk):
+                                    on_chunk(delta_content)
+                    except Exception:
+                        continue
+        except Exception:
+            # If streaming fails (e.g. proxy/provider doesn't support SSE stream_options), fallback to standard
+            if not collected_text:
+                full_res = self.generate_chat(messages, system_prompt=system_prompt)
+                if on_chunk and callable(on_chunk) and full_res:
+                    on_chunk(full_res)
+                return full_res
+
+        full_output = "".join(collected_text)
+        if not usage_found and full_output:
+            est_prompt = (len(system_prompt or "") + sum(len(m.get("content", "")) for m in messages)) // 4
+            est_comp = len(full_output) // 4
+            self.record_usage(prompt_tokens=est_prompt, completion_tokens=est_comp, total_tokens=est_prompt + est_comp)
+        return full_output
+
     def generate_chat_with_tools(
         self,
         messages: list[dict[str, Any]],
@@ -162,11 +240,13 @@ class OpenAICompatibleClient(BaseLLMClient):
                     else:
                         parsed_args = raw_args or {}
 
-                    tool_calls.append({
-                        "id": tc.get("id", f"call_{fn_name}"),
-                        "name": fn_name,
-                        "arguments": parsed_args,
-                    })
+                    tool_calls.append(
+                        {
+                            "id": tc.get("id", f"call_{fn_name}"),
+                            "name": fn_name,
+                            "arguments": parsed_args,
+                        }
+                    )
 
                 return content, tool_calls
         except urllib.error.HTTPError as exc:
@@ -205,4 +285,3 @@ class OpenAICompatibleClient(BaseLLMClient):
                 return models or [{"id": self.model, "name": self.model}]
         except Exception as exc:
             return [{"id": self.model, "name": self.model, "note": f"Error: {exc}"}]
-

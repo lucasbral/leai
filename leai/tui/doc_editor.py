@@ -140,19 +140,21 @@ def _collect_all_objects(
             cols = [c.name for c in t.columns]
             pct, bar_str = _calculate_doc_completeness(ann, cols)
             pk_str = f"PK: {', '.join(t.primary_keys)}" if t.primary_keys else "No PK"
-            items.append({
-                "schema": s_name,
-                "category": "tables",
-                "type": "TABLE",
-                "name": t.name,
-                "obj_meta": t,
-                "cols": cols,
-                "details": f"{len(t.columns)} cols ({pk_str})",
-                "ann_file": ann_file,
-                "pct": pct,
-                "bar_str": bar_str,
-                "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
-            })
+            items.append(
+                {
+                    "schema": s_name,
+                    "category": "tables",
+                    "type": "TABLE",
+                    "name": t.name,
+                    "obj_meta": t,
+                    "cols": cols,
+                    "details": f"{len(t.columns)} cols ({pk_str})",
+                    "ann_file": ann_file,
+                    "pct": pct,
+                    "bar_str": bar_str,
+                    "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
+                }
+            )
 
         # Views
         for v in s.views:
@@ -160,19 +162,21 @@ def _collect_all_objects(
             ann = load_annotation(ann_file) if ann_file.exists() else ObjectAnnotation()
             cols = [c.name for c in v.columns]
             pct, bar_str = _calculate_doc_completeness(ann, cols)
-            items.append({
-                "schema": s_name,
-                "category": "views",
-                "type": "VIEW",
-                "name": v.name,
-                "obj_meta": v,
-                "cols": cols,
-                "details": f"{len(v.columns)} cols",
-                "ann_file": ann_file,
-                "pct": pct,
-                "bar_str": bar_str,
-                "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
-            })
+            items.append(
+                {
+                    "schema": s_name,
+                    "category": "views",
+                    "type": "VIEW",
+                    "name": v.name,
+                    "obj_meta": v,
+                    "cols": cols,
+                    "details": f"{len(v.columns)} cols",
+                    "ann_file": ann_file,
+                    "pct": pct,
+                    "bar_str": bar_str,
+                    "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
+                }
+            )
 
         # Materialized Views
         for mv in s.mviews:
@@ -180,19 +184,21 @@ def _collect_all_objects(
             ann = load_annotation(ann_file) if ann_file.exists() else ObjectAnnotation()
             cols = [c.name for c in mv.columns]
             pct, bar_str = _calculate_doc_completeness(ann, cols)
-            items.append({
-                "schema": s_name,
-                "category": "mviews",
-                "type": "MVIEW",
-                "name": mv.name,
-                "obj_meta": mv,
-                "cols": cols,
-                "details": f"{len(mv.columns)} cols",
-                "ann_file": ann_file,
-                "pct": pct,
-                "bar_str": bar_str,
-                "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
-            })
+            items.append(
+                {
+                    "schema": s_name,
+                    "category": "mviews",
+                    "type": "MVIEW",
+                    "name": mv.name,
+                    "obj_meta": mv,
+                    "cols": cols,
+                    "details": f"{len(mv.columns)} cols",
+                    "ann_file": ann_file,
+                    "pct": pct,
+                    "bar_str": bar_str,
+                    "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
+                }
+            )
 
         # Code Objects (Packages, Procedures, Functions, Types)
         for co in s.code_objects:
@@ -211,76 +217,84 @@ def _collect_all_objects(
                 details = f"{len(co.source.splitlines())} lines"
             else:
                 details = "code"
-            items.append({
-                "schema": s_name,
-                "category": cat,
-                "type": co.object_type.upper(),
-                "name": co.name,
-                "obj_meta": co,
-                "cols": cols,
-                "details": details,
-                "ann_file": ann_file,
-                "pct": pct,
-                "bar_str": bar_str,
-                "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
-            })
+            items.append(
+                {
+                    "schema": s_name,
+                    "category": cat,
+                    "type": co.object_type.upper(),
+                    "name": co.name,
+                    "obj_meta": co,
+                    "cols": cols,
+                    "details": details,
+                    "ann_file": ann_file,
+                    "pct": pct,
+                    "bar_str": bar_str,
+                    "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
+                }
+            )
 
         # Triggers
         for tr in s.triggers:
             ann_file = resolve_annotation_path(config, s_name, "triggers", tr.name, is_multi)
             ann = load_annotation(ann_file) if ann_file.exists() else ObjectAnnotation()
             pct, bar_str = _calculate_doc_completeness(ann, [])
-            items.append({
-                "schema": s_name,
-                "category": "triggers",
-                "type": "TRIGGER",
-                "name": tr.name,
-                "obj_meta": tr,
-                "cols": [],
-                "details": f"on {tr.table_name or 'DB'}",
-                "ann_file": ann_file,
-                "pct": pct,
-                "bar_str": bar_str,
-                "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
-            })
+            items.append(
+                {
+                    "schema": s_name,
+                    "category": "triggers",
+                    "type": "TRIGGER",
+                    "name": tr.name,
+                    "obj_meta": tr,
+                    "cols": [],
+                    "details": f"on {tr.table_name or 'DB'}",
+                    "ann_file": ann_file,
+                    "pct": pct,
+                    "bar_str": bar_str,
+                    "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
+                }
+            )
 
         # Sequences
         for sq in s.sequences:
             ann_file = resolve_annotation_path(config, s_name, "sequences", sq.name, is_multi)
             ann = load_annotation(ann_file) if ann_file.exists() else ObjectAnnotation()
             pct, bar_str = _calculate_doc_completeness(ann, [])
-            items.append({
-                "schema": s_name,
-                "category": "sequences",
-                "type": "SEQUENCE",
-                "name": sq.name,
-                "obj_meta": sq,
-                "cols": [],
-                "details": "Sequence",
-                "ann_file": ann_file,
-                "pct": pct,
-                "bar_str": bar_str,
-                "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
-            })
+            items.append(
+                {
+                    "schema": s_name,
+                    "category": "sequences",
+                    "type": "SEQUENCE",
+                    "name": sq.name,
+                    "obj_meta": sq,
+                    "cols": [],
+                    "details": "Sequence",
+                    "ann_file": ann_file,
+                    "pct": pct,
+                    "bar_str": bar_str,
+                    "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
+                }
+            )
 
         # Synonyms
         for sn in s.synonyms:
             ann_file = resolve_annotation_path(config, s_name, "synonyms", sn.name, is_multi)
             ann = load_annotation(ann_file) if ann_file.exists() else ObjectAnnotation()
             pct, bar_str = _calculate_doc_completeness(ann, [])
-            items.append({
-                "schema": s_name,
-                "category": "synonyms",
-                "type": "SYNONYM",
-                "name": sn.name,
-                "obj_meta": sn,
-                "cols": [],
-                "details": f"-> {sn.table_owner or ''}.{sn.table_name or ''}",
-                "ann_file": ann_file,
-                "pct": pct,
-                "bar_str": bar_str,
-                "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
-            })
+            items.append(
+                {
+                    "schema": s_name,
+                    "category": "synonyms",
+                    "type": "SYNONYM",
+                    "name": sn.name,
+                    "obj_meta": sn,
+                    "cols": [],
+                    "details": f"-> {sn.table_owner or ''}.{sn.table_name or ''}",
+                    "ann_file": ann_file,
+                    "pct": pct,
+                    "bar_str": bar_str,
+                    "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
+                }
+            )
 
     return items
 
@@ -303,11 +317,9 @@ def _render_catalog_table(
             filtered = [o for o in objects if o["pct"] == 100]
         else:
             filtered = [
-                o for o in objects
-                if q in o["name"].lower()
-                or q in o["schema"].lower()
-                or q in o["type"].lower()
-                or q in f"{o['schema']}.{o['name']}".lower()
+                o
+                for o in objects
+                if q in o["name"].lower() or q in o["schema"].lower() or q in o["type"].lower() or q in f"{o['schema']}.{o['name']}".lower()
             ]
 
     total_items = len(filtered)
@@ -386,9 +398,7 @@ class DocEditor:
             current_filter = None
 
             while True:
-                table, page_items, total_pages = _render_catalog_table(
-                    all_objects, search_filter=current_filter, page=current_page
-                )
+                table, page_items, total_pages = _render_catalog_table(all_objects, search_filter=current_filter, page=current_page)
                 console.print()
                 console.print(table)
                 console.print(
@@ -432,9 +442,9 @@ class DocEditor:
 
                 # Check if user typed an exact object name (or schema.name)
                 found_match = [
-                    o for o in all_objects
-                    if o["name"].upper() == user_choice.upper()
-                    or f"{o['schema']}.{o['name']}".upper() == user_choice.upper()
+                    o
+                    for o in all_objects
+                    if o["name"].upper() == user_choice.upper() or f"{o['schema']}.{o['name']}".upper() == user_choice.upper()
                 ]
                 if found_match:
                     target_name = f"{found_match[0]['schema']}.{found_match[0]['name']}"
@@ -452,7 +462,9 @@ class DocEditor:
 
         if not schema or not category or not obj_meta:
             console.print(f"[red]✕ Object '[bold]{target_name}[/bold]' not found in extracted schemas.[/red]")
-            console.print("[dim]Tip: Check available tables with [bold cyan]/tables[/bold cyan] or run [bold cyan]/extract[/bold cyan].[/dim]")
+            console.print(
+                "[dim]Tip: Check available tables with [bold cyan]/tables[/bold cyan] or run [bold cyan]/extract[/bold cyan].[/dim]"
+            )
             return False
 
         s_name = schema.schema_name or self.config.schema_name or "MAIN"
@@ -553,7 +565,11 @@ class DocEditor:
         table.add_column("Field", style="bold cyan", width=22)
         table.add_column("Value", style="white")
 
-        desc_preview = (annotation.description[:120] + "...") if len(annotation.description or "") > 120 else (annotation.description or "[dim italic]No description defined yet[/dim italic]")
+        desc_preview = (
+            (annotation.description[:120] + "...")
+            if len(annotation.description or "") > 120
+            else (annotation.description or "[dim italic]No description defined yet[/dim italic]")
+        )
         cols_annotated = sum(1 for c in cols if annotation.columns.get(c) and str(annotation.columns[c]).strip())
         rules_count = len(annotation.business_rules)
         tags_str = ", ".join(annotation.tags) if annotation.tags else "[dim]None[/dim]"
@@ -596,7 +612,13 @@ class DocEditor:
         )
 
         console.print()
-        console.print(Panel(table, title=f"[bold cyan]✦ LEAI Documentation Studio • {schema_name}.{object_name} [{type_label}][/bold cyan]", border_style="cyan"))
+        console.print(
+            Panel(
+                table,
+                title=f"[bold cyan]✦ LEAI Documentation Studio • {schema_name}.{object_name} [{type_label}][/bold cyan]",
+                border_style="cyan",
+            )
+        )
         console.print(Panel(menu_text, box=box.SIMPLE))
 
     def _prompt_menu_choice(self) -> str:
@@ -729,6 +751,7 @@ class DocEditor:
 
     def _display_save_success(self, ann_file: Path, annotation: ObjectAnnotation) -> None:
         import yaml
+
         yaml_content = yaml.safe_dump(
             annotation.model_dump(exclude_defaults=False),
             sort_keys=False,
@@ -753,14 +776,20 @@ class DocEditor:
             with Progress(
                 SpinnerColumn(spinner_name="dots", style="bold cyan", finished_text="[bold green]✓[/bold green]"),
                 TextColumn("{task.description}", table_column=Column(no_wrap=True, overflow="ellipsis")),
-                BarColumn(bar_width=None, style="dim cyan", complete_style="bold cyan", finished_style="bold green", table_column=Column(ratio=1)),
+                BarColumn(
+                    bar_width=None, style="dim cyan", complete_style="bold cyan", finished_style="bold green", table_column=Column(ratio=1)
+                ),
                 TaskProgressColumn(style="bold cyan", table_column=Column(no_wrap=True, justify="right", width=6)),
                 TimeElapsedColumn(table_column=Column(no_wrap=True, justify="right", width=8, style="dim")),
                 console=console,
                 expand=True,
                 transient=False,
             ) as progress:
-                desc = f"Compiling [bold yellow]{target_obj_up}[/bold yellow]..." if target_obj_up else f"Compiling [bold yellow]{schema.schema_name}[/bold yellow]..."
+                desc = (
+                    f"Compiling [bold yellow]{target_obj_up}[/bold yellow]..."
+                    if target_obj_up
+                    else f"Compiling [bold yellow]{schema.schema_name}[/bold yellow]..."
+                )
                 comp_task = progress.add_task(desc, total=total_objs or 1)
 
                 def _on_comp_progress(cat: str, name: str, current: int, total: int) -> None:

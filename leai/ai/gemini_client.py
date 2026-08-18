@@ -26,11 +26,13 @@ def _convert_tools_to_gemini(tools: list[dict[str, Any]]) -> list[dict[str, Any]
     fn_decls = []
     for td in tools:
         fn = td.get("function", td)
-        fn_decls.append({
-            "name": fn["name"],
-            "description": fn.get("description", ""),
-            "parameters": _convert_schema_to_gemini(fn.get("parameters", {})),
-        })
+        fn_decls.append(
+            {
+                "name": fn["name"],
+                "description": fn.get("description", ""),
+                "parameters": _convert_schema_to_gemini(fn.get("parameters", {})),
+            }
+        )
     return [{"functionDeclarations": fn_decls}]
 
 
@@ -126,6 +128,96 @@ class GeminiClient(BaseLLMClient):
         content, _ = self.generate_chat_with_tools(messages, tools=None, system_prompt=system_prompt)
         return content or ""
 
+    def stream_chat(
+        self,
+        messages: list[dict[str, Any]],
+        system_prompt: str | None = None,
+        on_chunk: Any = None,
+    ) -> str:
+        if not self.api_key:
+            raise ValueError("Gemini API key (GEMINI_API_KEY) is not configured.")
+
+        url = f"{self.base_url}/models/{self.model}:streamGenerateContent?alt=sse&key={self.api_key}"
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "LEAI-CLI",
+        }
+
+        gemini_contents = []
+        for m in messages:
+            role = m.get("role")
+            if role == "user":
+                txt = (m.get("content") or "").strip()
+                if txt:
+                    gemini_contents.append(
+                        {
+                            "role": "user",
+                            "parts": [{"text": txt}],
+                        }
+                    )
+            elif role == "assistant":
+                parts = []
+                if m.get("content"):
+                    parts.append({"text": m["content"]})
+                if parts:
+                    gemini_contents.append(
+                        {
+                            "role": "model",
+                            "parts": parts,
+                        }
+                    )
+
+        payload: dict[str, Any] = {
+            "contents": gemini_contents,
+            "generationConfig": {
+                "temperature": self.temperature,
+            },
+        }
+        if system_prompt:
+            payload["systemInstruction"] = {
+                "parts": [{"text": system_prompt}],
+            }
+
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+
+        collected_text = []
+        try:
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                for raw_line in resp:
+                    line = raw_line.decode("utf-8").strip()
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data_str = line[5:].strip()
+                    try:
+                        chunk_json = json.loads(data_str)
+                        usage = chunk_json.get("usageMetadata", {})
+                        if usage:
+                            self.record_usage(
+                                prompt_tokens=usage.get("promptTokenCount", 0),
+                                completion_tokens=usage.get("candidatesTokenCount", 0),
+                                total_tokens=usage.get("totalTokenCount"),
+                            )
+                        candidates = chunk_json.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            for part in parts:
+                                txt = part.get("text", "")
+                                if txt:
+                                    collected_text.append(txt)
+                                    if on_chunk and callable(on_chunk):
+                                        on_chunk(txt)
+                    except Exception:
+                        continue
+        except Exception:
+            if not collected_text:
+                full_res = self.generate_chat(messages, system_prompt=system_prompt)
+                if on_chunk and callable(on_chunk) and full_res:
+                    on_chunk(full_res)
+                return full_res
+
+        return "".join(collected_text)
+
     def generate_chat_with_tools(
         self,
         messages: list[dict[str, Any]],
@@ -147,10 +239,12 @@ class GeminiClient(BaseLLMClient):
             if role == "user":
                 txt = (m.get("content") or "").strip()
                 if txt:
-                    gemini_contents.append({
-                        "role": "user",
-                        "parts": [{"text": txt}],
-                    })
+                    gemini_contents.append(
+                        {
+                            "role": "user",
+                            "parts": [{"text": txt}],
+                        }
+                    )
             elif role == "assistant":
                 parts = []
                 if m.get("content"):
@@ -175,27 +269,31 @@ class GeminiClient(BaseLLMClient):
                             fc_part["thoughtSignature"] = ts
                         parts.append(fc_part)
                 if parts:
-                    gemini_contents.append({
-                        "role": "model",
-                        "parts": parts,
-                    })
+                    gemini_contents.append(
+                        {
+                            "role": "model",
+                            "parts": parts,
+                        }
+                    )
             elif role == "tool":
                 raw_c = m.get("content", "")
                 try:
                     resp_obj = json.loads(raw_c) if isinstance(raw_c, str) else raw_c
                 except Exception:
                     resp_obj = {"output": raw_c}
-                gemini_contents.append({
-                    "role": "function",
-                    "parts": [
-                        {
-                            "functionResponse": {
-                                "name": m.get("name", "tool"),
-                                "response": {"output": resp_obj},
+                gemini_contents.append(
+                    {
+                        "role": "function",
+                        "parts": [
+                            {
+                                "functionResponse": {
+                                    "name": m.get("name", "tool"),
+                                    "response": {"output": resp_obj},
+                                }
                             }
-                        }
-                    ],
-                })
+                        ],
+                    }
+                )
 
         payload: dict[str, Any] = {
             "contents": gemini_contents,
@@ -284,11 +382,13 @@ class GeminiClient(BaseLLMClient):
                         desc = item.get("description", "")
                         if len(desc) > 80:
                             desc = desc[:77] + "..."
-                        models.append({
-                            "id": m_id,
-                            "name": display,
-                            "description": desc,
-                        })
+                        models.append(
+                            {
+                                "id": m_id,
+                                "name": display,
+                                "description": desc,
+                            }
+                        )
                 models.sort(key=lambda x: x["id"])
                 return models
         except Exception as exc:

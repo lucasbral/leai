@@ -19,12 +19,12 @@ class CliIntegrationTests(unittest.TestCase):
     def test_version_option(self):
         result = self.runner.invoke(app, ["--version"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("LEAI CLI version 0.2.4", result.output)
+        self.assertIn("LEAI CLI version 0.2.5", result.output)
 
     def test_version_short_option(self):
         result = self.runner.invoke(app, ["-v"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("LEAI CLI version 0.2.4", result.output)
+        self.assertIn("LEAI CLI version 0.2.5", result.output)
 
     def test_help_command(self):
         result = self.runner.invoke(app, ["--help"])
@@ -136,6 +136,7 @@ docPath: "{doc_dir.as_posix()}"
             base = Path(tmpdir)
             raw_dir = base / "raw"
             from datetime import datetime
+
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             schema = SchemaMetadata(
@@ -161,8 +162,8 @@ docPath: "{doc_dir.as_posix()}"
 schemas:
   - HR
 rawPath: "{raw_dir.as_posix()}"
-annotationsPath: "{(base / 'annotations').as_posix()}"
-docPath: "{(base / 'docs').as_posix()}"
+annotationsPath: "{(base / "annotations").as_posix()}"
+docPath: "{(base / "docs").as_posix()}"
                 """,
                 encoding="utf-8",
             )
@@ -210,7 +211,7 @@ docPath: "{(base / 'docs').as_posix()}"
 schemas:
   - HR
 rawPath: "{raw_dir.as_posix()}"
-annotationsPath: "{(base / 'annotations').as_posix()}"
+annotationsPath: "{(base / "annotations").as_posix()}"
 docPath: "{doc_dir.as_posix()}"
                 """,
                 encoding="utf-8",
@@ -255,8 +256,8 @@ docPath: "{doc_dir.as_posix()}"
 schemas:
   - HR
 rawPath: "{raw_dir.as_posix()}"
-annotationsPath: "{(base / 'annotations').as_posix()}"
-docPath: "{(base / 'docs').as_posix()}"
+annotationsPath: "{(base / "annotations").as_posix()}"
+docPath: "{(base / "docs").as_posix()}"
 ai:
   default_provider: "openai"
                 """,
@@ -306,7 +307,7 @@ schemas:
   - HR
 rawPath: "{raw_dir.as_posix()}"
 annotationsPath: "{ann_dir.as_posix()}"
-docPath: "{(base / 'docs').as_posix()}"
+docPath: "{(base / "docs").as_posix()}"
 ai:
   default_provider: "openai"
                 """,
@@ -355,9 +356,9 @@ ai:
 dsn: "oracle://user:pass@localhost:1521/ORCL"
 schemas:
   - HR
-rawPath: "{(base / 'raw').as_posix()}"
-annotationsPath: "{(base / 'annotations').as_posix()}"
-docPath: "{(base / 'docs').as_posix()}"
+rawPath: "{(base / "raw").as_posix()}"
+annotationsPath: "{(base / "annotations").as_posix()}"
+docPath: "{(base / "docs").as_posix()}"
                 """,
                 encoding="utf-8",
             )
@@ -410,9 +411,9 @@ docPath: "{(base / 'docs').as_posix()}"
 dsn: "oracle://user:pass@localhost:1521/ORCL"
 schemas:
   - C_ERGON
-rawPath: "{(base / 'raw').as_posix()}"
-annotationsPath: "{(base / 'annotations').as_posix()}"
-docPath: "{(base / 'docs').as_posix()}"
+rawPath: "{(base / "raw").as_posix()}"
+annotationsPath: "{(base / "annotations").as_posix()}"
+docPath: "{(base / "docs").as_posix()}"
                 """,
                 encoding="utf-8",
             )
@@ -452,9 +453,9 @@ docPath: "{(base / 'docs').as_posix()}"
                 f"""
 dsn: "oracle://user:pass@localhost:1521/ORCL"
 schemas: "ALL"
-rawPath: "{(base / 'raw').as_posix()}"
-annotationsPath: "{(base / 'annotations').as_posix()}"
-docPath: "{(base / 'docs').as_posix()}"
+rawPath: "{(base / "raw").as_posix()}"
+annotationsPath: "{(base / "annotations").as_posix()}"
+docPath: "{(base / "docs").as_posix()}"
                 """,
                 encoding="utf-8",
             )
@@ -492,8 +493,8 @@ docPath: "{(base / 'docs').as_posix()}"
 schemas:
   - HR
 rawPath: "{raw_dir.as_posix()}"
-annotationsPath: "{(base / 'annotations').as_posix()}"
-docPath: "{(base / 'docs').as_posix()}"
+annotationsPath: "{(base / "annotations").as_posix()}"
+docPath: "{(base / "docs").as_posix()}"
                 """,
                 encoding="utf-8",
             )
@@ -519,5 +520,3 @@ docPath: "{(base / 'docs').as_posix()}"
 
 if __name__ == "__main__":
     unittest.main()
-
-

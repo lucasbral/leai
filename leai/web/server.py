@@ -121,14 +121,16 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
     def _handle_api_status(self) -> None:
         cfg = self.server.config
         client = self.server.client
-        self._send_json({
-            "status": "online",
-            "schemas_count": len(self.server.schemas),
-            "provider": self.server.provider_name or "offline",
-            "model": client.model if client else "offline",
-            "annotations_path": str(cfg.annotationsPath),
-            "docs_path": str(cfg.docPath),
-        })
+        self._send_json(
+            {
+                "status": "online",
+                "schemas_count": len(self.server.schemas),
+                "provider": self.server.provider_name or "offline",
+                "model": client.model if client else "offline",
+                "annotations_path": str(cfg.annotationsPath),
+                "docs_path": str(cfg.docPath),
+            }
+        )
 
     def _handle_api_catalog(self) -> None:
         schemas_data = []
@@ -146,20 +148,30 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
 
             tables = [{"name": t.name, "comment": t.comment or "", "is_annotated": _check_ann("tables", t.name)} for t in s.tables]
             views = [{"name": v.name, "comment": v.comment or "", "is_annotated": _check_ann("views", v.name)} for v in s.views]
-            code_objects = [{"name": co.name, "type": co.object_type, "comment": co.comment or "", "is_annotated": _check_ann("packages" if co.object_type == "PACKAGE" else "procedures", co.name)} for co in s.code_objects]
+            code_objects = [
+                {
+                    "name": co.name,
+                    "type": co.object_type,
+                    "comment": co.comment or "",
+                    "is_annotated": _check_ann("packages" if co.object_type == "PACKAGE" else "procedures", co.name),
+                }
+                for co in s.code_objects
+            ]
             triggers = [{"name": tr.name, "is_annotated": _check_ann("triggers", tr.name)} for tr in s.triggers]
             synonyms = [{"name": sy.name, "is_annotated": _check_ann("synonyms", sy.name)} for sy in s.synonyms]
             sequences = [{"name": sq.name, "is_annotated": _check_ann("sequences", sq.name)} for sq in s.sequences]
 
-            schemas_data.append({
-                "schema_name": s_name,
-                "tables": tables,
-                "views": views,
-                "code_objects": code_objects,
-                "triggers": triggers,
-                "synonyms": synonyms,
-                "sequences": sequences,
-            })
+            schemas_data.append(
+                {
+                    "schema_name": s_name,
+                    "tables": tables,
+                    "views": views,
+                    "code_objects": code_objects,
+                    "triggers": triggers,
+                    "synonyms": synonyms,
+                    "sequences": sequences,
+                }
+            )
 
         self._send_json({"schemas": schemas_data})
 
@@ -212,7 +224,11 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         s_name = matched_schema.schema_name or "DEFAULT"
 
         # Load YAML annotations if existing
-        ann_folder = "tables" if obj_type == "TABLE" else ("views" if obj_type == "VIEW" else ("packages" if obj_type == "PACKAGE" else "procedures"))
+        ann_folder = (
+            "tables"
+            if obj_type == "TABLE"
+            else ("views" if obj_type == "VIEW" else ("packages" if obj_type == "PACKAGE" else "procedures"))
+        )
         ann_path = cfg.annotationsPath / s_name / ann_folder / f"{obj_name}.yml"
         if not ann_path.exists():
             ann_path = cfg.annotationsPath / ann_folder / f"{obj_name}.yml"
@@ -246,36 +262,42 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         cols_data = []
         if hasattr(matched_obj, "columns"):
             for col in matched_obj.columns:
-                cols_data.append({
-                    "name": col.name,
-                    "data_type": col.data_type,
-                    "nullable": col.nullable,
-                    "comment": col.comment or "",
-                })
+                cols_data.append(
+                    {
+                        "name": col.name,
+                        "data_type": col.data_type,
+                        "nullable": col.nullable,
+                        "comment": col.comment or "",
+                    }
+                )
 
         pks = getattr(matched_obj, "primary_keys", []) or []
         fks = []
         if hasattr(matched_obj, "foreign_keys"):
             for fk in matched_obj.foreign_keys:
-                fks.append({
-                    "constraint_name": getattr(fk, "name", "") or getattr(fk, "constraint_name", ""),
-                    "column": getattr(fk, "column", ""),
-                    "referenced_table": getattr(fk, "referenced_table", ""),
-                    "referenced_column": getattr(fk, "referenced_column", ""),
-                })
+                fks.append(
+                    {
+                        "constraint_name": getattr(fk, "name", "") or getattr(fk, "constraint_name", ""),
+                        "column": getattr(fk, "column", ""),
+                        "referenced_table": getattr(fk, "referenced_table", ""),
+                        "referenced_column": getattr(fk, "referenced_column", ""),
+                    }
+                )
 
-        self._send_json({
-            "schema": s_name,
-            "object_name": obj_name,
-            "object_type": obj_type,
-            "comment": getattr(matched_obj, "comment", "") or "",
-            "columns": cols_data,
-            "primary_keys": pks,
-            "foreign_keys": fks,
-            "annotations": ann_data,
-            "markdown_doc": doc_content,
-            "lineage_mermaid": mermaid_code,
-        })
+        self._send_json(
+            {
+                "schema": s_name,
+                "object_name": obj_name,
+                "object_type": obj_type,
+                "comment": getattr(matched_obj, "comment", "") or "",
+                "columns": cols_data,
+                "primary_keys": pks,
+                "foreign_keys": fks,
+                "annotations": ann_data,
+                "markdown_doc": doc_content,
+                "lineage_mermaid": mermaid_code,
+            }
+        )
 
     def _handle_api_save_annotations(self, payload: dict[str, Any]) -> None:
         schema_name = payload.get("schema", "").strip()
@@ -287,7 +309,11 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
             return
 
         cfg = self.server.config
-        ann_folder = "tables" if obj_type == "TABLE" else ("views" if obj_type == "VIEW" else ("packages" if obj_type == "PACKAGE" else "procedures"))
+        ann_folder = (
+            "tables"
+            if obj_type == "TABLE"
+            else ("views" if obj_type == "VIEW" else ("packages" if obj_type == "PACKAGE" else "procedures"))
+        )
         multi_schema = len(self.server.schemas) > 1
         if multi_schema and schema_name:
             target_dir = cfg.annotationsPath / schema_name / ann_folder
@@ -335,11 +361,13 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
             self._send_error(f"Annotation saved, but failed to recompile Markdown: {exc}")
             return
 
-        self._send_json({
-            "success": True,
-            "saved_file": str(target_file),
-            "object_name": obj_name,
-        })
+        self._send_json(
+            {
+                "success": True,
+                "saved_file": str(target_file),
+                "object_name": obj_name,
+            }
+        )
 
     def _handle_api_enrich(self, payload: dict[str, Any]) -> None:
         schema_name = payload.get("schema", "").strip()
@@ -383,18 +411,20 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
             else:
                 enriched = enrich_code_object_annotation(matched_obj, ann, client, overwrite=True)
 
-            self._send_json({
-                "success": True,
-                "enrichment": {
-                    "business_description": enriched.description,
-                    "business_rules": enriched.business_rules,
-                    "use_cases": enriched.use_cases,
-                    "warnings": enriched.warnings,
-                    "related_objects": enriched.related_objects,
-                    "tags": enriched.tags,
-                    "columns": enriched.columns,
-                },
-            })
+            self._send_json(
+                {
+                    "success": True,
+                    "enrichment": {
+                        "business_description": enriched.description,
+                        "business_rules": enriched.business_rules,
+                        "use_cases": enriched.use_cases,
+                        "warnings": enriched.warnings,
+                        "related_objects": enriched.related_objects,
+                        "tags": enriched.tags,
+                        "columns": enriched.columns,
+                    },
+                }
+            )
         except Exception as exc:
             self._send_error(f"AI enrichment failed: {exc}")
 
@@ -460,7 +490,7 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
 
             for p_name in all_prov_names:
                 p_raw = raw_providers.get(p_name, {}) if isinstance(raw_providers, dict) else {}
-                p_cfg = (cfg.ai.providers.get(p_name) if cfg.ai else None)
+                p_cfg = cfg.ai.providers.get(p_name) if cfg.ai else None
 
                 m = p_raw.get("model") or (getattr(p_cfg, "model", "") if p_cfg else "") or ""
                 b = p_raw.get("base_url") or (getattr(p_cfg, "base_url", "") if p_cfg else "") or ""
@@ -472,21 +502,23 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                     "has_api_key": k,
                 }
 
-            self._send_json({
-                "dsn": dsn_val,
-                "schemas": schemas_list,
-                "include": include_list,
-                "exclude": exclude_list,
-                "object_types": obj_types,
-                "rawPath": raw_path_str,
-                "annotationsPath": ann_path_str,
-                "docPath": doc_path_str,
-                "ai": {
-                    "default_provider": default_prov,
-                    "temperature": temp,
-                    "providers": providers_data,
-                },
-            })
+            self._send_json(
+                {
+                    "dsn": dsn_val,
+                    "schemas": schemas_list,
+                    "include": include_list,
+                    "exclude": exclude_list,
+                    "object_types": obj_types,
+                    "rawPath": raw_path_str,
+                    "annotationsPath": ann_path_str,
+                    "docPath": doc_path_str,
+                    "ai": {
+                        "default_provider": default_prov,
+                        "temperature": temp,
+                        "providers": providers_data,
+                    },
+                }
+            )
         except Exception as exc:
             self._send_error(f"Erro ao obter configurações: {exc}")
 
@@ -511,19 +543,31 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
 
         if "schemas" in payload:
             raw_schemas = payload["schemas"]
-            schemas_list = [s.strip().upper() for s in raw_schemas if s.strip()] if isinstance(raw_schemas, list) else [s.strip().upper() for s in str(raw_schemas).split(",") if s.strip()]
+            schemas_list = (
+                [s.strip().upper() for s in raw_schemas if s.strip()]
+                if isinstance(raw_schemas, list)
+                else [s.strip().upper() for s in str(raw_schemas).split(",") if s.strip()]
+            )
             existing_yaml["schemas"] = schemas_list
             cfg.schemas = schemas_list
 
         if "include" in payload:
             raw_inc = payload["include"]
-            inc_list = [i.strip().upper() for i in raw_inc if i.strip()] if isinstance(raw_inc, list) else [i.strip().upper() for i in str(raw_inc).split(",") if i.strip()]
+            inc_list = (
+                [i.strip().upper() for i in raw_inc if i.strip()]
+                if isinstance(raw_inc, list)
+                else [i.strip().upper() for i in str(raw_inc).split(",") if i.strip()]
+            )
             existing_yaml["include"] = inc_list
             cfg.include = inc_list
 
         if "exclude" in payload:
             raw_exc = payload["exclude"]
-            exc_list = [e.strip().upper() for e in raw_exc if e.strip()] if isinstance(raw_exc, list) else [e.strip().upper() for e in str(raw_exc).split(",") if e.strip()]
+            exc_list = (
+                [e.strip().upper() for e in raw_exc if e.strip()]
+                if isinstance(raw_exc, list)
+                else [e.strip().upper() for e in str(raw_exc).split(",") if e.strip()]
+            )
             existing_yaml["exclude"] = exc_list
             cfg.exclude = exc_list
 
@@ -576,11 +620,13 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
             self._send_error(f"Failed to write leai.yml: {exc}")
             return
 
-        self._send_json({
-            "success": True,
-            "message": "Configurações salvas no leai.yml com sucesso!",
-            "saved_file": str(config_path.resolve()),
-        })
+        self._send_json(
+            {
+                "success": True,
+                "message": "Configurações salvas no leai.yml com sucesso!",
+                "saved_file": str(config_path.resolve()),
+            }
+        )
 
 
 class LEAIStudioServer(ThreadingHTTPServer):

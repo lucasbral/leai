@@ -101,9 +101,7 @@ class CompressionTests(unittest.TestCase):
                 ColumnMeta(name="NOME", data_type="VARCHAR2", nullable=False),
             ],
             primary_keys=["ID"],
-            foreign_keys=[
-                ForeignKeyMeta(name="FK_F_D", column="DEP_ID", referenced_table="DEPARTAMENTOS", referenced_column="ID")
-            ],
+            foreign_keys=[ForeignKeyMeta(name="FK_F_D", column="DEP_ID", referenced_table="DEPARTAMENTOS", referenced_column="ID")],
         )
 
         schema = SchemaMetadata(schema_name="HR", tables=[t1])

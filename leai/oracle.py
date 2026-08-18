@@ -35,9 +35,7 @@ def _build_connect_kwargs(dsn: str) -> dict[str, str]:
     if not parsed.hostname or not service:
         raise ValueError("Oracle DSN URL inválida. Informe host, porta e serviço.")
 
-    easy_connect = (
-        f"{parsed.hostname}:{parsed.port}/{service}" if parsed.port else f"{parsed.hostname}/{service}"
-    )
+    easy_connect = f"{parsed.hostname}:{parsed.port}/{service}" if parsed.port else f"{parsed.hostname}/{service}"
     return {
         "user": unquote(parsed.username or ""),
         "password": unquote(parsed.password or ""),
@@ -545,16 +543,54 @@ def _fetch_synonyms(cursor: oracledb.Cursor, config: LeaiConfig, prefix: str = "
     return synonyms
 
 
-
 ORACLE_SYSTEM_SCHEMAS = {
-    "ANONYMOUS", "APEX_040000", "APEX_040200", "APEX_050000", "APEX_180000",
-    "APEX_190000", "APEX_200000", "APEX_210000", "APEX_220000", "APEX_230000",
-    "APEX_PUBLIC_USER", "APPQOSSYS", "AUDSYS", "AUTODDL", "CTXSYS", "DBSNMP",
-    "DIP", "DVF", "DVSYS", "EXFSYS", "GSMADMIN_INTERNAL", "GSMCATUSER",
-    "GSMUSER", "LBACSYS", "LEAI", "MDSYS", "OASYS", "ORACLE_OCM", "ORDDATA",
-    "ORDPLUGINS", "ORDSYS", "OUTLN", "PDBADMIN", "REMOTE_SCHEDULER_AGENT",
-    "SI_INFORMTN_SCHEMA", "SYS", "SYS$UMF", "SYSBACKUP", "SYSDG", "SYSKM",
-    "SYSRAC", "SYSTEM", "TESTE", "WMSYS", "XDB", "XS$NULL", "ZABBIX"
+    "ANONYMOUS",
+    "APEX_040000",
+    "APEX_040200",
+    "APEX_050000",
+    "APEX_180000",
+    "APEX_190000",
+    "APEX_200000",
+    "APEX_210000",
+    "APEX_220000",
+    "APEX_230000",
+    "APEX_PUBLIC_USER",
+    "APPQOSSYS",
+    "AUDSYS",
+    "AUTODDL",
+    "CTXSYS",
+    "DBSNMP",
+    "DIP",
+    "DVF",
+    "DVSYS",
+    "EXFSYS",
+    "GSMADMIN_INTERNAL",
+    "GSMCATUSER",
+    "GSMUSER",
+    "LBACSYS",
+    "LEAI",
+    "MDSYS",
+    "OASYS",
+    "ORACLE_OCM",
+    "ORDDATA",
+    "ORDPLUGINS",
+    "ORDSYS",
+    "OUTLN",
+    "PDBADMIN",
+    "REMOTE_SCHEDULER_AGENT",
+    "SI_INFORMTN_SCHEMA",
+    "SYS",
+    "SYS$UMF",
+    "SYSBACKUP",
+    "SYSDG",
+    "SYSKM",
+    "SYSRAC",
+    "SYSTEM",
+    "TESTE",
+    "WMSYS",
+    "XDB",
+    "XS$NULL",
+    "ZABBIX",
 }
 
 
@@ -944,5 +980,3 @@ def fetch_focal_trace(
         return result
     finally:
         connection.close()
-
-

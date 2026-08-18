@@ -80,6 +80,7 @@ class ChatSessionTests(unittest.TestCase):
             content = saved.read_text(encoding="utf-8")
             self.assertIn("# LEAI Chat Session Transcript", content)
             self.assertIn("Primeira pergunta do chat", content)
+
     def test_chat_token_accumulation_and_clear(self):
         self.assertEqual(self.session.total_tokens, 0)
         self.assertIsNone(self.session.last_turn_tokens)
@@ -100,6 +101,16 @@ class ChatSessionTests(unittest.TestCase):
         self.assertEqual(len(self.session.messages), 0)
         self.assertIsNone(self.session.last_turn_tokens)
         self.assertEqual(self.session.total_tokens, second_total)
+
+    def test_chat_streaming_callback(self):
+        chunks = []
+
+        def _on_token(tok: str):
+            chunks.append(tok)
+
+        reply, _ = self.session.send("Teste de streaming", on_token=_on_token)
+        self.assertTrue(len(chunks) > 0)
+        self.assertEqual("".join(chunks), reply)
 
 
 if __name__ == "__main__":

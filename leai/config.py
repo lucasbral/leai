@@ -56,7 +56,6 @@ class LeaiConfig(BaseModel):
         return any(s.upper() == "ALL" for s in self.schemas)
 
 
-
 class ConfigError(ValueError):
     pass
 

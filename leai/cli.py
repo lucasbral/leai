@@ -11,6 +11,7 @@ if sys.platform == "win32":
         if sys.stderr and hasattr(sys.stderr, "reconfigure"):
             sys.stderr.reconfigure(encoding="utf-8")
         import ctypes
+
         kernel32 = ctypes.windll.kernel32
         for std_handle_id in (-11, -12):
             handle = kernel32.GetStdHandle(std_handle_id)
@@ -76,6 +77,7 @@ def _create_progress_bar() -> Progress:
 def _version_callback(value: bool) -> None:
     if value:
         from leai import __version__
+
         console.print(f"[bold cyan]LEAI CLI[/bold cyan] version [bold green]{__version__}[/bold green]")
         raise typer.Exit()
 
@@ -159,7 +161,7 @@ def check(
     console.print(f"[cyan]Checking configuration file:[/cyan] [bold]{config}[/bold]...")
     try:
         cfg = load_config(config)
-        schemas_info = ', '.join(cfg.schemas) if cfg.schemas else 'None'
+        schemas_info = ", ".join(cfg.schemas) if cfg.schemas else "None"
         console.print(f"[green]✓ Valid configuration![/green] (Configured schemas: [bold]{schemas_info}[/bold])")
     except ConfigError as exc:
         console.print(f"[red]✗ Configuration error:[/red] {exc}")
@@ -222,8 +224,14 @@ def extract(
         )
 
         totals = {
-            "tables": 0, "views": 0, "mviews": 0, "code_objects": 0,
-            "triggers": 0, "sequences": 0, "indexes": 0, "synonyms": 0,
+            "tables": 0,
+            "views": 0,
+            "mviews": 0,
+            "code_objects": 0,
+            "triggers": 0,
+            "sequences": 0,
+            "indexes": 0,
+            "synonyms": 0,
         }
 
         with _create_progress_bar() as progress:
@@ -316,8 +324,14 @@ def annotate(
         is_multi = len(schemas_meta) > 1
 
         totals = {
-            "tables": 0, "views": 0, "mviews": 0, "code_objects": 0,
-            "triggers": 0, "sequences": 0, "indexes": 0, "synonyms": 0,
+            "tables": 0,
+            "views": 0,
+            "mviews": 0,
+            "code_objects": 0,
+            "triggers": 0,
+            "sequences": 0,
+            "indexes": 0,
+            "synonyms": 0,
         }
         total_ann = 0
         total_objects_all = sum(count_schema_objects(s, cfg.object_types) for s in schemas_meta)
@@ -396,7 +410,9 @@ def annotate(
 @app.command()
 def ask(
     question: str = typer.Argument(..., help="Natural language question about the database"),
-    provider: str = typer.Option(None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, grok, xai, deepseek, qwen, kimi, ollama)"),
+    provider: str = typer.Option(
+        None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, grok, xai, deepseek, qwen, kimi, ollama)"
+    ),
     model: str = typer.Option(None, "--model", "-m", help="AI model name"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
 ) -> None:
@@ -431,7 +447,10 @@ def ask(
         console.print(f"[dim cyan]  ⚙️ Investigating:[/dim cyan] [bold yellow]{t_name}[/bold yellow]({args_str})")
 
     try:
-        with console.status(f"[cyan]Agent analyzing database ([bold yellow]{provider_name}[/bold yellow] • [bold green]{client.model}[/bold green])...[/cyan]", spinner="dots"):
+        with console.status(
+            f"[cyan]Agent analyzing database ([bold yellow]{provider_name}[/bold yellow] • [bold green]{client.model}[/bold green])...[/cyan]",
+            spinner="dots",
+        ):
             answer, detected_entities = session.send(question, on_tool_start=_on_tool_start)
 
         elapsed = time.perf_counter() - start_time
@@ -442,7 +461,9 @@ def ask(
             meta_parts.append(f"RAG: {', '.join(detected_entities)}")
 
         subtitle_text = f"[dim]{' • '.join(meta_parts)}[/dim]"
-        console.print(Panel(Markdown(answer), title="[bold green]🤖 LEAI Assistant[/bold green]", subtitle=subtitle_text, border_style="cyan"))
+        console.print(
+            Panel(Markdown(answer), title="[bold green]🤖 LEAI Assistant[/bold green]", subtitle=subtitle_text, border_style="cyan")
+        )
     except Exception as exc:
         console.print(f"[red]Error querying AI:[/red] {exc}")
         raise typer.Exit(code=1)
@@ -450,7 +471,9 @@ def ask(
 
 @app.command()
 def chat(
-    provider: str = typer.Option(None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, grok, xai, deepseek, qwen, kimi, ollama)"),
+    provider: str = typer.Option(
+        None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, grok, xai, deepseek, qwen, kimi, ollama)"
+    ),
     model: str = typer.Option(None, "--model", "-m", help="AI model name"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
 ) -> None:
@@ -483,7 +506,9 @@ def chat(
 
 @app.command()
 def models(
-    provider: str = typer.Option(None, "--provider", "-p", help="AI provider to query (openai, gemini, anthropic, grok, xai, deepseek, qwen, kimi, ollama)"),
+    provider: str = typer.Option(
+        None, "--provider", "-p", help="AI provider to query (openai, gemini, anthropic, grok, xai, deepseek, qwen, kimi, ollama)"
+    ),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
 ) -> None:
     """Lists available AI models returned by the provider API for the configured API key."""
@@ -496,7 +521,9 @@ def models(
     target_prov = (provider or cfg.ai.default_provider or "openai").lower()
     try:
         client = get_llm_client(cfg, provider_override=target_prov)
-        with console.status(f"[cyan]Querying [bold yellow]{target_prov.upper()}[/bold yellow] API for available models...[/cyan]", spinner="dots"):
+        with console.status(
+            f"[cyan]Querying [bold yellow]{target_prov.upper()}[/bold yellow] API for available models...[/cyan]", spinner="dots"
+        ):
             models_list = client.list_models()
     except Exception as exc:
         console.print(f"[red]Error fetching models for {target_prov.upper()}:[/red] {exc}")
@@ -510,13 +537,22 @@ def models(
 
     for m in models_list:
         m_id = m.get("id", "")
-        is_active = (m_id == client.model)
+        is_active = m_id == client.model
         status_badge = "[bold green]ACTIVE[/bold green]" if is_active else "[dim]-[/dim]"
         table.add_row(status_badge, m_id, m.get("name", m_id), m.get("description", m.get("note", "")))
 
     console.print()
-    console.print(Panel(table, title=f"[bold cyan]✦ Available Models for {target_prov.upper()} ({len(models_list)} Total)[/bold cyan]", box=box.ROUNDED, border_style="cyan"))
-    console.print(f"[dim]Tip: Use in chat with [bold cyan]/model {target_prov} <model_id>[/bold cyan] or CLI with [bold cyan]-p {target_prov} -m <model_id>[/bold cyan][/dim]\n")
+    console.print(
+        Panel(
+            table,
+            title=f"[bold cyan]✦ Available Models for {target_prov.upper()} ({len(models_list)} Total)[/bold cyan]",
+            box=box.ROUNDED,
+            border_style="cyan",
+        )
+    )
+    console.print(
+        f"[dim]Tip: Use in chat with [bold cyan]/model {target_prov} <model_id>[/bold cyan] or CLI with [bold cyan]-p {target_prov} -m <model_id>[/bold cyan][/dim]\n"
+    )
 
 
 @app.callback(invoke_without_command=True)
@@ -530,7 +566,9 @@ def default(
         is_eager=True,
         help="Show LEAI version and exit.",
     ),
-    provider: str = typer.Option(None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, grok, xai, deepseek, qwen, kimi, ollama)"),
+    provider: str = typer.Option(
+        None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, grok, xai, deepseek, qwen, kimi, ollama)"
+    ),
     model: str = typer.Option(None, "--model", "-m", help="AI model name"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
     schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to target (overrides leai.yml)"),
@@ -659,7 +697,10 @@ def compile(
                         or any(mv.name.upper() == clean_obj for mv in s.mviews)
                         or any(
                             co.name.upper() == clean_obj
-                            or any(sub.name.upper() == clean_obj or f"{co.name.upper()}.{sub.name.upper()}" == clean_obj for sub in co.subprograms)
+                            or any(
+                                sub.name.upper() == clean_obj or f"{co.name.upper()}.{sub.name.upper()}" == clean_obj
+                                for sub in co.subprograms
+                            )
                             for co in s.code_objects
                         )
                         or any(tr.name.upper() == clean_obj for tr in s.triggers)
@@ -672,14 +713,22 @@ def compile(
                 schemas_meta = target_schemas_list
             else:
                 avail_str = ", ".join(s.schema_name for s in schemas_meta)
-                console.print(f"[yellow]! Object '[bold cyan]{object_name}[/bold cyan]' was not found in loaded snapshots ({avail_str}).[/yellow]")
+                console.print(
+                    f"[yellow]! Object '[bold cyan]{object_name}[/bold cyan]' was not found in loaded snapshots ({avail_str}).[/yellow]"
+                )
                 raise typer.Exit(code=1)
 
         is_multi = len(schemas_meta) > 1
 
         totals = {
-            "tables": 0, "views": 0, "mviews": 0, "code_objects": 0,
-            "triggers": 0, "sequences": 0, "indexes": 0, "synonyms": 0,
+            "tables": 0,
+            "views": 0,
+            "mviews": 0,
+            "code_objects": 0,
+            "triggers": 0,
+            "sequences": 0,
+            "indexes": 0,
+            "synonyms": 0,
         }
         total_md = 0
         total_ann = 0
@@ -819,8 +868,14 @@ def generate(
         )
 
         totals = {
-            "tables": 0, "views": 0, "mviews": 0, "code_objects": 0,
-            "triggers": 0, "sequences": 0, "indexes": 0, "synonyms": 0,
+            "tables": 0,
+            "views": 0,
+            "mviews": 0,
+            "code_objects": 0,
+            "triggers": 0,
+            "sequences": 0,
+            "indexes": 0,
+            "synonyms": 0,
         }
         total_md = 0
         total_ann = 0
@@ -1057,7 +1112,9 @@ def trace(
 
     try:
         if offline or not cfg.dsn:
-            console.print(f"\n[dim]🔍 Offline Mode: Tracing dependencies for [bold yellow]{target_obj}[/bold yellow] (Depth: {depth})...[/dim]")
+            console.print(
+                f"\n[dim]🔍 Offline Mode: Tracing dependencies for [bold yellow]{target_obj}[/bold yellow] (Depth: {depth})...[/dim]"
+            )
             trace_target_schemas = [schema.strip().upper()] if schema else (cfg.schemas if not cfg.is_all_schemas else None)
             schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=trace_target_schemas)
             if not schemas_meta:
@@ -1066,7 +1123,9 @@ def trace(
             trace_res = trace_raw_dependencies(schemas_meta, target_obj, max_depth=depth)
         else:
             try:
-                console.print(f"\n[dim]🌐 Querying real-time dependency catalog in Oracle for [bold yellow]{target_obj}[/bold yellow]...[/dim]")
+                console.print(
+                    f"\n[dim]🌐 Querying real-time dependency catalog in Oracle for [bold yellow]{target_obj}[/bold yellow]...[/dim]"
+                )
                 trace_res = fetch_focal_trace(cfg, target_obj, schema_name=schema, max_depth=depth)
             except Exception as live_exc:
                 console.print(f"[yellow]Warning: online connection failed ({live_exc}). Falling back to local RAW snapshot...[/yellow]")
@@ -1104,7 +1163,11 @@ def trace(
             for d_level in sorted(by_depth.keys()):
                 level_branch = tree.add(f"[bold cyan]Level {d_level}[/bold cyan] [dim]({'Direct' if d_level == 1 else 'Indirect'})[/dim]")
                 for dep in by_depth[d_level]:
-                    icon = "📊" if dep.source_type == "TABLE" or dep.target_type == "TABLE" else ("👁️" if "VIEW" in dep.source_type else ("⚡" if dep.source_type == "TRIGGER" else "⚙️"))
+                    icon = (
+                        "📊"
+                        if dep.source_type == "TABLE" or dep.target_type == "TABLE"
+                        else ("👁️" if "VIEW" in dep.source_type else ("⚡" if dep.source_type == "TRIGGER" else "⚙️"))
+                    )
                     label = f"{icon} [bold]{dep.source_name}[/bold] [dim]({dep.relation_type} -> {dep.target_name})[/dim]"
                     if dep.details:
                         label += f" [dim italic]- {dep.details}[/dim italic]"
@@ -1124,7 +1187,9 @@ def trace(
             console.print(f"[green]✓ RAG JSON chunk generated at:[/green] [bold cyan]{written_json}[/bold cyan]")
 
         elapsed = time.perf_counter() - start_time
-        console.print(f"[green]✓ Markdown Dossier with Mermaid generated at:[/green] [bold cyan]{written_path}[/bold cyan] [dim]({elapsed:.2f}s)[/dim]\n")
+        console.print(
+            f"[green]✓ Markdown Dossier with Mermaid generated at:[/green] [bold cyan]{written_path}[/bold cyan] [dim]({elapsed:.2f}s)[/dim]\n"
+        )
 
     except typer.Exit:
         raise
@@ -1136,7 +1201,9 @@ def trace(
 @app.command()
 def enrich(
     object_name: str = typer.Option(None, "--object-name", "-o", help="Specific object name to enrich (optional)"),
-    provider: str = typer.Option(None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, grok, xai, deepseek, qwen, kimi, ollama)"),
+    provider: str = typer.Option(
+        None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, grok, xai, deepseek, qwen, kimi, ollama)"
+    ),
     model: str = typer.Option(None, "--model", "-m", help="AI model name (e.g. gpt-4o, gemini-1.5-flash, claude-3-5-sonnet)"),
     overwrite: bool = typer.Option(False, "--overwrite", help="Force overwrite existing descriptions and comments"),
     schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to enrich (overrides leai.yml)"),
@@ -1272,4 +1339,3 @@ def serve(
         in_background=False,
         config_path=config,
     )
-
