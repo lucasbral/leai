@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from typing import Any
 
 from leai.annotations import load_annotation
@@ -11,6 +12,31 @@ from leai.models import SchemaMetadata
 from leai.raw import trace_raw_dependencies
 
 DATABASE_TOOLS_DEFINITIONS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_business_documentation",
+            "description": "Searches human and AI documentation across YAML annotations (descriptions, column comments, business rules, tags) and Markdown documents for business concepts, domain keywords, and functional rules (e.g. 'férias', 'afastamento', 'cálculo de proventos', 'adicional noturno'). Use this when the user asks conceptual questions or when table names are not obvious.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The business concept, functional term, or keyword to search in documentation (e.g. 'ferias', 'afastamento', 'licenca', 'salario').",
+                    },
+                    "object_type": {
+                        "type": "string",
+                        "description": "Optional filter by object type: 'table', 'view', 'package', 'procedure', 'function', 'trigger'.",
+                    },
+                    "search_fields": {
+                        "type": "string",
+                        "description": "Optional fields to search: 'all' (default), 'descriptions', 'columns', 'rules', 'tags'.",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -176,34 +202,227 @@ def resolve_synonym(schemas: list[SchemaMetadata], name: str) -> dict[str, Any] 
     return None
 
 
+def _normalize_text(text: str) -> str:
+    """Removes diacritics and accents for robust case-insensitive search."""
+    if not text:
+        return ""
+    normalized = unicodedata.normalize("NFKD", str(text))
+    return "".join(c for c in normalized if not unicodedata.combining(c)).upper()
+
+
+def search_business_documentation(
+    schemas: list[SchemaMetadata],
+    config: LeaiConfig,
+    query: str,
+    object_type: str | None = None,
+    search_fields: str | None = None,
+) -> list[dict[str, Any]]:
+    """Searches human and AI documentation across YAML annotations and Markdown documents for business concepts."""
+    if not query or not query.strip():
+        return []
+
+    q_raw = query.strip()
+    q_norm = _normalize_text(q_raw)
+    words = [w for w in q_norm.split() if len(w) > 2]
+    if not words:
+        words = [q_norm]
+
+    target_type = object_type.strip().upper() if object_type else None
+    fields_filter = (search_fields or "all").strip().lower()
+
+    results: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+
+    # 1. Search in YAML Annotations (config.annotationsPath)
+    ann_path = config.annotationsPath
+    if ann_path and ann_path.exists():
+        for yml_file in ann_path.glob("**/*.yml"):
+            try:
+                rel_parts = yml_file.relative_to(ann_path).parts
+                if not rel_parts:
+                    continue
+
+                if len(rel_parts) >= 3:
+                    schema_name = rel_parts[0].upper()
+                    cat_folder = rel_parts[1].lower()
+                    obj_name = yml_file.stem.upper()
+                elif len(rel_parts) == 2:
+                    schema_name = (schemas[0].schema_name if schemas else config.schema_name or "DEFAULT").upper()
+                    cat_folder = rel_parts[0].lower()
+                    obj_name = yml_file.stem.upper()
+                else:
+                    continue
+
+                obj_type = cat_folder.rstrip("s").upper()
+                if obj_type in ("PACKAGE_BODY", "PACKAGE_BODYS"):
+                    obj_type = "PACKAGE"
+                elif obj_type in ("TYPE_BODY", "TYPE_BODYS"):
+                    obj_type = "TYPE"
+
+                if target_type and target_type not in (obj_type, f"{obj_type}S"):
+                    continue
+
+                ann = load_annotation(yml_file)
+                score = 0
+                matched_fields = []
+                snippets = []
+
+                # Name check
+                if q_norm in _normalize_text(obj_name):
+                    score += 50
+                    matched_fields.append("name")
+
+                # Description check
+                if fields_filter in ("all", "descriptions", "description") and ann.description:
+                    norm_desc = _normalize_text(ann.description)
+                    if q_norm in norm_desc or any(w in norm_desc for w in words):
+                        score += 45
+                        matched_fields.append("description")
+                        snippets.append(f"description: '{ann.description}'")
+
+                # Business rules check
+                if fields_filter in ("all", "rules", "business_rules") and ann.business_rules:
+                    for rule in ann.business_rules:
+                        norm_rule = _normalize_text(rule)
+                        if q_norm in norm_rule or any(w in norm_rule for w in words):
+                            score += 35
+                            if "business_rules" not in matched_fields:
+                                matched_fields.append("business_rules")
+                            snippets.append(f"rule: '{rule}'")
+
+                # Columns check
+                if fields_filter in ("all", "columns", "cols") and ann.columns:
+                    for col_name, col_desc in ann.columns.items():
+                        norm_col = _normalize_text(f"{col_name} {col_desc or ''}")
+                        if q_norm in norm_col or any(w in norm_col for w in words):
+                            score += 30
+                            matched_fields.append(f"column: {col_name}")
+                            snippets.append(f"column {col_name}: '{col_desc}'")
+
+                # Tags check
+                if fields_filter in ("all", "tags") and ann.tags:
+                    for tag in ann.tags:
+                        if q_norm in _normalize_text(tag) or any(w in _normalize_text(tag) for w in words):
+                            score += 25
+                            matched_fields.append(f"tag: {tag}")
+                            snippets.append(f"tag: '{tag}'")
+
+                if score > 0:
+                    item_key = f"{schema_name}.{obj_name}"
+                    seen_keys.add(item_key)
+                    results.append({
+                        "object_name": obj_name,
+                        "object_type": obj_type,
+                        "schema": schema_name,
+                        "relevance_score": score,
+                        "matched_fields": matched_fields,
+                        "description": ann.description or "",
+                        "matched_snippets": snippets[:5],
+                        "business_rules": ann.business_rules,
+                        "tags": ann.tags,
+                    })
+            except Exception:
+                continue
+
+    # 2. Also search SchemaMetadata dictionary comments for objects not yet found
+    for s in schemas:
+        s_name = (s.schema_name or "DEFAULT").upper()
+        all_objs = (
+            [("TABLE", t.name, t.comment, [(c.name, c.comment) for c in t.columns]) for t in s.tables]
+            + [("VIEW", v.name, v.comment, [(c.name, c.comment) for c in v.columns]) for v in s.views]
+            + [("MVIEW", mv.name, mv.comment, [(c.name, c.comment) for c in mv.columns]) for mv in s.mviews]
+            + [("PACKAGE" if co.object_type.upper() == "PACKAGE" else co.object_type.upper(), co.name, co.comment, [(sp.name, sp.comment) for sp in co.subprograms]) for co in s.code_objects]
+            + [("TRIGGER", tr.name, None, []) for tr in s.triggers]
+            + [("SYNONYM", syn.name, None, []) for syn in s.synonyms]
+        )
+
+        for otype, oname, ocomment, subitems in all_objs:
+            if target_type and target_type not in (otype, f"{otype}S"):
+                continue
+            item_key = f"{s_name}.{oname.upper()}"
+            if item_key in seen_keys:
+                continue
+
+            score = 0
+            matched_fields = []
+            snippets = []
+
+            # Name match
+            if q_norm in _normalize_text(oname):
+                score += 30
+                matched_fields.append("name")
+
+            # Comment match
+            if ocomment and (q_norm in _normalize_text(ocomment) or any(w in _normalize_text(ocomment) for w in words)):
+                score += 35
+                matched_fields.append("oracle_comment")
+                snippets.append(f"comment: '{ocomment}'")
+
+            # Subitem / Column comment match
+            for sname, scomment in subitems:
+                if scomment and (q_norm in _normalize_text(scomment) or any(w in _normalize_text(scomment) for w in words)):
+                    score += 20
+                    matched_fields.append(f"column/routine: {sname}")
+                    snippets.append(f"{sname}: '{scomment}'")
+
+            if score > 0:
+                seen_keys.add(item_key)
+                results.append({
+                    "object_name": oname.upper(),
+                    "object_type": otype,
+                    "schema": s_name,
+                    "relevance_score": score,
+                    "matched_fields": matched_fields,
+                    "description": ocomment or "",
+                    "matched_snippets": snippets[:5],
+                    "business_rules": [],
+                    "tags": [],
+                })
+
+    # Sort results by relevance_score descending
+    results.sort(key=lambda x: x["relevance_score"], reverse=True)
+    return results[:15]
+
+
 def search_database_objects(
     schemas: list[SchemaMetadata],
     query: str,
     object_type: str | None = None,
+    config: LeaiConfig | None = None,
 ) -> list[dict[str, Any]]:
-    q = query.strip().upper()
+    q_norm = _normalize_text(query)
     target_type = object_type.strip().upper() if object_type else None
     results: list[dict[str, Any]] = []
 
     for s in schemas:
         s_name = s.schema_name or "DEFAULT"
+        is_multi = len(schemas) > 1 or (config and config.is_all_schemas)
 
         # Tables
         if not target_type or target_type in ("TABLE", "TABLES"):
             for t in s.tables:
-                if q in t.name.upper() or (t.comment and q in t.comment.upper()):
+                ann_desc = ""
+                if config and config.annotationsPath:
+                    ann_dir = config.annotationsPath / s_name if is_multi else config.annotationsPath
+                    ann_file = ann_dir / "tables" / f"{t.name}.yml"
+                    if ann_file.exists():
+                        ann = load_annotation(ann_file)
+                        ann_desc = ann.description or ""
+                
+                haystack = f"{t.name} {t.comment or ''} {ann_desc}"
+                if q_norm in _normalize_text(haystack):
                     results.append({
                         "name": t.name,
                         "type": "TABLE",
                         "schema": s_name,
-                        "comment": t.comment,
+                        "comment": t.comment or (ann_desc if ann_desc else None),
                         "column_count": len(t.columns),
                     })
 
         # Views
         if not target_type or target_type in ("VIEW", "VIEWS"):
             for v in s.views:
-                if q in v.name.upper() or (v.comment and q in v.comment.upper()):
+                if q_norm in _normalize_text(f"{v.name} {v.comment or ''}"):
                     results.append({
                         "name": v.name,
                         "type": "VIEW",
@@ -214,7 +433,7 @@ def search_database_objects(
         # Materialized Views
         if not target_type or target_type in ("MVIEW", "MVIEWS", "MATERIALIZED VIEW"):
             for mv in s.mviews:
-                if q in mv.name.upper() or (mv.comment and q in mv.comment.upper()):
+                if q_norm in _normalize_text(f"{mv.name} {mv.comment or ''}"):
                     results.append({
                         "name": mv.name,
                         "type": "MATERIALIZED VIEW",
@@ -226,7 +445,7 @@ def search_database_objects(
         for co in s.code_objects:
             c_type = co.object_type.upper()
             if not target_type or target_type in (c_type, f"{c_type}S"):
-                if q in co.name.upper() or (co.comment and q in co.comment.upper()):
+                if q_norm in _normalize_text(f"{co.name} {co.comment or ''}"):
                     results.append({
                         "name": co.name,
                         "type": c_type,
@@ -239,7 +458,7 @@ def search_database_objects(
             for sp in co.subprograms:
                 sp_full = f"{co.name}.{sp.name}"
                 if not target_type or target_type in (sp.subprogram_type.upper(), f"{sp.subprogram_type.upper()}S", "SUBPROGRAM"):
-                    if q in sp.name.upper() or q in sp_full.upper() or (sp.comment and q in sp.comment.upper()):
+                    if q_norm in _normalize_text(f"{sp.name} {sp_full} {sp.comment or ''}"):
                         results.append({
                             "name": sp_full,
                             "type": f"{co.object_type}.{sp.subprogram_type}",
@@ -252,7 +471,7 @@ def search_database_objects(
         # Triggers
         if not target_type or target_type in ("TRIGGER", "TRIGGERS"):
             for trg in s.triggers:
-                if q in trg.name.upper() or (trg.table_name and q in trg.table_name.upper()):
+                if q_norm in _normalize_text(f"{trg.name} {trg.table_name or ''}"):
                     results.append({
                         "name": trg.name,
                         "type": "TRIGGER",
@@ -264,7 +483,7 @@ def search_database_objects(
         # Synonyms
         if not target_type or target_type in ("SYNONYM", "SYNONYMS"):
             for syn in s.synonyms:
-                if q in syn.name.upper() or (syn.table_name and q in syn.table_name.upper()):
+                if q_norm in _normalize_text(f"{syn.name} {syn.table_name or ''}"):
                     target_info = resolve_synonym(schemas, syn.name)
                     target_desc = f"{syn.table_owner or ''}.{syn.table_name or ''}"
                     if target_info and target_info.get("target_type") != "UNKNOWN":
@@ -277,7 +496,7 @@ def search_database_objects(
                     })
 
     # Return top 25 matches sorted by closest name match
-    results.sort(key=lambda x: (0 if x["name"].upper() == q else (1 if x["name"].upper().startswith(q) else 2), x["name"]))
+    results.sort(key=lambda x: (0 if _normalize_text(x["name"]) == q_norm else (1 if _normalize_text(x["name"]).startswith(q_norm) else 2), x["name"]))
     return results[:25]
 
 
@@ -564,8 +783,16 @@ def execute_tool_call(
 ) -> str:
     """Dispatches and executes the requested database tool call and returns a JSON string response."""
     try:
-        if tool_name == "search_database_objects":
-            res = search_database_objects(schemas, query=arguments.get("query", ""), object_type=arguments.get("object_type"))
+        if tool_name == "search_business_documentation":
+            res = search_business_documentation(
+                schemas,
+                config=config,
+                query=arguments.get("query", ""),
+                object_type=arguments.get("object_type"),
+                search_fields=arguments.get("search_fields"),
+            )
+        elif tool_name == "search_database_objects":
+            res = search_database_objects(schemas, query=arguments.get("query", ""), object_type=arguments.get("object_type"), config=config)
         elif tool_name == "get_table_schema":
             res = get_table_schema(schemas, config=config, table_name=arguments.get("table_name", ""))
         elif tool_name == "get_subprogram_source":

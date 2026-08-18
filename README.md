@@ -165,7 +165,7 @@ docPath: "./docs"                  # Final Markdown docs for RAG
 
 # AI Provider Configuration
 ai:
-  default_provider: "openai"      # openai, gemini, anthropic, deepseek, qwen, kimi, ollama
+  default_provider: "openai"      # openai, gemini, anthropic, grok, deepseek, qwen, kimi, ollama
   temperature: 0.2
   providers:
     openai:
@@ -177,6 +177,10 @@ ai:
     anthropic:
       api_key: "${ANTHROPIC_API_KEY}"
       model: "claude-3-5-sonnet-20241022"
+    grok:
+      api_key: "${GROK_API_KEY}"
+      base_url: "https://api.x.ai/v1"
+      model: "grok-2-latest"
     ollama:
       base_url: "http://localhost:11434/v1"
       model: "llama3.1"
@@ -207,8 +211,32 @@ leai compile
 
 ## 📖 CLI Command Reference
 
-### 1. `leai` (or `leai generate`)
-Executes the full pipeline: extracts technical snapshots from Oracle, synchronizes business annotation stubs, and compiles final Markdown docs.
+### 1. `leai` (Unified Interactive Studio)
+Launches the interactive terminal copilot by default with real-time autocompletion for commands (`/doc`, `/extract`, `/compile`, `/annotate`, `/enrich`, `/serve`, `/trace`) and `@OBJECT` mentions.
+
+```bash
+# Launch the interactive terminal
+leai
+
+# Target specific schema and AI provider
+leai -s HR -p gemini -m gemini-2.5-flash
+```
+
+---
+
+### 2. `leai doc [OBJECT]`
+Opens the interactive in-terminal documentation editor for an object (table, view, package, etc.), allowing you to edit business descriptions, column comments, and business rules, saving directly to YAML and offering 1-click Markdown recompile.
+
+```bash
+# Document a specific table or package directly
+leai doc EMPLOYEES
+leai doc PKG_FINANCEIRO
+```
+
+---
+
+### 3. `leai generate`
+Executes the full automated pipeline: extracts technical snapshots from Oracle, synchronizes business annotation stubs, and compiles final Markdown docs.
 
 | Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
@@ -221,8 +249,8 @@ Executes the full pipeline: extracts technical snapshots from Oracle, synchroniz
 | `-v`, `--version` | Flag | Show LEAI version and exit. |
 
 ```bash
-leai
-leai -s HR -t tables -t packages --depth 2
+leai generate
+leai generate -s HR -t tables -t packages --depth 2
 ```
 
 ---
@@ -304,7 +332,7 @@ Uses AI (LLMs) to analyze DDLs and PL/SQL code, automatically generating busines
 | Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
 | `-c`, `--config PATH` | Option | Path to `leai.yml`. |
-| `-p`, `--provider TEXT` | Option | AI provider (`openai`, `gemini`, `anthropic`, `deepseek`, `qwen`, `kimi`, `ollama`). |
+| `-p`, `--provider TEXT` | Option | AI provider (`openai`, `gemini`, `anthropic`, `grok`, `xai`, `deepseek`, `qwen`, `kimi`, `ollama`). |
 | `-m`, `--model TEXT` | Option | Model identifier (e.g., `gpt-4o-mini`, `gemini-2.5-flash`, `claude-3-5-sonnet-20241022`). |
 | `-w`, `--overwrite` | Flag | Forces regeneration of existing descriptions and comments. |
 | `-s`, `--schema TEXT` | Option | Filter by specific schema. |
@@ -371,7 +399,7 @@ Queries the AI provider API and displays a formatted table of all available mode
 
 | Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
-| `-p`, `--provider TEXT` | Option | AI provider to query (`openai`, `gemini`, `anthropic`, `deepseek`, `qwen`, `kimi`, `ollama`). |
+| `-p`, `--provider TEXT` | Option | AI provider to query (`openai`, `gemini`, `anthropic`, `grok`, `xai`, `deepseek`, `qwen`, `kimi`, `ollama`). |
 | `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 
 ```bash

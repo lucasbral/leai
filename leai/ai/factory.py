@@ -39,6 +39,16 @@ PROVIDER_DEFAULTS = {
         "base_url": "https://api.moonshot.cn/v1",
         "default_model": "moonshot-v1-8k",
     },
+    "grok": {
+        "env_key": "GROK_API_KEY",
+        "base_url": "https://api.x.ai/v1",
+        "default_model": "grok-2-latest",
+    },
+    "xai": {
+        "env_key": "XAI_API_KEY",
+        "base_url": "https://api.x.ai/v1",
+        "default_model": "grok-2-latest",
+    },
     "ollama": {
         "env_key": None,
         "base_url": "http://localhost:11434/v1",
@@ -58,7 +68,13 @@ def get_llm_client(
     defaults = PROVIDER_DEFAULTS.get(provider_name, {})
 
     env_var = defaults.get("env_key")
-    api_key = (p_cfg and p_cfg.api_key) or (os.getenv(env_var) if env_var else None) or os.getenv(f"{provider_name.upper()}_API_KEY")
+    api_key = (
+        (p_cfg and p_cfg.api_key)
+        or (os.getenv(env_var) if env_var else None)
+        or os.getenv(f"{provider_name.upper()}_API_KEY")
+        or (os.getenv("XAI_API_KEY") if provider_name == "grok" else None)
+        or (os.getenv("GROK_API_KEY") if provider_name == "xai" else None)
+    )
     base_url = (p_cfg and p_cfg.base_url) or defaults.get("base_url")
     model = model_override or (p_cfg and p_cfg.model) or defaults.get("default_model") or "gpt-4o-mini"
     temp = config.ai.temperature

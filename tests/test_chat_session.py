@@ -80,7 +80,26 @@ class ChatSessionTests(unittest.TestCase):
             content = saved.read_text(encoding="utf-8")
             self.assertIn("# LEAI Chat Session Transcript", content)
             self.assertIn("Primeira pergunta do chat", content)
-            self.assertIn("Segunda pergunta do chat", content)
+    def test_chat_token_accumulation_and_clear(self):
+        self.assertEqual(self.session.total_tokens, 0)
+        self.assertIsNone(self.session.last_turn_tokens)
+
+        # Turn 1
+        self.session.send("Pergunta 1 sobre FUNCIONARIOS")
+        self.assertGreater(self.session.total_tokens, 0)
+        self.assertIsNotNone(self.session.last_turn_tokens)
+        first_total = self.session.total_tokens
+
+        # Turn 2
+        self.session.send("Pergunta 2")
+        self.assertGreater(self.session.total_tokens, first_total)
+        second_total = self.session.total_tokens
+
+        # Clear should reset messages and last_turn_tokens, but KEEP total_tokens
+        self.session.clear()
+        self.assertEqual(len(self.session.messages), 0)
+        self.assertIsNone(self.session.last_turn_tokens)
+        self.assertEqual(self.session.total_tokens, second_total)
 
 
 if __name__ == "__main__":

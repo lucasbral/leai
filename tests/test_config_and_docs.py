@@ -102,6 +102,11 @@ class ConfigAndDocsTests(unittest.TestCase):
             self.assertTrue(cfg_all.is_all_schemas)
             self.assertEqual(cfg_all.schemas, ["ALL"])
 
+            # Test schema override (e.g. via CLI -s flag)
+            cfg_all.schemas = ["HADES"]
+            self.assertFalse(cfg_all.is_all_schemas)
+            self.assertEqual(cfg_all.schema_name, "HADES")
+
     def test_multi_schema_pipeline_generates_isolated_folders(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

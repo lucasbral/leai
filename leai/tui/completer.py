@@ -8,12 +8,21 @@ from prompt_toolkit.document import Document
 from leai.models import SchemaMetadata
 
 SLASH_COMMANDS: list[tuple[str, str]] = [
+    ("/doc", "Open in-terminal YAML annotation & documentation editor"),
+    ("/extract", "Extract fresh metadata snapshot from Oracle database"),
+    ("/compile", "Compile Markdown documentation in docs/"),
+    ("/annotate", "Synchronize YAML annotation stubs in annotations/"),
+    ("/enrich", "Auto-enrich business descriptions using AI / LLM"),
+    ("/chat", "Ask a question to AI Assistant directly with RAG context"),
+    ("/serve", "Launch offline web documentation server"),
     ("/trace", "Trace object lineage, impacts & Mermaid graph"),
     ("/tables", "List all tables, columns count and stats"),
     ("/schema", "Show active schema metadata & object counts"),
     ("/changes", "Inspect recent DDL modifications in database"),
     ("/model", "Switch AI provider and model dynamically"),
     ("/save", "Save conversation transcript to Markdown file"),
+    ("/check", "Run environment diagnostics on DB, config and AI provider"),
+    ("/init", "Create or check leai.yml configuration file"),
     ("/clear", "Clear conversation memory and terminal screen"),
     ("/help", "Display interactive command reference"),
     ("/exit", "Exit LEAI interactive copilot"),
@@ -21,40 +30,70 @@ SLASH_COMMANDS: list[tuple[str, str]] = [
 
 
 class LeaiCompleter(Completer):
-    """Smart autocomplete engine for slash commands (/) and database object mentions (@)."""
+    """Smart autocomplete engine for slash commands (/), sub-arguments, and database object mentions (@)."""
 
-    def __init__(self, schemas: list[SchemaMetadata]) -> None:
+    def __init__(self, schemas: list[SchemaMetadata], config: Any = None) -> None:
         self.schemas = schemas
-        self._db_objects: list[tuple[str, str]] = []
+        self.config = config
+        self._db_objects: list[tuple[str, str, str, str]] = []
+        self._schemas_list: list[str] = []
+        self._build_object_cache()
+
+    def update_schemas(self, schemas: list[SchemaMetadata]) -> None:
+        """Dynamically updates the schema cache after extractions."""
+        self.schemas = schemas
         self._build_object_cache()
 
     def _build_object_cache(self) -> None:
-        objs: list[tuple[str, str]] = []
+        objs: list[tuple[str, str, str, str]] = []
+        s_names: set[str] = set()
+
         for s in self.schemas:
+            s_name = s.schema_name.upper() if s.schema_name else ""
+            if s_name:
+                s_names.add(s_name)
             for t in s.tables:
-                objs.append((t.name, "Table"))
+                pk_str = f", PK: {', '.join(t.primary_keys)}" if t.primary_keys else ""
+                objs.append((s_name, t.name, "Table", f"{len(t.columns)} cols{pk_str}"))
             for v in s.views:
-                objs.append((v.name, "View"))
+                objs.append((s_name, v.name, "View", f"{len(v.columns)} cols"))
             for mv in s.mviews:
-                objs.append((mv.name, "MView"))
+                objs.append((s_name, mv.name, "MView", f"{len(mv.columns)} cols"))
             for co in s.code_objects:
-                objs.append((co.name, co.object_type.title()))
+                if co.subprograms:
+                    sub_count = len(co.subprograms)
+                    label = "routines"
+                elif co.source:
+                    sub_count = len(co.source.splitlines())
+                    label = "lines"
+                else:
+                    sub_count = 0
+                    label = "code"
+                objs.append((s_name, co.name, co.object_type.title(), f"{sub_count} {label}"))
             for tr in s.triggers:
-                objs.append((tr.name, "Trigger"))
+                objs.append((s_name, tr.name, "Trigger", f"on {tr.table_name or 'DB'}"))
             for sq in s.sequences:
-                objs.append((sq.name, "Sequence"))
+                objs.append((s_name, sq.name, "Sequence", ""))
             for sn in s.synonyms:
-                objs.append((sn.name, "Synonym"))
+                objs.append((s_name, sn.name, "Synonym", f"-> {sn.table_name or ''}"))
 
         # Deduplicate preserving order
         seen = set()
         deduped = []
-        for name, otype in objs:
-            key = (name.upper(), otype)
+        for s_name, name, otype, details in objs:
+            key = (s_name, name.upper(), otype)
             if key not in seen:
                 seen.add(key)
-                deduped.append((name.upper(), otype))
+                deduped.append((s_name, name.upper(), otype, details))
         self._db_objects = deduped
+
+        # Collect configured schemas from config.schemas
+        cfg_schemas = [
+            s.strip().upper()
+            for s in getattr(self.config, "schemas", []) or []
+            if s and not getattr(self.config, "is_all_schemas", False)
+        ]
+        self._schemas_list = sorted(list(set(cfg_schemas or s_names)))
 
     def get_completions(self, document: Document, complete_event: CompleteEvent) -> Iterable[Completion]:
         text = document.text_before_cursor
@@ -75,50 +114,132 @@ class LeaiCompleter(Completer):
                         )
                 return
 
-            # Sub-argument completion for /trace
-            if parts[0].lower() == "/trace":
+            cmd_name = parts[0].lower()
+
+            # Sub-argument completion for /doc, /trace, /enrich, /compile, /build (DB Objects)
+            if cmd_name in ("/doc", "/trace", "/enrich", "/compile", "/build"):
                 arg_query = parts[1].lstrip("@").upper() if len(parts) > 1 else ""
                 if text.endswith(" ") and len(parts) == 1:
                     arg_query = ""
-                for name, otype in self._db_objects:
-                    if name.startswith(arg_query):
+                for s_name, name, otype, details in self._db_objects:
+                    qualified = f"{s_name}.{name}" if s_name else name
+                    if name.startswith(arg_query) or qualified.startswith(arg_query):
+                        meta_desc = f"{s_name} [{otype}] ({details})" if (s_name and details) else f"[{otype}] {details}".strip()
                         yield Completion(
                             text=name,
                             start_position=-len(word_before_cursor),
-                            display=name,
-                            display_meta=otype,
+                            display=f"{s_name}.{name}" if s_name else name,
+                            display_meta=meta_desc,
                         )
                 return
 
-            # Sub-argument completion for /model
-            if parts[0].lower() == "/model":
-                providers = [
-                    ("openai", "OpenAI (gpt-4o, gpt-4o-mini)"),
-                    ("gemini", "Google Gemini (gemini-1.5-flash, gemini-1.5-pro)"),
-                    ("anthropic", "Anthropic Claude (claude-3-5-sonnet)"),
-                    ("deepseek", "DeepSeek API (deepseek-chat)"),
-                    ("ollama", "Local Ollama LLM"),
-                ]
-                prov_query = parts[1].lower() if len(parts) > 1 else ""
-                if len(parts) <= 2 and not (len(parts) == 2 and text.endswith(" ")):
-                    for p_name, desc in providers:
-                        if p_name.startswith(prov_query):
+            # Sub-argument completion for /extract (Schemas)
+            if cmd_name == "/extract":
+                if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
+                    schema_query = parts[1].upper() if len(parts) > 1 else ""
+
+                    # 1. Suggest ALL option first
+                    if "ALL".startswith(schema_query):
+                        yield Completion(
+                            text="ALL",
+                            start_position=-len(word_before_cursor),
+                            display="ALL",
+                            display_meta="Extract all schemas configured in leai.yml",
+                        )
+
+                    # 2. Suggest individual configured schemas from leai.yml
+                    for s_name in self._schemas_list:
+                        if s_name != "ALL" and s_name.startswith(schema_query):
                             yield Completion(
-                                text=p_name,
+                                text=s_name,
                                 start_position=-len(word_before_cursor),
-                                display=p_name,
-                                display_meta=desc,
+                                display=s_name,
+                                display_meta="Configured Schema (leai.yml)",
                             )
                 return
 
-        # 2. @ Mentions anywhere in prompt
+            # Sub-argument completion for /model and /models (AI Providers)
+            if cmd_name in ("/model", "/models"):
+                providers = ["openai", "gemini", "anthropic", "grok", "xai", "deepseek", "qwen", "kimi", "ollama"]
+                if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
+                    p_query = parts[1].lower() if len(parts) > 1 else ""
+                    for p in providers:
+                        if p.startswith(p_query):
+                            yield Completion(
+                                text=p,
+                                start_position=-len(word_before_cursor),
+                                display=p,
+                                display_meta="AI Provider",
+                            )
+                return
+
+            # Sub-argument completion for /schema (Database Schemas)
+            if cmd_name == "/schema":
+                if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
+                    s_query = parts[1].upper() if len(parts) > 1 else ""
+                    for s_name in self._schemas_list:
+                        if s_name.startswith(s_query):
+                            yield Completion(
+                                text=s_name,
+                                start_position=-len(word_before_cursor),
+                                display=s_name,
+                                display_meta="Database Schema",
+                            )
+                return
+
+            # Sub-argument completion for /changes (Day Windows)
+            if cmd_name == "/changes":
+                if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
+                    c_query = parts[1] if len(parts) > 1 else ""
+                    day_options = [
+                        ("1", "Last 24 hours"),
+                        ("7", "Last 7 days (Default)"),
+                        ("15", "Last 15 days"),
+                        ("30", "Last 30 days (1 month)"),
+                        ("60", "Last 60 days (2 months)"),
+                        ("90", "Last 90 days (3 months)"),
+                    ]
+                    for d_str, d_meta in day_options:
+                        if d_str.startswith(c_query):
+                            yield Completion(
+                                text=d_str,
+                                start_position=-len(word_before_cursor),
+                                display=f"{d_str} days",
+                                display_meta=d_meta,
+                            )
+                return
+
+            # Sub-argument completion for /save (File Names)
+            if cmd_name == "/save":
+                if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
+                    f_query = parts[1].lower() if len(parts) > 1 else ""
+                    file_options = [
+                        ("leai_chat.md", "Export conversation to leai_chat.md"),
+                        ("transcript.md", "Export conversation to transcript.md"),
+                        ("history.md", "Export conversation to history.md"),
+                    ]
+                    for f_name, f_meta in file_options:
+                        if f_name.lower().startswith(f_query):
+                            yield Completion(
+                                text=f_name,
+                                start_position=-len(word_before_cursor),
+                                display=f_name,
+                                display_meta=f_meta,
+                            )
+                return
+
+            return
+
+        # 2. @Mentions within chat prompts
         if word_before_cursor.startswith("@"):
             query = word_before_cursor[1:].upper()
-            for name, otype in self._db_objects:
-                if name.startswith(query):
+            for s_name, name, otype, details in self._db_objects:
+                qualified = f"{s_name}.{name}" if s_name else name
+                if name.startswith(query) or qualified.startswith(query):
+                    meta_desc = f"{s_name} [{otype}] ({details})" if (s_name and details) else f"[{otype}] {details}".strip()
                     yield Completion(
                         text=f"@{name}",
                         start_position=-len(word_before_cursor),
-                        display=f"@{name}",
-                        display_meta=otype,
+                        display=f"@{s_name}.{name}" if s_name else f"@{name}",
+                        display_meta=meta_desc,
                     )

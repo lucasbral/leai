@@ -52,6 +52,7 @@ class AIIntegrationTests(unittest.TestCase):
                     "gemini": AIProviderConfig(api_key="gem-test", model="gemini-1.5-pro"),
                     "anthropic": AIProviderConfig(api_key="ant-test", model="claude-3-5-sonnet"),
                     "deepseek": AIProviderConfig(api_key="ds-test", base_url="https://api.deepseek.com/v1", model="deepseek-chat"),
+                    "grok": AIProviderConfig(api_key="xai-test", base_url="https://api.x.ai/v1", model="grok-2-latest"),
                 },
             ),
         )
@@ -71,6 +72,11 @@ class AIIntegrationTests(unittest.TestCase):
         client_deepseek = get_llm_client(cfg, provider_override="deepseek")
         self.assertIsInstance(client_deepseek, OpenAICompatibleClient)
         self.assertEqual(client_deepseek.base_url, "https://api.deepseek.com/v1")
+
+        client_grok = get_llm_client(cfg, provider_override="grok")
+        self.assertIsInstance(client_grok, OpenAICompatibleClient)
+        self.assertEqual(client_grok.base_url, "https://api.x.ai/v1")
+        self.assertEqual(client_grok.model, "grok-2-latest")
 
     def test_enrich_table_preserves_existing_when_not_overwrite(self):
         table = TableMeta(

@@ -233,6 +233,53 @@ END;"""
         self.assertIsInstance(parsed, list)
         self.assertEqual(parsed[0]["name"], "VINCULOS")
 
+    def test_search_business_documentation_accents_and_rules(self):
+        import tempfile
+        from pathlib import Path
+        from leai.ai.tools import search_business_documentation
+        from leai.annotations import save_annotation
+        from leai.models import ObjectAnnotation
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg = LeaiConfig()
+            cfg.annotationsPath = Path(tmpdir) / "annotations"
+            ann_file = cfg.annotationsPath / "tables" / "TGOVPE_FREQ_LIC_AFAST.yml"
+            ann = ObjectAnnotation(
+                description="Tabela com histórico de licenças, afastamentos e férias de servidores públicos.",
+                columns={"DT_INICIO": "Data de início do gozo de férias"},
+                business_rules=["Servidor não pode acumular mais de 2 períodos aquisitivos."],
+                tags=["RH", "Férias", "Frequência"],
+            )
+            save_annotation(ann_file, ann)
+
+            # Test 1: Search unaccented "ferias" should find "férias" in description
+            matches = search_business_documentation(self.schemas, cfg, query="ferias")
+            self.assertGreaterEqual(len(matches), 1)
+            self.assertEqual(matches[0]["object_name"], "TGOVPE_FREQ_LIC_AFAST")
+            self.assertIn("description", matches[0]["matched_fields"])
+
+            # Test 2: Search "periodos aquisitivos" in business rules
+            matches_rule = search_business_documentation(self.schemas, cfg, query="aquisitivos")
+            self.assertGreaterEqual(len(matches_rule), 1)
+            self.assertEqual(matches_rule[0]["object_name"], "TGOVPE_FREQ_LIC_AFAST")
+
+            # Test 3: Search column field only
+            matches_col = search_business_documentation(self.schemas, cfg, query="gozo", search_fields="columns")
+            self.assertGreaterEqual(len(matches_col), 1)
+            self.assertEqual(matches_col[0]["object_name"], "TGOVPE_FREQ_LIC_AFAST")
+
+            # Test 4: Dispatcher via execute_tool_call
+            raw_res = execute_tool_call(
+                tool_name="search_business_documentation",
+                arguments={"query": "licenca"},
+                schemas=self.schemas,
+                config=cfg,
+            )
+            parsed = json.loads(raw_res)
+            self.assertIsInstance(parsed, list)
+            self.assertEqual(parsed[0]["object_name"], "TGOVPE_FREQ_LIC_AFAST")
+
+
     def test_agent_execution_engine_multi_turn(self):
         self.assertEqual(MAX_AGENT_ITERATIONS, 10)
 

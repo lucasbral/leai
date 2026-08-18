@@ -19,12 +19,12 @@ class CliIntegrationTests(unittest.TestCase):
     def test_version_option(self):
         result = self.runner.invoke(app, ["--version"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("LEAI CLI version 0.2.1", result.output)
+        self.assertIn("LEAI CLI version 0.2.2", result.output)
 
     def test_version_short_option(self):
         result = self.runner.invoke(app, ["-v"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("LEAI CLI version 0.2.1", result.output)
+        self.assertIn("LEAI CLI version 0.2.2", result.output)
 
     def test_help_command(self):
         result = self.runner.invoke(app, ["--help"])
@@ -372,10 +372,16 @@ docPath: "{(base / 'docs').as_posix()}"
             self.assertEqual(result_gen.exit_code, 0, msg=result_gen.output)
             self.assertIn("Documentation Generation Completed", result_gen.output)
 
-            # Test default invocation (calling bare `leai` without subcommand)
-            result_default = self.runner.invoke(app, ["--config", str(cfg_file)])
+            # Test default invocation (calling bare `leai` without subcommand starts interactive studio)
+            result_default = self.runner.invoke(app, ["--config", str(cfg_file)], input="/exit\n")
             self.assertEqual(result_default.exit_code, 0, msg=result_default.output)
-            self.assertIn("Documentation Generation Completed", result_default.output)
+            self.assertIn("Oracle Database DOC Assistant", result_default.output)
+            self.assertIn("Leai", result_default.output)
+
+            # Test doc command
+            result_doc = self.runner.invoke(app, ["doc", "EMPLOYEES", "--config", str(cfg_file)], input="0\n")
+            self.assertEqual(result_doc.exit_code, 0, msg=result_doc.output)
+            self.assertIn("LEAI Documentation Studio", result_doc.output)
 
     @patch("leai.cli.oracledb.connect")
     @patch("leai.cli.fetch_available_schemas")
@@ -422,6 +428,83 @@ docPath: "{(base / 'docs').as_posix()}"
             self.assertTrue((base / "docs" / "HADES" / "tables" / "T_LOG.md").exists())
             self.assertTrue((base / "annotations" / "HADES" / "tables" / "T_LOG.yml").exists())
 
+    @patch("leai.cli.oracledb.connect")
+    @patch("leai.cli.fetch_schema_metadata")
+    def test_extract_overrides_all_in_config(self, mock_fetch_meta, mock_connect):
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
+
+        fake_schema = SchemaMetadata(
+            schema_name="HADES",
+            tables=[
+                TableMeta(
+                    name="T_LOG",
+                    columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)],
+                )
+            ],
+        )
+        mock_fetch_meta.return_value = fake_schema
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            cfg_file = base / "leai.yml"
+            cfg_file.write_text(
+                f"""
+dsn: "oracle://user:pass@localhost:1521/ORCL"
+schemas: "ALL"
+rawPath: "{(base / 'raw').as_posix()}"
+annotationsPath: "{(base / 'annotations').as_posix()}"
+docPath: "{(base / 'docs').as_posix()}"
+                """,
+                encoding="utf-8",
+            )
+
+            # Test extract with -s HADES override when config has schemas: "ALL"
+            result_ext = self.runner.invoke(app, ["extract", "-c", str(cfg_file), "-s", "HADES"])
+            self.assertEqual(result_ext.exit_code, 0, msg=result_ext.output)
+            # fetch_schema_metadata should only have been called for HADES
+            mock_fetch_meta.assert_called_once()
+            self.assertEqual(mock_fetch_meta.call_args[1]["schema_name"], "HADES")
+            self.assertTrue((base / "raw" / "HADES" / "tables" / "T_LOG.json").exists())
+
+    def test_compile_single_object_offline(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            raw_dir = base / "raw"
+            schema = SchemaMetadata(
+                schema_name="HR",
+                tables=[
+                    TableMeta(
+                        name="EMPLOYEES",
+                        columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)],
+                    ),
+                    TableMeta(
+                        name="DEPARTMENTS",
+                        columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)],
+                    ),
+                ],
+            )
+            save_raw_schema(schema, raw_dir)
+
+            cfg_file = base / "leai.yml"
+            cfg_file.write_text(
+                f"""
+schemas:
+  - HR
+rawPath: "{raw_dir.as_posix()}"
+annotationsPath: "{(base / 'annotations').as_posix()}"
+docPath: "{(base / 'docs').as_posix()}"
+                """,
+                encoding="utf-8",
+            )
+
+            # Compile ONLY EMPLOYEES
+            result = self.runner.invoke(app, ["compile", "-c", str(cfg_file), "-o", "EMPLOYEES"])
+            self.assertEqual(result.exit_code, 0, msg=result.output)
+            self.assertTrue((base / "docs" / "tables" / "EMPLOYEES.md").exists())
+            self.assertFalse((base / "docs" / "tables" / "DEPARTMENTS.md").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -45,7 +45,7 @@ from leai.enrich import enrich_schema_annotations
 from leai.models import SchemaMetadata
 from leai.oracle import _build_connect_kwargs, fetch_available_schemas, fetch_focal_trace, fetch_schema_metadata
 from leai.raw import load_raw_schemas, save_raw_schema, trace_raw_dependencies
-from leai.tui import InteractiveTUISession
+from leai.tui import DocEditor, InteractiveTUISession
 
 app = typer.Typer(help="CLI for Oracle Database Intelligence & Documentation.")
 console = Console(legacy_windows=False)
@@ -311,7 +311,8 @@ def annotate(
 
     try:
         console.print(f"[cyan]Loading snapshots from[/cyan] [bold]{cfg.rawPath}[/bold]...\n")
-        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=cfg.schemas if schemas else None)
+        target_schemas = cfg.schemas if not cfg.is_all_schemas else None
+        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas)
         is_multi = len(schemas_meta) > 1
 
         totals = {
@@ -395,7 +396,7 @@ def annotate(
 @app.command()
 def ask(
     question: str = typer.Argument(..., help="Natural language question about the database"),
-    provider: str = typer.Option(None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, deepseek, qwen, kimi, ollama)"),
+    provider: str = typer.Option(None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, grok, xai, deepseek, qwen, kimi, ollama)"),
     model: str = typer.Option(None, "--model", "-m", help="AI model name"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
 ) -> None:
@@ -449,7 +450,7 @@ def ask(
 
 @app.command()
 def chat(
-    provider: str = typer.Option(None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, deepseek, qwen, kimi, ollama)"),
+    provider: str = typer.Option(None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, grok, xai, deepseek, qwen, kimi, ollama)"),
     model: str = typer.Option(None, "--model", "-m", help="AI model name"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
 ) -> None:
@@ -482,7 +483,7 @@ def chat(
 
 @app.command()
 def models(
-    provider: str = typer.Option(None, "--provider", "-p", help="AI provider to query (openai, gemini, anthropic, deepseek, qwen, kimi, ollama)"),
+    provider: str = typer.Option(None, "--provider", "-p", help="AI provider to query (openai, gemini, anthropic, grok, xai, deepseek, qwen, kimi, ollama)"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
 ) -> None:
     """Lists available AI models returned by the provider API for the configured API key."""
@@ -529,28 +530,73 @@ def default(
         is_eager=True,
         help="Show LEAI version and exit.",
     ),
+    provider: str = typer.Option(None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, grok, xai, deepseek, qwen, kimi, ollama)"),
+    model: str = typer.Option(None, "--model", "-m", help="AI model name"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
-    schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to generate (overrides leai.yml)"),
-    object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to generate (e.g. tables, views, procedures)"),
-    with_traces: bool = typer.Option(True, "--with-traces/--no-traces", help="Include dependency lineage, risk analysis and Mermaid graph"),
-    rag_json: bool = typer.Option(False, "--rag-json", "--rag", help="Also export structured JSON chunks to docs/chunks/ for Vector DB"),
-    depth: int = typer.Option(1, "--depth", "-d", help="Max dependency graph traversal depth (default: 1)"),
+    schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to target (overrides leai.yml)"),
 ) -> None:
+    """LEAI: Autonomous Oracle Database Intelligence, Documentation Engine & Copilot."""
+    if hasattr(config, "default") or not isinstance(config, (str, Path)):
+        config = getattr(config, "default", Path("leai.yml")) or Path("leai.yml")
+    if not isinstance(config, Path):
+        config = Path(config)
+    if hasattr(schemas, "default"):
+        schemas = getattr(schemas, "default", None)
+    if hasattr(provider, "default"):
+        provider = getattr(provider, "default", None)
+    if hasattr(model, "default"):
+        model = getattr(model, "default", None)
+
     if ctx.invoked_subcommand is None:
-        ctx.invoke(
-            generate,
-            config=config,
-            schemas=schemas,
-            object_types=object_types,
-            with_traces=with_traces,
-            rag_json=rag_json,
-            depth=depth,
+        try:
+            cfg = load_config(config)
+            if schemas:
+                cfg.schemas = [s.strip().upper() for s in schemas]
+        except Exception:
+            cfg = LeaiConfig()
+
+        target_schemas = cfg.schemas if not cfg.is_all_schemas else None
+        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas)
+        try:
+            client = get_llm_client(cfg, provider_override=provider, model_override=model)
+        except Exception:
+            client = None
+
+        session = InteractiveTUISession(
+            schemas=schemas_meta,
+            config=cfg,
+            client=client,
+            provider_name=provider,
         )
+        session.run()
+
+
+@app.command()
+def doc(
+    object_name: str = typer.Argument(None, help="Name of the database object to document (e.g. EMPLOYEES, PKG_FIN)"),
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+) -> None:
+    """Interactive in-terminal documentation and annotation editor."""
+    try:
+        cfg = load_config(config)
+    except ConfigError as exc:
+        console.print(f"[red]Config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    target_schemas = cfg.schemas if not cfg.is_all_schemas else None
+    schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas)
+    if not schemas_meta:
+        console.print(f"[yellow]No snapshots found in '{cfg.rawPath}'. Run 'leai extract' first.[/yellow]")
+        raise typer.Exit(code=1)
+
+    editor = DocEditor(cfg, schemas_meta)
+    editor.run(object_name)
 
 
 @app.command()
 def compile(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    object_name: str = typer.Option(None, "--object-name", "-o", help="Specific database object name to compile (e.g. EMPLOYEES)"),
     schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to compile (overrides leai.yml)"),
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to compile (e.g. tables, views, procedures)"),
     with_traces: bool = typer.Option(True, "--with-traces/--no-traces", help="Include dependency lineage, risk analysis and Mermaid graph"),
@@ -574,6 +620,10 @@ def compile(
         object_types = getattr(object_types, "default", None)
     if hasattr(schemas, "default"):
         schemas = getattr(schemas, "default", None)
+    if hasattr(object_name, "default"):
+        object_name = getattr(object_name, "default", None)
+    if object_name:
+        object_name = str(object_name).strip()
 
     start_time = time.perf_counter()
     try:
@@ -588,7 +638,41 @@ def compile(
 
     try:
         console.print(f"[cyan]Loading snapshots from[/cyan] [bold]{cfg.rawPath}[/bold]...\n")
-        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=cfg.schemas if schemas else None)
+        target_schemas = cfg.schemas if not cfg.is_all_schemas else None
+        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas)
+
+        if object_name:
+            clean_obj = object_name.strip().upper()
+            target_schemas_list = []
+            if "." in clean_obj:
+                s_part, o_part = clean_obj.split(".", 1)
+                for s in schemas_meta:
+                    if (s.schema_name or "").upper() == s_part:
+                        target_schemas_list.append(s)
+            if not target_schemas_list:
+                for s in schemas_meta:
+                    if (
+                        any(t.name.upper() == clean_obj for t in s.tables)
+                        or any(v.name.upper() == clean_obj for v in s.views)
+                        or any(mv.name.upper() == clean_obj for mv in s.mviews)
+                        or any(
+                            co.name.upper() == clean_obj
+                            or any(sub.name.upper() == clean_obj or f"{co.name.upper()}.{sub.name.upper()}" == clean_obj for sub in co.subprograms)
+                            for co in s.code_objects
+                        )
+                        or any(tr.name.upper() == clean_obj for tr in s.triggers)
+                        or any(sq.name.upper() == clean_obj for sq in s.sequences)
+                        or any(idx.name.upper() == clean_obj for idx in s.indexes)
+                        or any(sn.name.upper() == clean_obj for sn in s.synonyms)
+                    ):
+                        target_schemas_list.append(s)
+            if target_schemas_list:
+                schemas_meta = target_schemas_list
+            else:
+                avail_str = ", ".join(s.schema_name for s in schemas_meta)
+                console.print(f"[yellow]! Object '[bold cyan]{object_name}[/bold cyan]' was not found in loaded snapshots ({avail_str}).[/yellow]")
+                raise typer.Exit(code=1)
+
         is_multi = len(schemas_meta) > 1
 
         totals = {
@@ -597,7 +681,7 @@ def compile(
         }
         total_md = 0
         total_ann = 0
-        total_objects_all = sum(count_schema_objects(s, cfg.object_types) for s in schemas_meta)
+        total_objects_all = 1 if object_name else sum(count_schema_objects(s, cfg.object_types) for s in schemas_meta)
 
         with _create_progress_bar() as progress:
             overall_task = (
@@ -605,7 +689,7 @@ def compile(
                     f"[bold cyan]Overall Compilation[/bold cyan] (0/{len(schemas_meta)} schemas)",
                     total=max(1, total_objects_all),
                 )
-                if is_multi
+                if is_multi and not object_name
                 else None
             )
             schema_task = progress.add_task("Compiling...", total=100)
@@ -652,6 +736,7 @@ def compile(
                     max_depth=depth,
                     generate_rag_chunks=rag_json,
                     progress_callback=_on_comp_progress,
+                    target_object=object_name,
                 )
                 total_md += len(generated_md)
                 total_ann += len(generated_ann)
@@ -863,7 +948,8 @@ def changes(
         raise typer.Exit(code=1)
 
     try:
-        schemas_meta = load_raw_schemas(cfg.rawPath)
+        target_schemas = cfg.schemas if not cfg.is_all_schemas else None
+        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas)
         cutoff = datetime.now() - timedelta(days=days)
         results = []
 
@@ -970,7 +1056,8 @@ def trace(
     try:
         if offline or not cfg.dsn:
             console.print(f"\n[dim]🔍 Offline Mode: Tracing dependencies for [bold yellow]{target_obj}[/bold yellow] (Depth: {depth})...[/dim]")
-            schemas_meta = load_raw_schemas(cfg.rawPath)
+            trace_target_schemas = [schema.strip().upper()] if schema else (cfg.schemas if not cfg.is_all_schemas else None)
+            schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=trace_target_schemas)
             if not schemas_meta:
                 console.print(f"[red]No snapshot found in '{cfg.rawPath}'. Run 'leai extract' first.[/red]")
                 raise typer.Exit(code=1)
@@ -981,7 +1068,8 @@ def trace(
                 trace_res = fetch_focal_trace(cfg, target_obj, schema_name=schema, max_depth=depth)
             except Exception as live_exc:
                 console.print(f"[yellow]Warning: online connection failed ({live_exc}). Falling back to local RAW snapshot...[/yellow]")
-                schemas_meta = load_raw_schemas(cfg.rawPath)
+                trace_target_schemas = [schema.strip().upper()] if schema else (cfg.schemas if not cfg.is_all_schemas else None)
+                schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=trace_target_schemas)
                 if not schemas_meta:
                     raise live_exc
                 trace_res = trace_raw_dependencies(schemas_meta, target_obj, max_depth=depth)
@@ -1046,7 +1134,7 @@ def trace(
 @app.command()
 def enrich(
     object_name: str = typer.Option(None, "--object-name", "-o", help="Specific object name to enrich (optional)"),
-    provider: str = typer.Option(None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, deepseek, qwen, kimi, ollama)"),
+    provider: str = typer.Option(None, "--provider", "-p", help="AI provider (openai, gemini, anthropic, grok, xai, deepseek, qwen, kimi, ollama)"),
     model: str = typer.Option(None, "--model", "-m", help="AI model name (e.g. gpt-4o, gemini-1.5-flash, claude-3-5-sonnet)"),
     overwrite: bool = typer.Option(False, "--overwrite", help="Force overwrite existing descriptions and comments"),
     schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to enrich (overrides leai.yml)"),
@@ -1063,7 +1151,8 @@ def enrich(
         console.print(f"[red]Config error:[/red] {exc}")
         raise typer.Exit(code=1)
 
-    schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=cfg.schemas if schemas else None)
+    target_schemas = cfg.schemas if not cfg.is_all_schemas else None
+    schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas)
     if not schemas_meta:
         console.print(f"[red]No snapshot found in '{cfg.rawPath}'. Run 'leai extract' first.[/red]")
         raise typer.Exit(code=1)
