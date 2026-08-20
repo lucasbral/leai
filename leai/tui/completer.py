@@ -20,6 +20,9 @@ SLASH_COMMANDS: list[tuple[str, str]] = [
     ("/schema", "Show active schema metadata & object counts"),
     ("/changes", "Inspect recent DDL modifications in database"),
     ("/model", "Switch AI provider and model dynamically"),
+    ("/agent", "Run specialized subagents (catalog, plsql, lineage, patch, doc)"),
+    ("/workflow", "Execute autonomous multi-step workflows (impact, refactor)"),
+    ("/copy", "Copy last AI response or specific code block to OS clipboard"),
     ("/save", "Save conversation transcript to Markdown file"),
     ("/audit", "Inspect AI reasoning, tool execution trace and session logs"),
     ("/tools", "Quick viewer for last turn's tool execution inputs/outputs"),
@@ -183,6 +186,60 @@ class LeaiCompleter(Completer):
                             )
                 return
 
+            # Sub-argument completion for /agent (Specialist Roles)
+            if cmd_name == "/agent":
+                specialists = [
+                    ("catalog_researcher", "Discovery of tables, columns, comments, constraints"),
+                    ("plsql_analyst", "Reverse engineering of packages, procedures, triggers"),
+                    ("lineage_auditor", "Dependency traversal and change impact risk audit"),
+                    ("patch_generator", "Production-grade PL/SQL refactoring, unit tests, rollback"),
+                    ("doc_annotator", "Business descriptions, rules, domain classification tags"),
+                    ("list", "List all registered subagent specialists"),
+                ]
+                if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
+                    a_query = parts[1].lower() if len(parts) > 1 else ""
+                    for role_name, role_desc in specialists:
+                        if role_name.startswith(a_query):
+                            yield Completion(
+                                text=role_name,
+                                start_position=-len(word_before_cursor),
+                                display=f"@{role_name}",
+                                display_meta=role_desc,
+                            )
+                return
+
+            # Sub-argument completion for /workflow (Pipelines)
+            if cmd_name == "/workflow":
+                workflows = [
+                    ("impact", "Impact assessment: constraints, lineage, code scan & risk matrix"),
+                    ("refactor", "Safe PL/SQL subprogram refactoring with unit test & rollback"),
+                    ("list", "List all available autonomous workflows"),
+                ]
+                if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
+                    w_query = parts[1].lower() if len(parts) > 1 else ""
+                    for wf_name, wf_desc in workflows:
+                        if wf_name.startswith(w_query):
+                            yield Completion(
+                                text=wf_name,
+                                start_position=-len(word_before_cursor),
+                                display=wf_name,
+                                display_meta=wf_desc,
+                            )
+                elif len(parts) >= 2:
+                    # Suggest DB objects as 2nd argument (target)
+                    arg_query = parts[-1].lstrip("@").upper() if not text.endswith(" ") else ""
+                    for s_name, name, otype, details in self._db_objects:
+                        qualified = f"{s_name}.{name}" if s_name else name
+                        if name.startswith(arg_query) or qualified.startswith(arg_query):
+                            meta_desc = f"{s_name} [{otype}] ({details})" if (s_name and details) else f"[{otype}] {details}".strip()
+                            yield Completion(
+                                text=name,
+                                start_position=-len(word_before_cursor),
+                                display=f"{s_name}.{name}" if s_name else name,
+                                display_meta=meta_desc,
+                            )
+                return
+
             # Sub-argument completion for /schema (Database Schemas)
             if cmd_name == "/schema":
                 if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
@@ -254,6 +311,28 @@ class LeaiCompleter(Completer):
                                 start_position=-len(word_before_cursor),
                                 display=a_opt,
                                 display_meta=a_meta,
+                            )
+                return
+            # Sub-argument completion for /copy and /yank
+            if cmd_name in ("/copy", "/yank"):
+                if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
+                    c_query = parts[1].lower() if len(parts) > 1 else ""
+                    copy_options = [
+                        ("all", "Copy entire AI response text (Default)"),
+                        ("code", "Copy first code block (SQL/PLSQL/etc)"),
+                        ("1", "Copy 1st code block"),
+                        ("2", "Copy 2nd code block"),
+                        ("3", "Copy 3rd code block"),
+                        ("sql", "Copy SQL / PL/SQL query or routine"),
+                        ("list", "List all code blocks available in last response"),
+                    ]
+                    for c_opt, c_meta in copy_options:
+                        if c_opt.startswith(c_query):
+                            yield Completion(
+                                text=c_opt,
+                                start_position=-len(word_before_cursor),
+                                display=c_opt,
+                                display_meta=c_meta,
                             )
                 return
 

@@ -54,6 +54,7 @@ class BaseLLMClient(ABC):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         system_prompt: str | None = None,
+        tool_choice_mode: str = "auto",
     ) -> tuple[str | None, list[dict[str, Any]]]:
         """Generates a chat turn supporting tool calls (Function Calling). Default fallback invokes generate_chat."""
         res = self.generate_chat(messages, system_prompt=system_prompt)

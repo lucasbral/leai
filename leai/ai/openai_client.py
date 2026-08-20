@@ -189,6 +189,7 @@ class OpenAICompatibleClient(BaseLLMClient):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         system_prompt: str | None = None,
+        tool_choice_mode: str = "auto",
     ) -> tuple[str | None, list[dict[str, Any]]]:
         all_msgs = []
         if system_prompt:
@@ -210,6 +211,10 @@ class OpenAICompatibleClient(BaseLLMClient):
         }
         if tools:
             payload["tools"] = tools
+            if tool_choice_mode == "required":
+                payload["tool_choice"] = "required"
+            elif tool_choice_mode == "none":
+                payload["tool_choice"] = "none"
 
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")

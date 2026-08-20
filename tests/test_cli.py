@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
+from leai import __version__
 from leai.cli import app
 from leai.models import ColumnMeta, SchemaMetadata, TableMeta
 from leai.raw import save_raw_schema
@@ -19,12 +20,12 @@ class CliIntegrationTests(unittest.TestCase):
     def test_version_option(self):
         result = self.runner.invoke(app, ["--version"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("LEAI CLI version 0.2.6", result.output)
+        self.assertIn(f"LEAI CLI version {__version__}", result.output)
 
     def test_version_short_option(self):
         result = self.runner.invoke(app, ["-v"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("LEAI CLI version 0.2.6", result.output)
+        self.assertIn(f"LEAI CLI version {__version__}", result.output)
 
     def test_help_command(self):
         result = self.runner.invoke(app, ["--help"])
@@ -467,6 +468,13 @@ docPath: "{(base / "docs").as_posix()}"
             mock_fetch_meta.assert_called_once()
             self.assertEqual(mock_fetch_meta.call_args[1]["schema_name"], "HADES")
             self.assertTrue((base / "raw" / "HADES" / "tables" / "T_LOG.json").exists())
+
+            # Test extract with --days 30 option
+            mock_fetch_meta.reset_mock()
+            result_days = self.runner.invoke(app, ["extract", "-c", str(cfg_file), "-s", "HADES", "--days", "30"])
+            self.assertEqual(result_days.exit_code, 0, msg=result_days.output)
+            self.assertIn("Incremental (last 30 days)", result_days.output)
+            self.assertEqual(mock_fetch_meta.call_args[1]["days"], 30)
 
     def test_compile_single_object_offline(self):
         with tempfile.TemporaryDirectory() as tmpdir:

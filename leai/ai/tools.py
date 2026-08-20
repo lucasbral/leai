@@ -6,7 +6,7 @@ import unicodedata
 from typing import Any
 
 from leai.annotations import load_annotation
-from leai.compression import extract_subprogram_block
+from leai.compression import extract_subprogram_block, minify_plsql_source
 from leai.config import LeaiConfig
 from leai.models import SchemaMetadata
 from leai.raw import trace_raw_dependencies
@@ -164,6 +164,28 @@ DATABASE_TOOLS_DEFINITIONS = [
                     },
                 },
                 "required": ["pattern"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delegate_to_specialist",
+            "description": "Delegates an in-depth investigation task to an autonomous specialized subagent (e.g. catalog discovery, deep PL/SQL reverse engineering, lineage risk audit, or patch generation).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "specialist_role": {
+                        "type": "string",
+                        "enum": ["catalog_researcher", "plsql_analyst", "lineage_auditor", "patch_generator", "doc_annotator"],
+                        "description": "Role of the specialist subagent: 'catalog_researcher' (tables/cols/synonyms), 'plsql_analyst' (code/logic/DMLs), 'lineage_auditor' (dependencies/consumers/risk), 'patch_generator' (scripts/tests), 'doc_annotator' (business rules/tags).",
+                    },
+                    "task": {
+                        "type": "string",
+                        "description": "Clear and detailed description of the objective/investigation for the specialist subagent.",
+                    },
+                },
+                "required": ["specialist_role", "task"],
             },
         },
     },
@@ -992,7 +1014,7 @@ def get_subprogram_source(
                                 "subprogram_name": sp.name,
                                 "subprogram_type": sp.subprogram_type,
                                 "schema": s_name,
-                                "source_code": code_src,
+                                "source_code": minify_plsql_source(code_src) if code_src else "",
                             }
 
                     if co.source:
@@ -1003,7 +1025,7 @@ def get_subprogram_source(
                                 "subprogram_name": sp_name,
                                 "subprogram_type": "SUBPROGRAM",
                                 "schema": s_name,
-                                "source_code": code_src,
+                                "source_code": minify_plsql_source(code_src),
                             }
 
         if package_found:
@@ -1022,7 +1044,9 @@ def get_subprogram_source(
                     "subprogram_name": co.name,
                     "subprogram_type": co.object_type.upper(),
                     "schema": s_name,
-                    "source_code": co.source or f"-- Objeto {co.object_type} {co.name} registrado sem fonte inline.",
+                    "source_code": minify_plsql_source(co.source)
+                    if co.source
+                    else f"-- Objeto {co.object_type} {co.name} registrado sem fonte inline.",
                 }
 
     # 3. Check Synonyms
@@ -1043,7 +1067,9 @@ def get_subprogram_source(
                         "subprogram_name": co.name,
                         "subprogram_type": co.object_type.upper(),
                         "schema": s_name,
-                        "source_code": co.source or f"-- Objeto {co.object_type} {co.name} registrado sem fonte inline.",
+                        "source_code": minify_plsql_source(co.source)
+                        if co.source
+                        else f"-- Objeto {co.object_type} {co.name} registrado sem fonte inline.",
                     }
                     if target_owner and s_name == target_owner:
                         matching_entry = entry
@@ -1061,7 +1087,7 @@ def get_subprogram_source(
                             "subprogram_name": sp.name,
                             "subprogram_type": sp.subprogram_type,
                             "schema": s_name,
-                            "source_code": code_src,
+                            "source_code": minify_plsql_source(code_src) if code_src else "",
                         }
                         if target_owner and s_name == target_owner:
                             matching_entry = entry
@@ -1222,10 +1248,21 @@ def execute_tool_call(
     arguments: dict[str, Any],
     schemas: list[SchemaMetadata],
     config: LeaiConfig,
+    client: Any = None,
 ) -> str:
     """Dispatches and executes the requested database tool call and returns a JSON string response."""
     try:
-        if tool_name == "search_business_documentation":
+        if tool_name == "delegate_to_specialist":
+            from leai.ai.subagents import execute_subagent
+
+            role = arguments.get("specialist_role") or arguments.get("role", "")
+            task = arguments.get("task", "")
+            if not client:
+                res = {"error": "LLM Client not available for delegating to specialist."}
+            else:
+                out = execute_subagent(role=role, task=task, schemas=schemas, config=config, client=client)
+                res = {"specialist": role, "result": out}
+        elif tool_name == "search_business_documentation":
             res = search_business_documentation(
                 schemas,
                 config=config,
@@ -1268,9 +1305,9 @@ def execute_tool_call(
             )
         else:
             res = {"error": f"Unknown tool: '{tool_name}'"}
-        return json.dumps(res, ensure_ascii=False, indent=2)
+        return json.dumps(res, ensure_ascii=False, separators=(",", ":"))
     except Exception as exc:
-        return json.dumps({"error": f"Tool execution failed ({tool_name}): {str(exc)}"})
+        return json.dumps({"error": f"Tool execution failed ({tool_name}): {str(exc)}"}, ensure_ascii=False, separators=(",", ":"))
 
 
 def summarize_tool_result(tool_name: str, arguments: dict[str, Any], raw_output: str) -> str:
@@ -1279,6 +1316,10 @@ def summarize_tool_result(tool_name: str, arguments: dict[str, Any], raw_output:
         data = json.loads(raw_output)
         if isinstance(data, dict) and "error" in data:
             return f"❌ {data['error']}"
+
+        if tool_name == "delegate_to_specialist":
+            role = arguments.get("specialist_role", "specialist")
+            return f"Specialist @{role} completed analysis"
 
         if tool_name == "search_column_comments":
             results = data if isinstance(data, list) else data.get("results", [])

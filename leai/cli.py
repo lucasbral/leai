@@ -198,6 +198,7 @@ def extract(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
     schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to extract (overrides leai.yml)"),
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to extract (e.g. tables, views, procedures)"),
+    days: int = typer.Option(None, "--days", "-d", help="Extract only objects modified in the last N days (incremental extraction)"),
 ) -> None:
     """Extracts raw technical snapshot from Oracle database into rawPath."""
     start_time = time.perf_counter()
@@ -219,8 +220,9 @@ def extract(
             connection.close()
 
         is_multi = len(target_schemas) > 1 or cfg.is_all_schemas
+        days_banner = f" • [bold yellow]Incremental (last {days} days)[/bold yellow]" if days else ""
         console.print(
-            f"[cyan]Schemas to extract:[/cyan] [bold]{', '.join(target_schemas[:10])}{'...' if len(target_schemas) > 10 else ''}[/bold] (Total: {len(target_schemas)})\n"
+            f"[cyan]Schemas to extract:[/cyan] [bold]{', '.join(target_schemas[:10])}{'...' if len(target_schemas) > 10 else ''}[/bold] (Total: {len(target_schemas)}){days_banner}\n"
         )
 
         totals = {
@@ -266,7 +268,7 @@ def extract(
                     )
                     progress.refresh()
 
-                schema_meta = fetch_schema_metadata(cfg, schema_name=schema_name, callback=_cb)
+                schema_meta = fetch_schema_metadata(cfg, schema_name=schema_name, callback=_cb, days=days)
 
                 totals["tables"] += len(schema_meta.tables)
                 totals["views"] += len(schema_meta.views)
@@ -476,8 +478,10 @@ def chat(
     ),
     model: str = typer.Option(None, "--model", "-m", help="AI model name"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    web: bool = typer.Option(False, "--web", "-w", help="Launch and open the interactive Web Chat Studio in browser"),
+    port: int = typer.Option(8000, "--port", help="Web server port (used with --web)"),
 ) -> None:
-    """Starts an interactive OpenCode-style TUI copilot with RAG, slash commands and @ mentions."""
+    """Starts an interactive OpenCode-style TUI copilot (or Web Chat with --web) with RAG, tools and @ mentions."""
     try:
         cfg = load_config(config)
     except ConfigError as exc:
@@ -494,6 +498,37 @@ def chat(
     except Exception as exc:
         console.print(f"[red]Error initializing AI client:[/red] {exc}")
         raise typer.Exit(code=1)
+
+    if web:
+        from leai.web import start_server
+
+        url = f"http://127.0.0.1:{port}/chat"
+        console.print()
+        console.print(
+            Panel(
+                f"[bold cyan]⚡ LEAI AI Copilot & Code Studio (Web)[/bold cyan]\n\n"
+                f"[bold white]URL:[/bold white] [bold yellow underline]{url}[/bold yellow underline]\n"
+                f"[bold white]Schemas Loaded:[/bold white] [cyan]{len(schemas)}[/cyan] schemas\n"
+                f"[bold white]AI Model:[/bold white] [bold green]{client.model if client else 'Offline'}[/bold green]\n\n"
+                f"[dim]Features: Chat sessions, code copying, live tool calling streaming, @mention autocomplete.[/dim]\n"
+                f"[dim]Press [bold red]Ctrl+C[/bold red] to stop server.[/dim]",
+                title="[bold green]💬 Web Chat Running[/bold green]",
+                box=box.ROUNDED,
+                border_style="green",
+            )
+        )
+        start_server(
+            config=cfg,
+            schemas=schemas,
+            client=client,
+            provider_name=provider,
+            port=port,
+            open_browser=True,
+            in_background=False,
+            config_path=config,
+            initial_path="/chat",
+        )
+        return
 
     session = InteractiveTUISession(
         schemas=schemas,
@@ -1295,6 +1330,7 @@ def serve(
     open_browser: bool = typer.Option(True, "--open/--no-open", help="Automatically open default browser"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
     provider: str = typer.Option(None, "--provider", help="AI provider override"),
+    chat: bool = typer.Option(False, "--chat", help="Open browser directly on the AI Copilot Chat Studio (/chat)"),
 ) -> None:
     """Launch interactive LEAI Web Documentation & Annotation Studio in the browser."""
     try:
@@ -1310,17 +1346,21 @@ def serve(
     except Exception:
         client = None
 
-    url = f"http://{host}:{port}"
+    target_path = "/chat" if chat else "/"
+    url = f"http://{host}:{port}{target_path if chat else ''}"
+    panel_title = "💬 Web Chat Running" if chat else "🌐 Web Studio Running"
+    banner_title = "⚡ LEAI AI Copilot & Code Studio (Web)" if chat else "⚡ LEAI Web Documentation & Annotation Studio"
+
     console.print()
     console.print(
         Panel(
-            f"[bold cyan]⚡ LEAI Web Documentation & Annotation Studio[/bold cyan]\n\n"
+            f"[bold cyan]{banner_title}[/bold cyan]\n\n"
             f"[bold white]URL:[/bold white] [bold yellow underline]{url}[/bold yellow underline]\n"
             f"[bold white]Schemas Loaded:[/bold white] [cyan]{len(schemas_meta)}[/cyan] schemas\n"
             f"[bold white]AI Model:[/bold white] [bold green]{client.model if client else 'Offline'}[/bold green]\n\n"
-            f"[dim]Features: Real-time annotation editing, instant Markdown sync, AI enrichment, lineage graphs.[/dim]\n"
+            f"[dim]Features: Real-time chat & code copy, annotation editing, instant Markdown sync, lineage graphs.[/dim]\n"
             f"[dim]Press [bold red]Ctrl+C[/bold red] to stop server.[/dim]",
-            title="[bold green]🌐 Web Studio Running[/bold green]",
+            title=f"[bold green]{panel_title}[/bold green]",
             box=box.ROUNDED,
             border_style="green",
         )
@@ -1338,4 +1378,231 @@ def serve(
         open_browser=open_browser,
         in_background=False,
         config_path=config,
+        initial_path=target_path,
     )
+
+
+# ==============================================================================
+# SUBAGENTS CLI SUB-COMMANDS (`leai agent`)
+# ==============================================================================
+agent_app = typer.Typer(help="Execute specialized autonomous subagents directly.")
+app.add_typer(agent_app, name="agent")
+
+
+@agent_app.command("list")
+def list_agents_command() -> None:
+    """List all available specialized subagents and their capabilities."""
+    from leai.ai.subagents import list_registered_subagents
+
+    agents = list_registered_subagents()
+    table = Table(
+        title="[bold cyan]⚡ LEAI Specialized Subagents Registry[/bold cyan]",
+        box=box.ROUNDED,
+        header_style="bold magenta",
+    )
+    table.add_column("Role / Command ID", style="bold yellow")
+    table.add_column("Specialist Name", style="bold white")
+    table.add_column("Description", style="dim")
+    table.add_column("Allowed Tools", style="cyan")
+
+    for a in agents:
+        table.add_row(
+            a["role"],
+            a["name"],
+            a["description"],
+            ", ".join(a["allowed_tools"]),
+        )
+
+    console.print()
+    console.print(table)
+    console.print()
+    console.print("[dim]Usage example: [bold cyan]leai agent run plsql_analyst 'Explain routine X'[/bold cyan][/dim]\n")
+
+
+@agent_app.command("run")
+def run_agent_command(
+    role: str = typer.Argument(
+        ..., help="Specialist role: catalog_researcher, plsql_analyst, lineage_auditor, patch_generator, doc_annotator"
+    ),
+    task: str = typer.Argument(..., help="Objective, task, or question for the specialist"),
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    provider: str = typer.Option(None, "--provider", help="AI provider override"),
+    model: str = typer.Option(None, "--model", "-m", help="AI model override"),
+) -> None:
+    """Run a specialized subagent in clean, isolated context with real-time streaming."""
+    from leai.ai.subagents import SUBAGENT_REGISTRY, execute_subagent
+
+    role_clean = role.strip().lower()
+    if role_clean not in SUBAGENT_REGISTRY:
+        available = ", ".join(SUBAGENT_REGISTRY.keys())
+        console.print(f"[red]Error:[/red] Unknown subagent role '[bold yellow]{role}[/bold yellow]'.")
+        console.print(f"[dim]Available specialists: {available}[/dim]")
+        raise typer.Exit(code=1)
+
+    try:
+        cfg = load_config(config)
+    except Exception:
+        cfg = LeaiConfig()
+
+    schemas_meta = load_raw_schemas(cfg.rawPath)
+    if not schemas_meta:
+        console.print("[yellow]Warning:[/yellow] No offline schemas found in rawPath. Run [bold cyan]leai extract[/bold cyan] first.")
+
+    try:
+        client = get_llm_client(cfg, provider_override=provider)
+        if model:
+            client.model = model
+    except Exception as exc:
+        console.print(f"[red]Error initializing AI client:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    spec = SUBAGENT_REGISTRY[role_clean]
+    console.print()
+    console.print(
+        Panel(
+            f"[bold white]Specialist:[/bold white] [bold yellow]{spec.name}[/bold yellow] ([cyan]@{role_clean}[/cyan])\n"
+            f"[bold white]AI Model:[/bold white] [green]{client.model}[/green] ({client.__class__.__name__})\n"
+            f"[bold white]Task:[/bold white] {task}",
+            title="[bold cyan]🤖 Dispatching to Subagent Specialist[/bold cyan]",
+            border_style="cyan",
+            box=box.ROUNDED,
+        )
+    )
+    console.print()
+
+    def _on_tool_start(t_name: str, t_args: dict, step: int):
+        args_str = ", ".join(f"{k}={repr(v)[:25]}" for k, v in t_args.items())
+        console.print(f"[dim]⚡ [{step}] {t_name}({args_str}) ➔ Executing...[/dim]")
+
+    def _on_tool_end(t_name: str, t_out: str, summary: str, dur: float):
+        console.print(f"   [green]✓[/green] [dim]{summary} ({dur:.2f}s)[/dim]")
+
+    try:
+        reply = execute_subagent(
+            role=role_clean,
+            task=task,
+            schemas=schemas_meta,
+            config=cfg,
+            client=client,
+            on_tool_start=_on_tool_start,
+            on_tool_end=_on_tool_end,
+        )
+        console.print()
+        console.print(Panel(reply, title=f"[bold green]✨ {spec.name} Output[/bold green]", border_style="green"))
+    except Exception as exc:
+        console.print(f"[red]Execution failed:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
+# ==============================================================================
+# WORKFLOWS CLI SUB-COMMANDS (`leai workflow`)
+# ==============================================================================
+workflow_app = typer.Typer(help="Execute autonomous multi-step database workflows.")
+app.add_typer(workflow_app, name="workflow")
+
+
+@workflow_app.command("list")
+def list_workflows_command() -> None:
+    """List all available autonomous database workflows and pipelines."""
+    from leai.workflows import list_workflows
+
+    workflows = list_workflows()
+    table = Table(
+        title="[bold cyan]⚙️ LEAI Autonomous Workflows Registry[/bold cyan]",
+        box=box.ROUNDED,
+        header_style="bold magenta",
+    )
+    table.add_column("Workflow Name", style="bold yellow")
+    table.add_column("Aliases", style="cyan")
+    table.add_column("Description", style="white")
+
+    for w in workflows:
+        table.add_row(
+            w["name"],
+            ", ".join(w["aliases"]) if w["aliases"] else "-",
+            w["description"],
+        )
+
+    console.print()
+    console.print(table)
+    console.print()
+    console.print("[dim]Usage example: [bold cyan]leai workflow run impact VINCULOS[/bold cyan][/dim]\n")
+
+
+@workflow_app.command("run")
+def run_workflow_command(
+    name: str = typer.Argument(..., help="Workflow name or alias: impact-analysis, impact, safe-refactor, refactor"),
+    target: str = typer.Argument(..., help="Target table, view, procedure, or package name"),
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    provider: str = typer.Option(None, "--provider", help="AI provider override"),
+    output: Path = typer.Option(None, "--output", "-o", help="Optional path to export generated report Markdown"),
+) -> None:
+    """Run an autonomous multi-step workflow pipeline against a database object."""
+    from leai.workflows import get_workflow
+
+    try:
+        cfg = load_config(config)
+    except Exception:
+        cfg = LeaiConfig()
+
+    schemas_meta = load_raw_schemas(cfg.rawPath)
+    if not schemas_meta:
+        console.print("[yellow]Warning:[/yellow] No offline schemas found in rawPath. Run [bold cyan]leai extract[/bold cyan] first.")
+
+    try:
+        client = get_llm_client(cfg, provider_override=provider)
+    except Exception as exc:
+        console.print(f"[red]Error initializing AI client:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    wf = get_workflow(name=name, schemas=schemas_meta, config=cfg, client=client)
+    if not wf:
+        from leai.workflows import WORKFLOW_REGISTRY
+
+        available = ", ".join(sorted(set(WORKFLOW_REGISTRY.keys())))
+        console.print(f"[red]Error:[/red] Unknown workflow '[bold yellow]{name}[/bold yellow]'. Available: {available}")
+        raise typer.Exit(code=1)
+
+    console.print()
+    console.print(
+        Panel(
+            f"[bold white]Workflow:[/bold white] [bold yellow]{wf.name}[/bold yellow]\n"
+            f"[bold white]Target Object:[/bold white] [bold cyan]{target.upper()}[/bold cyan]\n"
+            f"[bold white]Description:[/bold white] {wf.description}\n"
+            f"[bold white]AI Engine:[/bold white] [green]{client.model}[/green]",
+            title="[bold cyan]⚙️ Starting Autonomous Workflow Pipeline[/bold cyan]",
+            border_style="cyan",
+            box=box.ROUNDED,
+        )
+    )
+    console.print()
+
+    def _on_step_start(step):
+        console.print(f"[bold cyan]▶ Step {step.step_number}: {step.name}[/bold cyan] ➔ [dim]{step.description}[/dim]")
+
+    def _on_step_end(step):
+        status_color = "green" if step.status == "COMPLETED" else "red"
+        console.print(f"  [{status_color}]✓ {step.output_summary} ({step.duration_seconds}s)[/{status_color}]\n")
+
+    try:
+        result = wf.run(
+            target=target,
+            on_step_start=_on_step_start,
+            on_step_end=_on_step_end,
+        )
+
+        console.print(
+            Panel(
+                result.report_markdown,
+                title=f"[bold green]✨ {wf.name.upper()} Pipeline Completed ({result.total_duration_seconds}s)[/bold green]",
+                border_style="green",
+            )
+        )
+
+        if output or result.success:
+            saved_path = result.export_report(output)
+            console.print(f"[bold green]✓[/bold green] [dim]Report exported to: [bold cyan]{saved_path}[/bold cyan][/dim]\n")
+
+    except Exception as exc:
+        console.print(f"[red]Workflow execution failed:[/red] {exc}")
+        raise typer.Exit(code=1)

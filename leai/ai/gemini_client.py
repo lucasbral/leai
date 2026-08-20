@@ -223,6 +223,7 @@ class GeminiClient(BaseLLMClient):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         system_prompt: str | None = None,
+        tool_choice_mode: str = "auto",
     ) -> tuple[str | None, list[dict[str, Any]]]:
         if not self.api_key:
             raise ValueError("Gemini API key (GEMINI_API_KEY) is not configured.")
@@ -304,6 +305,8 @@ class GeminiClient(BaseLLMClient):
 
         if tools:
             payload["tools"] = _convert_tools_to_gemini(tools)
+            gemini_mode = {"auto": "AUTO", "required": "ANY", "none": "NONE"}.get(tool_choice_mode, "AUTO")
+            payload["toolConfig"] = {"functionCallingConfig": {"mode": gemini_mode}}
 
         if system_prompt:
             payload["systemInstruction"] = {

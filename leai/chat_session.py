@@ -46,11 +46,25 @@ class ChatSession:
         if hasattr(self, "agent_engine") and self.agent_engine:
             self.agent_engine.client = new_client
 
+    def _safe_truncate_messages(self) -> None:
+        """Truncates message history to max_history_turns while ensuring history begins at a clean user turn."""
+        max_msgs = self.max_history_turns * 2
+        if len(self.messages) <= max_msgs:
+            return
+
+        # Start checking from the naive cut point
+        cut_idx = len(self.messages) - max_msgs
+        while cut_idx < len(self.messages):
+            if self.messages[cut_idx].get("role") == "user":
+                break
+            cut_idx += 1
+
+        if 0 < cut_idx < len(self.messages):
+            self.messages = self.messages[cut_idx:]
+
     def add_user_message(self, content: str) -> None:
         self.messages.append({"role": "user", "content": content})
-        # Limit history to prevent context window overflow
-        if len(self.messages) > self.max_history_turns * 2:
-            self.messages = self.messages[-(self.max_history_turns * 2) :]
+        self._safe_truncate_messages()
 
     def add_assistant_message(self, content: str) -> None:
         self.messages.append({"role": "assistant", "content": content})
@@ -103,8 +117,9 @@ class ChatSession:
         on_token: Callable[[str], None] | None = None,
     ) -> tuple[str, list[str]]:
         """Processes user input, runs agent tool execution loop, and retrieves AI response."""
-        # 1. Update RAG context with the new question
-        rag_context, detected = build_rag_context(user_input, self.schemas, self.config)
+        # 1. Update RAG context with the new question (inject compact catalog only on initial turn to save tokens)
+        is_first_turn = len(self.messages) == 0
+        rag_context, detected = build_rag_context(user_input, self.schemas, self.config, include_catalog=is_first_turn)
         for entity in detected:
             self.active_entities.add(entity)
 
