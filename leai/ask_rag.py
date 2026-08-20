@@ -34,6 +34,7 @@ def build_rag_context(
     question: str,
     schemas: list[SchemaMetadata],
     config: LeaiConfig,
+    include_catalog: bool = True,
 ) -> tuple[str, list[str]]:
     """Builds the contextual RAG payload combining compressed schema overview and detailed trace with PL/SQL minification."""
     # 1. Map all available object names, subprograms, and synonyms
@@ -105,11 +106,12 @@ def build_rag_context(
                     f"\n--- START OF FOCAL DOSSIER: {target_trace} ---\n{dossier_text}\n--- END OF FOCAL DOSSIER: {target_trace} ---"
                 )
 
-    # 4. Add high-level macro catalog summary in compact notation (low token consumption)
-    context_parts.append("\n### [COMPACT SCHEMA CATALOG]")
-    for s in schemas:
-        compact_text = compact_schema_notation(s, max_tables=50)
-        context_parts.append(compact_text)
+    # 4. Add high-level macro catalog summary in compact notation (only if requested, e.g. initial turn)
+    if include_catalog:
+        context_parts.append("\n### [COMPACT SCHEMA CATALOG]")
+        for s in schemas:
+            compact_text = compact_schema_notation(s, max_tables=50)
+            context_parts.append(compact_text)
 
     full_context = "\n\n".join(context_parts)
     return full_context, detected_entities

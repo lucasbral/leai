@@ -112,6 +112,25 @@ class ChatSessionTests(unittest.TestCase):
         self.assertTrue(len(chunks) > 0)
         self.assertEqual("".join(chunks), reply)
 
+    def test_chat_safe_truncation(self):
+        # Create session with max_history_turns = 2 (max 4 messages)
+        short_session = ChatSession(
+            schemas=[self.schema],
+            config=self.cfg,
+            client=self.client,
+            max_history_turns=2,
+        )
+        # Add 6 turns (12 messages)
+        for i in range(1, 7):
+            short_session.add_user_message(f"User msg {i}")
+            short_session.add_assistant_message(f"Asst msg {i}")
+
+        # The message list should be bounded and start with a user message
+        self.assertLessEqual(len(short_session.messages), 4)
+        self.assertEqual(short_session.messages[0]["role"], "user")
+        self.assertEqual(short_session.messages[-1]["role"], "assistant")
+        self.assertEqual(short_session.messages[-1]["content"], "Asst msg 6")
+
 
 if __name__ == "__main__":
     unittest.main()

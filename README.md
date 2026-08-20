@@ -255,18 +255,27 @@ leai generate -s HR -t tables -t packages --depth 2
 
 ---
 
-### 2. `leai extract`
-Connects to Oracle and extracts raw JSON technical snapshots into the `raw/` directory.
+### 4. `leai extract`
+Connects to Oracle and extracts raw JSON technical snapshots into the `raw/` directory. Supports **incremental extraction** via `--days` to extract only objects modified in the last N days and merge them directly into the local snapshot.
 
 | Parameter / Flag | Type | Description |
 | :--- | :--- | :--- |
 | `-c`, `--config PATH` | Option | Path to `leai.yml`. |
 | `-s`, `--schema TEXT` | Option | Extract only specific schema(s). |
-| `-t`, `--object-type TEXT` | Option | Filter object types to extract. |
+| `-t`, `--object-type TEXT` | Option | Filter object types to extract (e.g. `-t tables -t packages`). |
+| `-d`, `--days INT` | Option | **Incremental Extraction:** Extract only objects modified in the last N days based on `LAST_DDL_TIME`. |
 
 ```bash
+# Full extraction
 leai extract
-leai extract -s HR -t tables -t views
+
+# Incremental extraction (objects modified in the last 30 days)
+leai extract --days 30
+leai extract -s HR -d 7
+
+# In TUI session
+/extract 30
+/extract HR 30
 ```
 
 ---
@@ -372,17 +381,24 @@ Launches an interactive multi-turn terminal chat session with persistent convers
 | `-p`, `--provider TEXT` | Option | AI provider to use. |
 | `-m`, `--model TEXT` | Option | Model identifier to use. |
 | `-c`, `--config PATH` | Option | Path to `leai.yml`. |
+| `-w`, `--web` | Flag | Launch and open the interactive Web Chat Studio in browser (`http://localhost:8000/chat`). |
 
 ```bash
+# Interactive TUI Copilot in terminal
 leai chat
 leai chat -p gemini -m gemini-2.5-flash
 leai chat -p ollama -m qwen2.5-coder:14b
+
+# Interactive Web Chat Studio in browser
+leai chat --web
+leai serve --chat
 ```
 
 #### 🎮 Interactive In-Session Features (OpenCode Style):
-- **🎨 Catppuccin Mocha Visual Theme:** Rounded border cards, clean status indicators, and syntax highlighting for SQL, PL/SQL, JSON and Diffs.
+- **🎨 Catppuccin Mocha Visual Theme:** Clean borderless cards, status indicators, and syntax highlighting for SQL, PL/SQL, JSON and Diffs.
 - **⚡ Live Reasoning & Tool Call Timeline:** Step-by-step progress tracking with animated spinners, execution durations, and compact result summaries.
-- **🌊 Token-by-Token Streaming:** Real-time markdown streaming across OpenAI, Gemini, and Anthropic providers.
+- **📋 Seamless One-Click Code Copy:** Clean selection without vertical box bars (`│`), plus `/copy`, `/copy 1`, `/copy sql` commands to copy directly to OS clipboard.
+- **🌐 Interactive Web Chat Studio:** Rich web interface with chat threads, SSE real-time streaming, 1-click code copying, and `@mention` autocomplete.
 - **⌨️ Smart Autocomplete & Multiline:**
   - Type `/` to browse and autocomplete slash commands with inline descriptions.
   - Type `@` to autocomplete database objects (`@EMPLOYEES`) with type badges (`[TABLE]`, `[VIEW]`, `[PACKAGE]`, `[PROCEDURE]`).
@@ -392,6 +408,7 @@ leai chat -p ollama -m qwen2.5-coder:14b
 #### 📋 Complete In-Session Slash Commands:
 | Command | Category | Description |
 | :--- | :--- | :--- |
+| `/copy [all\|code\|N]` | Clipboard | Copy last AI response or specific code block directly to OS clipboard. |
 | `/doc [obj]` | Documentation | Interactive in-terminal YAML annotation & documentation editor. |
 | `/enrich [obj]` | AI Studio | Auto-enrich business descriptions & rules with LLM. |
 | `/compile [obj]` | Pipeline | Compile final Markdown docs in `docs/` (supports single object). |

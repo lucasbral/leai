@@ -18,6 +18,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn, TimeElapsedColumn
 from rich.prompt import Prompt
+from rich.rule import Rule
 from rich.syntax import Syntax
 from rich.table import Column, Table
 from rich.tree import Tree
@@ -26,6 +27,7 @@ from leai.ai import get_llm_client
 from leai.ai.base import BaseLLMClient
 from leai.audit import SessionAuditLogger
 from leai.chat_session import ChatSession
+from leai.clipboard import copy_to_clipboard, extract_code_blocks
 from leai.config import LeaiConfig
 from leai.docs import (
     _calculate_risk_level,
@@ -105,6 +107,8 @@ class InteractiveTUISession:
         self.provider_name = (provider_name or config.ai.default_provider or "openai").lower()
         self.session = ChatSession(schemas=schemas, config=config, client=client)
         self.last_latency: float | None = None
+        self.last_ai_reply: str = ""
+        self.last_code_blocks: list[dict] = []
         self.completer = LeaiCompleter(schemas, config=config)
         self.audit_logger = SessionAuditLogger()
         self.web_server = None
@@ -514,6 +518,127 @@ class InteractiveTUISession:
                     console.print(f"[red]Failed to switch model:[/red] {exc}")
             return True
 
+        if cmd == "/agent":
+            from leai.ai.subagents import SUBAGENT_REGISTRY, execute_subagent, list_registered_subagents
+
+            if len(parts) < 2 or parts[1].lower() == "list":
+                agents = list_registered_subagents()
+                tbl = Table(title="[bold cyan]⚡ LEAI Specialized Subagents[/bold cyan]", box=box.ROUNDED)
+                tbl.add_column("Role / Command", style="bold yellow")
+                tbl.add_column("Specialist Name", style="bold white")
+                tbl.add_column("Description", style="dim")
+                for a in agents:
+                    tbl.add_row(f"/agent {a['role']}", a["name"], a["description"])
+                console.print()
+                console.print(tbl)
+                console.print("[dim]Usage: [bold cyan]/agent <role> <task/question>[/bold cyan][/dim]\n")
+                return True
+
+            target_role = parts[1].lower().lstrip("@")
+            if target_role not in SUBAGENT_REGISTRY:
+                available = ", ".join(SUBAGENT_REGISTRY.keys())
+                console.print(f"[red]Unknown specialist role:[/red] '{target_role}'. Available: {available}")
+                return True
+
+            if len(parts) < 3:
+                console.print(f"[yellow]Usage: /agent {target_role} <task or question>[/yellow]")
+                return True
+
+            task_query = " ".join(parts[2:])
+            spec = SUBAGENT_REGISTRY[target_role]
+            console.print()
+            console.print(f"[dim]🤖 Consulting Specialist [bold yellow]{spec.name}[/bold yellow]...[/dim]")
+
+            def _on_sub_start(t_name: str, t_args: dict, step: int):
+                args_str = ", ".join(f"{k}={repr(v)[:20]}" for k, v in t_args.items())
+                console.print(f"[dim]  ⚡ [{step}] {t_name}({args_str}) ➔ Executing...[/dim]")
+
+            def _on_sub_end(t_name: str, t_out: str, summary: str, dur: float):
+                console.print(f"     [green]✓[/green] [dim]{summary} ({dur:.2f}s)[/dim]")
+
+            try:
+                sub_reply = execute_subagent(
+                    role=target_role,
+                    task=task_query,
+                    schemas=self.schemas,
+                    config=self.config,
+                    client=self.client,
+                    on_tool_start=_on_sub_start,
+                    on_tool_end=_on_sub_end,
+                )
+                console.print()
+                console.print(Panel(sub_reply, title=f"[bold green]✨ {spec.name}[/bold green]", border_style="green"))
+                console.print()
+            except Exception as exc:
+                console.print(f"[red]Specialist error:[/red] {exc}")
+            return True
+
+        if cmd == "/workflow":
+            from leai.workflows import get_workflow, list_workflows
+
+            if len(parts) < 2 or parts[1].lower() == "list":
+                wfs = list_workflows()
+                tbl = Table(title="[bold cyan]⚙️ LEAI Autonomous Workflows[/bold cyan]", box=box.ROUNDED)
+                tbl.add_column("Workflow / Command", style="bold yellow")
+                tbl.add_column("Description", style="white")
+                for w in wfs:
+                    tbl.add_row(f"/workflow {w['name']}", w["description"])
+                console.print()
+                console.print(tbl)
+                console.print(
+                    "[dim]Usage: [bold cyan]/workflow <name> <target_object>[/bold cyan] (e.g. /workflow impact VINCULOS)[/dim]\n"
+                )
+                return True
+
+            wf_name = parts[1].lower()
+            if wf_name in ("run", "exec") and len(parts) >= 4:
+                wf_name = parts[2].lower()
+                target_obj = parts[3].lstrip("@")
+            elif len(parts) >= 3:
+                target_obj = parts[2].lstrip("@")
+            else:
+                console.print(f"[yellow]Usage: /workflow {wf_name} <target_object>[/yellow]")
+                return True
+
+            wf = get_workflow(name=wf_name, schemas=self.schemas, config=self.config, client=self.client)
+            if not wf:
+                from leai.workflows import WORKFLOW_REGISTRY
+
+                available = ", ".join(sorted(set(WORKFLOW_REGISTRY.keys())))
+                console.print(f"[red]Unknown workflow:[/red] '{wf_name}'. Available: {available}")
+                return True
+
+            console.print()
+            console.print(
+                f"[bold cyan]⚙️ Running workflow [bold yellow]{wf.name}[/bold yellow] on [bold white]{target_obj.upper()}[/bold white]...[/bold cyan]"
+            )
+
+            def _on_wf_start(step):
+                console.print(f"[dim]  ▶ Step {step.step_number}: {step.name}[/dim]")
+
+            def _on_wf_end(step):
+                console.print(f"    [green]✓[/green] [dim]{step.output_summary} ({step.duration_seconds}s)[/dim]")
+
+            try:
+                res = wf.run(target=target_obj, on_step_start=_on_wf_start, on_step_end=_on_wf_end)
+                console.print()
+                console.print(
+                    Panel(
+                        res.report_markdown,
+                        title=f"[bold green]✨ {wf.name.upper()} Completed ({res.total_duration_seconds}s)[/bold green]",
+                        border_style="green",
+                    )
+                )
+                console.print()
+            except Exception as exc:
+                console.print(f"[red]Workflow error:[/red] {exc}")
+            return True
+
+        if cmd in ("/copy", "/yank"):
+            sub_args = parts[1:] if len(parts) > 1 else []
+            self._run_copy(sub_args)
+            return True
+
         if cmd == "/save":
             out_file = Path(parts[1].strip()) if len(parts) > 1 else None
             saved = self.session.save_transcript(out_file)
@@ -537,6 +662,82 @@ class InteractiveTUISession:
         console.print(f"[yellow]Unknown command '{cmd}'. Type [bold cyan]/help[/bold cyan] for available commands.[/yellow]")
         return True
 
+    def _run_copy(self, args: list[str]) -> None:
+        """Copies the last AI assistant response or specific code block to OS clipboard."""
+        if not self.last_ai_reply:
+            console.print("[yellow]! Nenhuma resposta da IA para copiar nesta sessão.[/yellow]\n")
+            return
+
+        arg0 = args[0].strip().lower() if args else "all"
+
+        if arg0 == "list":
+            if not self.last_code_blocks:
+                console.print("[dim]Nenhum bloco de código encontrado na última resposta.[/dim]\n")
+                return
+            tbl = Table(title="[bold cyan]📋 Blocos de Código na Última Resposta[/bold cyan]", box=box.ROUNDED)
+            tbl.add_column("#", style="bold yellow", justify="center", width=4)
+            tbl.add_column("Linguagem", style="bold cyan", width=12)
+            tbl.add_column("Linhas", justify="right", width=8)
+            tbl.add_column("Prévia", style="dim")
+            for b in self.last_code_blocks:
+                preview = b["code"].splitlines()[0] if b["code"] else ""
+                if len(preview) > 60:
+                    preview = preview[:57] + "..."
+                tbl.add_row(str(b["index"]), b["language"].upper(), str(b["lines"]), preview)
+            console.print()
+            console.print(tbl)
+            console.print("[dim]Para copiar: [bold cyan]/copy <número>[/bold cyan] (ex: /copy 1)[/dim]\n")
+            return
+
+        # Check if user specified a block number (e.g. /copy 1, /copy 2)
+        if arg0.isdigit():
+            idx = int(arg0) - 1
+            if idx < 0 or idx >= len(self.last_code_blocks):
+                console.print(f"[red]Bloco #{arg0} não encontrado. Total de blocos disponíveis: {len(self.last_code_blocks)}[/red]\n")
+                return
+            block = self.last_code_blocks[idx]
+            ok, msg = copy_to_clipboard(block["code"])
+            if ok:
+                console.print(
+                    f"[green]✓ Bloco #{block['index']} [{block['language'].upper()}] ({block['lines']} linhas) copiado para a área de transferência![/green]\n"
+                )
+            else:
+                console.print(f"[red]✕ {msg}[/red]\n")
+            return
+
+        # Check if user specified /copy code, /copy sql, /copy plsql
+        if arg0 in ("code", "sql", "plsql", "python", "json"):
+            target_lang = "sql" if arg0 == "plsql" else arg0
+            matching = [
+                b
+                for b in self.last_code_blocks
+                if (target_lang == "code" or b["language"] == target_lang or (target_lang == "sql" and "sql" in b["language"]))
+            ]
+            if not matching:
+                if self.last_code_blocks:
+                    matching = [self.last_code_blocks[0]]
+                else:
+                    console.print("[yellow]! Nenhum bloco de código encontrado na última resposta.[/yellow]\n")
+                    return
+            block = matching[0]
+            ok, msg = copy_to_clipboard(block["code"])
+            if ok:
+                console.print(
+                    f"[green]✓ Bloco #{block['index']} [{block['language'].upper()}] ({block['lines']} linhas) copiado para a área de transferência![/green]\n"
+                )
+            else:
+                console.print(f"[red]✕ {msg}[/red]\n")
+            return
+
+        # Default: copy entire text
+        ok, msg = copy_to_clipboard(self.last_ai_reply)
+        if ok:
+            console.print(
+                f"[green]✓ Resposta completa copiada para a área de transferência ({len(self.last_ai_reply)} caracteres)![/green]\n"
+            )
+        else:
+            console.print(f"[red]✕ {msg}[/red]\n")
+
     def _run_doc(self, object_name: str | None = None) -> None:
         """Launches the in-terminal interactive documentation editor."""
         if not self.schemas:
@@ -552,7 +753,7 @@ class InteractiveTUISession:
             self.completer.update_schemas(self.schemas)
             self.session.update_schemas(self.schemas)
 
-    def _run_extract(self, schemas_arg: list[str] | None = None) -> None:
+    def _run_extract(self, schemas_arg: list[str] | None = None, days: int | None = None) -> None:
         """Extracts metadata snapshots from Oracle into rawPath."""
         import oracledb
 
@@ -561,8 +762,22 @@ class InteractiveTUISession:
             return
 
         extract_cfg = self.config.model_copy()
+        target_schemas_input = []
         if schemas_arg:
-            extract_cfg.schemas = [s.strip().upper() for s in schemas_arg]
+            for s in schemas_arg:
+                s_clean = s.strip()
+                if s_clean.isdigit() and days is None:
+                    days = int(s_clean)
+                elif s_clean.startswith(("--days=", "-d=")):
+                    try:
+                        days = int(s_clean.split("=")[1])
+                    except Exception:
+                        pass
+                elif s_clean not in ("--days", "-d"):
+                    target_schemas_input.append(s_clean.upper())
+
+        if target_schemas_input:
+            extract_cfg.schemas = target_schemas_input
 
         start_time = time.perf_counter()
         try:
@@ -574,8 +789,9 @@ class InteractiveTUISession:
                     connection.close()
 
             is_multi = len(target_schemas) > 1 or extract_cfg.is_all_schemas
+            days_banner = f" • [bold yellow]Incremental (last {days} days)[/bold yellow]" if days else ""
             console.print(
-                f"[cyan]Extracting metadata for schema(s):[/cyan] [bold yellow]{', '.join(target_schemas)}[/bold yellow] ({len(target_schemas)} total)\n"
+                f"[cyan]Extracting metadata for schema(s):[/cyan] [bold yellow]{', '.join(target_schemas)}[/bold yellow] ({len(target_schemas)} total){days_banner}\n"
             )
 
             total_tables = 0
@@ -612,7 +828,7 @@ class InteractiveTUISession:
                             description=f"Extracting [bold yellow]{s_title}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({schema_obj_count[0]:,} objects) [dim]│ {cat}[/dim]",
                         )
 
-                    schema_meta = fetch_schema_metadata(extract_cfg, schema_name=s_name, callback=_cb)
+                    schema_meta = fetch_schema_metadata(extract_cfg, schema_name=s_name, callback=_cb, days=days)
                     save_raw_schema(schema_meta, extract_cfg.rawPath, multi_schema=True)
                     total_tables += len(schema_meta.tables)
                     total_views += len(schema_meta.views)
@@ -1028,7 +1244,7 @@ class InteractiveTUISession:
         table.add_row("/enrich [obj]", "AI Studio", "Auto-enrich descriptions and business rules with AI")
         table.add_row("/compile [obj]", "Pipeline", "Compile final Markdown files into docs/ (supports single object)")
         table.add_row("/annotate", "Pipeline", "Synchronize YAML annotation stubs into annotations/")
-        table.add_row("/extract [s|ALL]", "Pipeline", "Connect to Oracle and extract a fresh metadata snapshot")
+        table.add_row("/extract [s] [d]", "Pipeline", "Extract Oracle snapshot (supports schema and days filter e.g. /extract 30)")
         table.add_row("/serve [port|stop]", "Web Studio", "Launch Web Studio with browser editor and live sync")
 
         # Exploration & Lineage
@@ -1038,12 +1254,15 @@ class InteractiveTUISession:
         table.add_row("/changes [d]", "Inspection", "Inspect objects modified in the last N days (default: 7)")
 
         # AI & Configuration
+        table.add_row("/agent <role> <task>", "Multi-Agent", "Directly execute specialized subagent (catalog, plsql, lineage, patch, doc)")
+        table.add_row("/workflow <name> <obj>", "Workflows", "Execute autonomous pipeline (impact, refactor)")
         table.add_row("/models [p]", "AI Config", "List available AI models from the provider API")
         table.add_row("/model <p> [m]", "AI Config", "Switch provider (openai, gemini, grok, etc.) and model")
         table.add_row("/check", "Diagnostics", "Check Oracle connection, snapshots, docs, and AI status")
         table.add_row("/init", "Setup", "Check or initialize the leai.yml configuration file")
 
         # Session & Utilities
+        table.add_row("/copy [all|code|N]", "Clipboard", "Copy last AI response or specific code block to OS clipboard")
         table.add_row("/audit [last|session|export]", "Audit", "Inspect AI tool traces, reasoning, latency, and logs")
         table.add_row("/tools", "Audit", "Quick viewer for tool input/output payload inspection")
         table.add_row("/save [file.md]", "Session", "Export conversation transcript to a Markdown file")
@@ -1337,6 +1556,8 @@ class InteractiveTUISession:
                 on_token=_on_token,
             )
         self.last_latency = time.perf_counter() - start_t
+        self.last_ai_reply = reply
+        self.last_code_blocks = extract_code_blocks(reply)
 
         # Record in Session Audit Logger
         turn_audit = self.audit_logger.record_turn(
@@ -1353,30 +1574,34 @@ class InteractiveTUISession:
         turn_tok_str = f" • {self.session.last_turn_tokens:,} tokens" if self.session.last_turn_tokens else ""
         tool_count = len(turn_audit.tools_executed)
         tool_badge = f" • {tool_count} tool{'s' if tool_count > 1 else ''}" if tool_count > 0 else ""
-        subtitle_str = (
-            f"[dim #9399b2]⚡ {self.last_latency:.2f}s{turn_tok_str}{tool_badge} • {self.provider_name.upper()} ({self.client.model})"
-            f"{' • RAG: ' + ', '.join(detected) if detected else ''}[/dim #9399b2]"
-        )
+        rag_badge = f" • RAG: {', '.join(detected)}" if detected else ""
 
+        # Render response in clean borderless Markdown format (no vertical box chars to interfere with mouse selection)
         console.print()
         console.print(
-            Panel(
-                Markdown(reply, code_theme="monokai"),
-                title="[bold #a6e3a1]✦ LEAI Assistant[/bold #a6e3a1]",
-                title_align="left",
-                subtitle=subtitle_str,
-                subtitle_align="right",
-                box=box.ROUNDED,
-                border_style="#74c7ec",
-                padding=(1, 2),
-            )
+            f"[bold #a6e3a1]✦ LEAI Assistant[/bold #a6e3a1] [dim #6c7086]({self.provider_name.upper()} • {self.client.model}){rag_badge}[/dim #6c7086]"
         )
-        if tool_count > 0:
-            console.print(
-                "[dim #6c7086]💡 Type [bold #74c7ec]/audit[/bold #74c7ec] or [bold #74c7ec]/tools[/bold #74c7ec] to inspect tool parameters, SQL queries, and raw responses.[/dim #6c7086]\n"
+        console.print(Rule(style="#45475a"))
+        console.print()
+        console.print(Markdown(reply, code_theme="monokai"))
+        console.print()
+        console.print(Rule(style="#313244"))
+
+        # Footer stats & Smart copy hint
+        if self.last_code_blocks:
+            c_count = len(self.last_code_blocks)
+            first_lang = self.last_code_blocks[0]["language"].upper()
+            code_hint = (
+                f" ou [bold #74c7ec]/copy 1[/bold #74c7ec] (código {first_lang})"
+                if c_count == 1
+                else f" ou [bold #74c7ec]/copy 1..{c_count}[/bold #74c7ec] (blocos de código)"
             )
         else:
-            console.print()
+            code_hint = ""
+
+        console.print(
+            f"[dim #9399b2]⚡ {self.last_latency:.2f}s{turn_tok_str}{tool_badge} • 💡 Dica: digite [bold #74c7ec]/copy[/bold #74c7ec]{code_hint} para copiar para o Clipboard[/dim #9399b2]\n"
+        )
 
     def _run_audit(self, sub_cmd: str | None = None, arg: str | None = None) -> None:
         """Inspects AI reasoning, tool execution traces, and session audit logs."""

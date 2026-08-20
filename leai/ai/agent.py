@@ -54,7 +54,16 @@ CORE OPERATING PRINCIPLES:
    - If any tool would provide useful details, CALL IT IMMEDIATELY during the reasoning loop.
    - Do NOT mention tool names to the user in your final text. Present the complete, verified answer cleanly.
 6. SYNONYMS RESOLUTION: In Oracle, procedures, packages, tables, and views are frequently exposed via SYNONYMS across schemas. If an object is a SYNONYM, explain what it is an alias for, identify its base target object, and use `get_subprogram_source` or `get_table_schema` to inspect and explain the underlying business routine or table.
-7. Once you have gathered sufficient information from all necessary tools, synthesize a clear, comprehensive, and well-structured response. Mirror the language used in the user's prompt (e.g. reply in English if asked in English, Portuguese if asked in Portuguese).
+7. STRICT GROUNDING & ANTI-FABRICATION PROTOCOL:
+   - NEVER fabricate, invent, or guess database object names, column names, constraints, or PL/SQL code that did not appear in tool results.
+   - If a tool returns empty results or an error (e.g. table not found), you MUST explicitly tell the user that the object/column was not found in the loaded schemas. NEVER invent a plausible-sounding schema or column name.
+   - ONLY cite table names, column names, data types, and code that were explicitly returned and verified by the tools in this turn.
+   - When writing SQL queries, EVERY table and column referenced MUST have been confirmed via get_table_schema or search_column_comments. Never generate SQL with unverified objects.
+8. STRUCTURED REASONING PROTOCOL:
+   - Internally review the facts gathered from tools before synthesizing your answer.
+   - Separate CONFIRMED facts (from tool results) from ASSUMPTIONS.
+   - Build your response using ONLY confirmed facts.
+9. Once you have gathered sufficient information from all necessary tools, synthesize a clear, comprehensive, and well-structured response. Mirror the language used in the user's prompt (e.g. reply in English if asked in English, Portuguese if asked in Portuguese).
 """
 
 
@@ -89,11 +98,15 @@ class AgentExecutionEngine:
         tools_ran = False
 
         for iteration in range(1, self.max_iterations + 1):
+            # Enforce tool execution on the first iteration to eliminate unverified head-answers
+            tool_mode = "required" if iteration == 1 else "auto"
+
             # Call LLM with tool definitions
             content, tool_calls = self.client.generate_chat_with_tools(
                 working_messages,
                 tools=DATABASE_TOOLS_DEFINITIONS,
                 system_prompt=sys_prompt,
+                tool_choice_mode=tool_mode,
             )
 
             # If no tool calls were requested, we reached the final synthesis
@@ -150,6 +163,7 @@ class AgentExecutionEngine:
                     arguments=t_args,
                     schemas=self.schemas,
                     config=self.config,
+                    client=self.client,
                 )
                 t_dur = time.perf_counter() - t_start
                 summary = summarize_tool_result(t_name, t_args, tool_output)
@@ -179,10 +193,15 @@ class AgentExecutionEngine:
                     }
                 )
 
-        # If tools ran or max iterations reached, synthesize final answer with streaming
+        # If tools ran or max iterations reached, synthesize final answer with streaming and strict grounding
         synth_prompt = (
             sys_prompt
-            + "\n\nSummarize and conclude the final response based on the information gathered by the tools. Respond in the same language as the user's query."
+            + "\n\n## SYNTHESIS INSTRUCTIONS & GROUNDING RULES:\n"
+            + "Synthesize the final response based strictly on the information gathered by the tools above.\n"
+            + "1. ONLY cite tables, columns, routines, and rules that were confirmed by the tool results.\n"
+            + "2. If a requested object or column was not found by the tools, state clearly that it was not found in the schemas.\n"
+            + "3. NEVER invent or assume database structures not present in the tool outputs.\n"
+            + "4. Respond in the same language as the user's query."
         )
         if hasattr(self.client, "stream_chat") and callable(self.client.stream_chat):
             final_synth = self.client.stream_chat(

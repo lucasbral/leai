@@ -627,10 +627,29 @@ def _fetch_object_timestamps(cursor: oracledb.Cursor, owner: str, prefix: str = 
     return timestamps
 
 
+def _fetch_modified_object_names(cursor: oracledb.Cursor, owner: str, days: int, prefix: str = "all") -> set[str]:
+    """Queries ALL_OBJECTS / DBA_OBJECTS for names of objects modified in the last N days."""
+    try:
+        cursor.execute(
+            f"""
+            SELECT DISTINCT object_name
+            FROM {prefix}_objects
+            WHERE owner = :owner
+              AND last_ddl_time >= SYSDATE - :days
+            """,
+            owner=owner,
+            days=days,
+        )
+        return {str(row[0]).upper() for row in cursor.fetchall()}
+    except Exception:
+        return set()
+
+
 def fetch_schema_metadata(
     config: LeaiConfig,
     schema_name: str | None = None,
     callback: Callable[[str, int, int, int], None] | None = None,
+    days: int | None = None,
 ) -> SchemaMetadata:
     target_schema = (schema_name or config.schema_name).upper()
     connection = oracledb.connect(**_build_connect_kwargs(config.dsn))
@@ -643,6 +662,16 @@ def fetch_schema_metadata(
         # Create a temporary config pointing to target_schema to reuse internal fetchers
         temp_config = config.model_copy()
         temp_config.schemas = [target_schema]
+
+        # If incremental extraction is requested, filter include list to only recently modified objects
+        if days is not None and days > 0:
+            modified_names = _fetch_modified_object_names(cursor, target_schema, days, prefix=prefix)
+            if temp_config.include:
+                temp_config.include = [name for name in temp_config.include if name.upper() in modified_names]
+                if not temp_config.include:
+                    temp_config.include = ["__LEAI_NO_MATCHING_MODIFIED_OBJECTS__"]
+            else:
+                temp_config.include = list(modified_names) if modified_names else ["__LEAI_NO_MATCHING_MODIFIED_OBJECTS__"]
 
         code_target_types = set()
         if "procedures" in types:

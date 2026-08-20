@@ -52,6 +52,7 @@ class MockLLMClient(BaseLLMClient):
         messages: list[dict],
         tools: list[dict] | None = None,
         system_prompt: str | None = None,
+        tool_choice_mode: str = "auto",
     ) -> tuple[str | None, list[dict]]:
         if self.call_count < len(self.turns_sequence):
             res = self.turns_sequence[self.call_count]
@@ -425,6 +426,86 @@ END;"""
             parsed = json.loads(out)
             self.assertTrue(len(parsed) >= 1)
             self.assertEqual(parsed[0]["column_name"], "DT_RECAD")
+
+    def test_agent_execution_engine_enforces_tool_mode(self):
+        modes_received = []
+
+        class ModeTrackingLLMClient(BaseLLMClient):
+            def __init__(self):
+                super().__init__(api_key="mock", model="mock-model")
+
+            def generate_text(self, prompt: str, system_prompt: str | None = None) -> str:
+                return ""
+
+            def generate_json(self, prompt: str, system_prompt: str | None = None) -> dict:
+                return {}
+
+            def generate_chat(self, messages: list[dict], system_prompt: str | None = None) -> str:
+                return "Final response"
+
+            def generate_chat_with_tools(
+                self,
+                messages: list[dict],
+                tools: list[dict] | None = None,
+                system_prompt: str | None = None,
+                tool_choice_mode: str = "auto",
+            ) -> tuple[str | None, list[dict]]:
+                modes_received.append(tool_choice_mode)
+                if len(modes_received) == 1:
+                    # Turn 1: tool call
+                    return None, [{"id": "call_1", "name": "get_table_schema", "arguments": {"table_name": "VINCULOS"}}]
+                # Turn 2: final synthesis
+                return "Final answer after tool", []
+
+        client = ModeTrackingLLMClient()
+        engine = AgentExecutionEngine(schemas=self.schemas, config=self.cfg, client=client)
+        reply = engine.run(messages=[{"role": "user", "content": "Explique a tabela VINCULOS"}])
+        self.assertIn("Final answer", reply)
+        # Verify first iteration was "required" and second was "auto"
+        self.assertEqual(modes_received, ["required", "auto"])
+
+    def test_anthropic_client_tools_conversion(self):
+        from leai.ai.anthropic_client import _convert_messages_to_anthropic, _convert_tools_to_anthropic
+        from leai.ai.tools import DATABASE_TOOLS_DEFINITIONS
+
+        # Test tool definitions conversion
+        anthropic_tools = _convert_tools_to_anthropic(DATABASE_TOOLS_DEFINITIONS)
+        self.assertEqual(len(anthropic_tools), len(DATABASE_TOOLS_DEFINITIONS))
+        for t in anthropic_tools:
+            self.assertIn("name", t)
+            self.assertIn("description", t)
+            self.assertIn("input_schema", t)
+
+        # Test messages conversion with user, assistant with tool_calls, and tool role
+        messages = [
+            {"role": "user", "content": "Qual a tabela de vinculos?"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call_123",
+                        "name": "get_table_schema",
+                        "arguments": {"table_name": "VINCULOS"},
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_123",
+                "name": "get_table_schema",
+                "content": '{"table_name": "VINCULOS", "columns": []}',
+            },
+        ]
+        conv_msgs = _convert_messages_to_anthropic(messages)
+        self.assertEqual(len(conv_msgs), 3)
+        self.assertEqual(conv_msgs[0]["role"], "user")
+        self.assertEqual(conv_msgs[1]["role"], "assistant")
+        self.assertEqual(conv_msgs[1]["content"][0]["type"], "tool_use")
+        self.assertEqual(conv_msgs[1]["content"][0]["name"], "get_table_schema")
+        self.assertEqual(conv_msgs[2]["role"], "user")
+        self.assertEqual(conv_msgs[2]["content"][0]["type"], "tool_result")
+        self.assertEqual(conv_msgs[2]["content"][0]["tool_use_id"], "call_123")
 
 
 if __name__ == "__main__":

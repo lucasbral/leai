@@ -56,6 +56,10 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
             self._serve_index_html()
             return
 
+        if path in ("/chat", "/chat/"):
+            self._serve_chat_html()
+            return
+
         if path == "/api/status":
             self._handle_api_status()
             return
@@ -72,6 +76,10 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
             self._handle_api_get_config()
             return
 
+        if path == "/api/chat/models":
+            self._handle_api_chat_models()
+            return
+
         self.send_response(HTTPStatus.NOT_FOUND)
         self.end_headers()
 
@@ -85,6 +93,10 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
             payload = json.loads(body) if body else {}
         except Exception as exc:
             self._send_error(f"Invalid JSON payload: {exc}")
+            return
+
+        if path in ("/api/chat/stream", "/api/chat"):
+            self._handle_api_chat_stream(payload)
             return
 
         if path == "/api/annotations":
@@ -117,6 +129,134 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(content)))
         self.end_headers()
         self.wfile.write(content)
+
+    def _serve_chat_html(self) -> None:
+        static_file = Path(__file__).parent / "static" / "chat.html"
+        if not static_file.exists():
+            self._send_error("Static chat.html not found.", status=HTTPStatus.NOT_FOUND)
+            return
+        content = static_file.read_bytes()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(content)))
+        self.end_headers()
+        self.wfile.write(content)
+
+    def _handle_api_chat_models(self) -> None:
+        cfg = self.server.config
+        providers_data = {}
+        if cfg.ai and cfg.ai.providers:
+            for prov_name, prov_cfg in cfg.ai.providers.items():
+                providers_data[prov_name] = {
+                    "model": prov_cfg.model or "",
+                    "has_key": bool(prov_cfg.api_key),
+                }
+        self._send_json(
+            {
+                "success": True,
+                "default_provider": cfg.ai.default_provider if cfg.ai else "openai",
+                "providers": providers_data,
+                "active_model": self.server.client.model if self.server.client else "offline",
+            }
+        )
+
+    def _handle_api_chat_stream(self, payload: dict) -> None:
+        """Handles real-time streaming AI chat responses via Server-Sent Events (SSE)."""
+        import time
+
+        from leai.chat_session import ChatSession
+
+        prompt = payload.get("prompt", "").strip()
+        if not prompt:
+            self._send_error("Prompt is required.")
+            return
+
+        provider_override = payload.get("provider")
+        model_override = payload.get("model")
+        history = payload.get("history", [])
+
+        try:
+            client = get_llm_client(
+                self.server.config,
+                provider_override=provider_override,
+                model_override=model_override,
+            )
+        except Exception as exc:
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            err_msg = json.dumps({"type": "error", "error": f"Failed to initialize AI client: {exc}"}, ensure_ascii=False)
+            self.wfile.write(f"data: {err_msg}\n\n".encode("utf-8"))
+            self.wfile.flush()
+            return
+
+        session = ChatSession(
+            schemas=self.server.schemas,
+            config=self.server.config,
+            client=client,
+        )
+
+        # Restore message history if provided
+        if history and isinstance(history, list):
+            for h in history:
+                role = h.get("role", "user")
+                content = h.get("content", "")
+                if content:
+                    session.messages.append({"role": role, "parts": [content]})
+
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        def _send_sse_event(event_type: str, data: dict) -> None:
+            try:
+                data["type"] = event_type
+                line = f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode("utf-8")
+                self.wfile.write(line)
+                self.wfile.flush()
+            except Exception:
+                pass
+
+        def _on_tool_start(t_name: str, t_args: dict, step_idx: int = 1) -> None:
+            _send_sse_event("tool_start", {"name": t_name, "arguments": t_args, "step": step_idx})
+
+        def _on_tool_end(t_name: str, t_out: str, summary: str = "", dur: float = 0.0) -> None:
+            _send_sse_event("tool_end", {"name": t_name, "summary": summary or "OK", "duration": round(dur, 2)})
+
+        def _on_token(token: str) -> None:
+            _send_sse_event("token", {"text": token})
+
+        start_t = time.perf_counter()
+        try:
+            reply, detected = session.send(
+                prompt,
+                on_tool_start=_on_tool_start,
+                on_tool_end=_on_tool_end,
+                on_token=_on_token,
+            )
+            latency = time.perf_counter() - start_t
+            _send_sse_event(
+                "done",
+                {
+                    "reply": reply,
+                    "tokens": session.last_turn_tokens or 0,
+                    "latency": round(latency, 2),
+                    "detected": detected or [],
+                },
+            )
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+        except Exception as exc:
+            _send_sse_event("error", {"error": str(exc)})
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+        finally:
+            self.close_connection = True
 
     def _handle_api_status(self) -> None:
         cfg = self.server.config
@@ -659,6 +799,7 @@ def start_server(
     open_browser: bool = True,
     in_background: bool = False,
     config_path: Path | None = None,
+    initial_path: str = "/",
 ) -> tuple[LEAIStudioServer, str]:
     """Starts the LEAI Web Studio server, optionally in background thread."""
     if schemas is None:
@@ -680,19 +821,20 @@ def start_server(
     )
 
     url = f"http://{host}:{port}"
+    target_url = f"{url}{initial_path}" if initial_path and initial_path != "/" else url
 
     if in_background:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
     else:
         if open_browser:
-            threading.Timer(0.8, lambda: webbrowser.open(url)).start()
+            threading.Timer(0.8, lambda: webbrowser.open(target_url)).start()
         try:
             server.serve_forever()
         except (KeyboardInterrupt, SystemExit):
             server.shutdown()
 
     if open_browser and in_background:
-        threading.Timer(0.5, lambda: webbrowser.open(url)).start()
+        threading.Timer(0.5, lambda: webbrowser.open(target_url)).start()
 
     return server, url
