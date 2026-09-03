@@ -15,6 +15,27 @@ DATABASE_TOOLS_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "lookup_business_term",
+            "description": "Searches the global business glossary (annotations/glossary.yml) for domain concepts, organizational business rules, status codes, and canonical SQL filters (e.g. 'usuários ativos', 'vacanciados no ano', 'folha suplementar', 'cargo efetivo'). ALWAYS call this tool first whenever the user asks for concepts, business definitions, calculation rules, or specific status filters.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The business term, domain concept, status name, or rule to look up (e.g. 'usuario ativo', 'vacanciado', 'folha suplementar').",
+                    },
+                    "tag": {
+                        "type": "string",
+                        "description": "Optional tag filter (e.g. 'rh', 'seguranca', 'financeiro').",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "search_business_documentation",
             "description": "Searches human and AI documentation across YAML annotations (descriptions, column comments, business rules, tags) and Markdown documents for business concepts, domain keywords, and functional rules (e.g. 'vacation', 'leave', 'payroll calculation', 'night shift allowance'). Use this when the user asks conceptual questions or when table names are not obvious.",
             "parameters": {
@@ -348,6 +369,38 @@ def search_business_documentation(
     results: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
 
+    # 0. Search Global Business Glossary (annotations/glossary.yml)
+    try:
+        from leai.glossary import load_glossary, search_glossary
+
+        glossary = load_glossary(config.annotationsPath)
+        gloss_matches = search_glossary(glossary, q_raw)
+        for g_term, g_score in gloss_matches[:5]:
+            item_key = f"GLOBAL.{g_term.term.upper()}"
+            if item_key not in seen_keys:
+                seen_keys.add(item_key)
+                matched_snippets = [f"definition: '{g_term.definition}'"]
+                if g_term.canonical_filter:
+                    matched_snippets.append(f"canonical_filter: '{g_term.canonical_filter}'")
+                results.append(
+                    {
+                        "object_name": g_term.term,
+                        "object_type": "GLOSSARY_TERM",
+                        "schema": "GLOBAL",
+                        "relevance_score": g_score + 60,
+                        "matched_fields": ["glossary_term", "business_rules"],
+                        "description": g_term.definition,
+                        "matched_snippets": matched_snippets,
+                        "business_rules": [
+                            f"{g_term.term}: {g_term.definition}"
+                            + (f" (Filtro Canônico: {g_term.canonical_filter})" if g_term.canonical_filter else "")
+                        ],
+                        "tags": g_term.tags,
+                    }
+                )
+    except Exception:
+        pass
+
     # 1. Search in YAML Annotations (config.annotationsPath)
     ann_path = config.annotationsPath
     if ann_path and ann_path.exists():
@@ -524,6 +577,42 @@ def search_business_documentation(
     # Sort results by relevance_score descending
     results.sort(key=lambda x: x["relevance_score"], reverse=True)
     return results[:15]
+
+
+def lookup_business_term(
+    config: LeaiConfig,
+    query: str,
+    tag: str | None = None,
+) -> dict[str, Any]:
+    from leai.glossary import load_glossary, search_glossary
+
+    glossary = load_glossary(config.annotationsPath)
+    matches = search_glossary(glossary, query)
+
+    if tag:
+        tag_norm = tag.strip().lower()
+        matches = [(t, s) for t, s in matches if any(tag_norm == tg.lower() for tg in t.tags)]
+
+    results = []
+    for term, score in matches[:10]:
+        results.append(
+            {
+                "term": term.term,
+                "definition": term.definition,
+                "primary_table": term.primary_table,
+                "canonical_filter": term.canonical_filter,
+                "related_tables": term.related_tables,
+                "tags": term.tags,
+                "examples": term.examples,
+                "relevance_score": score,
+            }
+        )
+
+    return {
+        "query": query,
+        "total_matches": len(results),
+        "results": results,
+    }
 
 
 def search_database_objects(
@@ -1262,6 +1351,12 @@ def execute_tool_call(
             else:
                 out = execute_subagent(role=role, task=task, schemas=schemas, config=config, client=client)
                 res = {"specialist": role, "result": out}
+        elif tool_name == "lookup_business_term":
+            res = lookup_business_term(
+                config=config,
+                query=arguments.get("query", ""),
+                tag=arguments.get("tag"),
+            )
         elif tool_name == "search_business_documentation":
             res = search_business_documentation(
                 schemas,
@@ -1316,6 +1411,14 @@ def summarize_tool_result(tool_name: str, arguments: dict[str, Any], raw_output:
         data = json.loads(raw_output)
         if isinstance(data, dict) and "error" in data:
             return f"❌ {data['error']}"
+
+        if tool_name == "lookup_business_term":
+            results = data.get("results", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+            count = len(results)
+            if count == 0:
+                return "0 business terms found"
+            top_term = results[0].get("term", "")
+            return f"{count} term{'s' if count > 1 else ''} found ('{top_term}')"
 
         if tool_name == "delegate_to_specialist":
             role = arguments.get("specialist_role", "specialist")

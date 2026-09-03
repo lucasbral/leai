@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "leai"
-version = "0.2.7"
+version = "0.2.8"
 description = "Oracle Database reverse engineering, lineage tracing, impact analysis, and RAG/LLM documentation engine"
 readme = "README.md"
 requires-python = ">=3.10"

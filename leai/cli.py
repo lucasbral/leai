@@ -23,37 +23,155 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-import oracledb
 import typer
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TaskProgressColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
 from rich.table import Column, Table
 
-from leai.ai import get_llm_client
-from leai.chat_session import ChatSession
 from leai.config import ConfigError, LeaiConfig, load_config
-from leai.docs import count_schema_objects, sync_schema_annotations, write_dossier_doc, write_rag_json_file, write_schema_docs
-from leai.enrich import enrich_schema_annotations
 from leai.models import SchemaMetadata
-from leai.oracle import _build_connect_kwargs, fetch_available_schemas, fetch_focal_trace, fetch_schema_metadata
-from leai.raw import load_raw_schemas, save_raw_schema, trace_raw_dependencies
-from leai.tui import DocEditor, InteractiveTUISession
+from leai.raw import load_raw_schemas
+
+def _build_connect_kwargs(*args, **kwargs):
+    from leai.oracle import _build_connect_kwargs as fn
+
+    return fn(*args, **kwargs)
+
+
+def fetch_schema_metadata(*args, **kwargs):
+    from leai.oracle import fetch_schema_metadata as fn
+
+    return fn(*args, **kwargs)
+
+
+def fetch_available_schemas(*args, **kwargs):
+    from leai.oracle import fetch_available_schemas as fn
+
+    return fn(*args, **kwargs)
+
+
+def fetch_focal_trace(*args, **kwargs):
+    from leai.oracle import fetch_focal_trace as fn
+
+    return fn(*args, **kwargs)
+
+
+def save_raw_schema(*args, **kwargs):
+    from leai.raw import save_raw_schema as fn
+
+    return fn(*args, **kwargs)
+
+
+def trace_raw_dependencies(*args, **kwargs):
+    from leai.raw import trace_raw_dependencies as fn
+
+    return fn(*args, **kwargs)
+
+
+def sync_schema_annotations(*args, **kwargs):
+    from leai.docs import sync_schema_annotations as fn
+
+    return fn(*args, **kwargs)
+
+
+def count_schema_objects(*args, **kwargs):
+    from leai.docs import count_schema_objects as fn
+
+    return fn(*args, **kwargs)
+
+
+def write_schema_docs(*args, **kwargs):
+    from leai.docs import write_schema_docs as fn
+
+    return fn(*args, **kwargs)
+
+
+def write_dossier_doc(*args, **kwargs):
+    from leai.docs import write_dossier_doc as fn
+
+    return fn(*args, **kwargs)
+
+
+def write_rag_json_file(*args, **kwargs):
+    from leai.docs import write_rag_json_file as fn
+
+    return fn(*args, **kwargs)
+
+
+def _calculate_risk_level(*args, **kwargs):
+    from leai.docs import _calculate_risk_level as fn
+
+    return fn(*args, **kwargs)
+
+
+def enrich_schema_annotations(*args, **kwargs):
+    from leai.enrich import enrich_schema_annotations as fn
+
+    return fn(*args, **kwargs)
+
+
+def get_llm_client(*args, **kwargs):
+    from leai.ai import get_llm_client as fn
+
+    return fn(*args, **kwargs)
+
+
+class _LazyOracledb:
+    def __getattr__(self, name):
+        import oracledb
+
+        return getattr(oracledb, name)
+
+
+oracledb = _LazyOracledb()
+
+
+class _LazyChatSession:
+    def __new__(cls, *args, **kwargs):
+        from leai.chat_session import ChatSession
+
+        return ChatSession(*args, **kwargs)
+
+
+ChatSession = _LazyChatSession
+
+
+class _LazyInteractiveTUISession:
+    def __new__(cls, *args, **kwargs):
+        from leai.tui import InteractiveTUISession
+
+        return InteractiveTUISession(*args, **kwargs)
+
+
+InteractiveTUISession = _LazyInteractiveTUISession
+
+
+class _LazyDocEditor:
+    def __new__(cls, *args, **kwargs):
+        from leai.tui import DocEditor
+
+        return DocEditor(*args, **kwargs)
+
+
+DocEditor = _LazyDocEditor
+
 
 app = typer.Typer(help="CLI for Oracle Database Intelligence & Documentation.")
 console = Console(legacy_windows=False)
 
 
-def _create_progress_bar() -> Progress:
+def _create_progress_bar():
     """Creates a fully responsive progress bar that gracefully handles terminal resizing without wrapping or ghost lines."""
+    from rich.progress import (
+        BarColumn,
+        Progress,
+        SpinnerColumn,
+        TaskProgressColumn,
+        TextColumn,
+        TimeElapsedColumn,
+    )
+
     return Progress(
         SpinnerColumn(spinner_name="dots", style="bold cyan", finished_text="[bold green]✓[/bold green]"),
         TextColumn(
@@ -216,77 +334,79 @@ def extract(
         connection = oracledb.connect(**_build_connect_kwargs(cfg.dsn))
         try:
             target_schemas = fetch_available_schemas(connection, cfg)
-        finally:
-            connection.close()
 
-        is_multi = len(target_schemas) > 1 or cfg.is_all_schemas
-        days_banner = f" • [bold yellow]Incremental (last {days} days)[/bold yellow]" if days else ""
-        console.print(
-            f"[cyan]Schemas to extract:[/cyan] [bold]{', '.join(target_schemas[:10])}{'...' if len(target_schemas) > 10 else ''}[/bold] (Total: {len(target_schemas)}){days_banner}\n"
-        )
-
-        totals = {
-            "tables": 0,
-            "views": 0,
-            "mviews": 0,
-            "code_objects": 0,
-            "triggers": 0,
-            "sequences": 0,
-            "indexes": 0,
-            "synonyms": 0,
-        }
-
-        with _create_progress_bar() as progress:
-            overall_task = (
-                progress.add_task(
-                    f"[bold cyan]Overall Extraction[/bold cyan] (0/{len(target_schemas)} schemas)",
-                    total=len(target_schemas),
-                )
-                if is_multi
-                else None
+            is_multi = len(target_schemas) > 1 or cfg.is_all_schemas
+            days_banner = f" • [bold yellow]Incremental (last {days} days)[/bold yellow]" if days else ""
+            console.print(
+                f"[cyan]Schemas to extract:[/cyan] [bold]{', '.join(target_schemas[:10])}{'...' if len(target_schemas) > 10 else ''}[/bold] (Total: {len(target_schemas)}){days_banner}\n"
             )
-            schema_task = progress.add_task("Extracting...", total=100)
 
-            for s_idx, schema_name in enumerate(target_schemas, 1):
-                schema_obj_count = [0]
-                progress.reset(
-                    schema_task,
-                    total=100,
-                    description=f"Extracting [bold yellow]{schema_name}[/bold yellow]",
+            totals = {
+                "tables": 0,
+                "views": 0,
+                "mviews": 0,
+                "code_objects": 0,
+                "triggers": 0,
+                "sequences": 0,
+                "indexes": 0,
+                "synonyms": 0,
+            }
+
+            with _create_progress_bar() as progress:
+                overall_task = (
+                    progress.add_task(
+                        f"[bold cyan]Overall Extraction[/bold cyan] (0/{len(target_schemas)} schemas)",
+                        total=len(target_schemas),
+                    )
+                    if is_multi
+                    else None
                 )
-                progress.refresh()
+                schema_task = progress.add_task("Extracting...", total=100)
 
-                def _cb(cat: str, count: int, step_idx: int, total_steps: int, s_name=schema_name) -> None:
-                    if count > 0:
-                        schema_obj_count[0] += count
-                    pct = int((step_idx / total_steps) * 100) if total_steps else 100
-                    progress.update(
+                for s_idx, schema_name in enumerate(target_schemas, 1):
+                    schema_obj_count = [0]
+                    progress.reset(
                         schema_task,
-                        completed=pct,
                         total=100,
-                        description=f"Extracting [bold yellow]{s_name}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({schema_obj_count[0]:,} objects) [dim]│ {cat}[/dim]",
+                        description=f"Extracting [bold yellow]{schema_name}[/bold yellow]",
                     )
                     progress.refresh()
 
-                schema_meta = fetch_schema_metadata(cfg, schema_name=schema_name, callback=_cb, days=days)
+                    def _cb(cat: str, count: int, step_idx: int, total_steps: int, s_name=schema_name) -> None:
+                        if count > 0:
+                            schema_obj_count[0] += count
+                        pct = int((step_idx / total_steps) * 100) if total_steps else 100
+                        progress.update(
+                            schema_task,
+                            completed=pct,
+                            total=100,
+                            description=f"Extracting [bold yellow]{s_name}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({schema_obj_count[0]:,} objects) [dim]│ {cat}[/dim]",
+                        )
+                        progress.refresh()
 
-                totals["tables"] += len(schema_meta.tables)
-                totals["views"] += len(schema_meta.views)
-                totals["mviews"] += len(schema_meta.mviews)
-                totals["code_objects"] += len(schema_meta.code_objects)
-                totals["triggers"] += len(schema_meta.triggers)
-                totals["sequences"] += len(schema_meta.sequences)
-                totals["indexes"] += len(schema_meta.indexes)
-                totals["synonyms"] += len(schema_meta.synonyms)
-
-                save_raw_schema(schema_meta, cfg.rawPath, multi_schema=True)
-
-                if overall_task is not None:
-                    progress.advance(overall_task, 1)
-                    progress.update(
-                        overall_task,
-                        description=f"[bold cyan]Overall Extraction[/bold cyan] ({s_idx}/{len(target_schemas)} schemas)",
+                    schema_meta = fetch_schema_metadata(
+                        cfg, schema_name=schema_name, callback=_cb, days=days, connection=connection
                     )
+
+                    totals["tables"] += len(schema_meta.tables)
+                    totals["views"] += len(schema_meta.views)
+                    totals["mviews"] += len(schema_meta.mviews)
+                    totals["code_objects"] += len(schema_meta.code_objects)
+                    totals["triggers"] += len(schema_meta.triggers)
+                    totals["sequences"] += len(schema_meta.sequences)
+                    totals["indexes"] += len(schema_meta.indexes)
+                    totals["synonyms"] += len(schema_meta.synonyms)
+
+                    save_raw_schema(schema_meta, cfg.rawPath, multi_schema=True)
+
+                    if overall_task is not None:
+                        progress.advance(overall_task, 1)
+                        progress.update(
+                            overall_task,
+                            description=f"[bold cyan]Overall Extraction[/bold cyan] ({s_idx}/{len(target_schemas)} schemas)",
+                        )
+        finally:
+            connection.close()
 
         elapsed = time.perf_counter() - start_time
         _print_final_summary_panel(
@@ -894,115 +1014,117 @@ def generate(
         connection = oracledb.connect(**_build_connect_kwargs(cfg.dsn))
         try:
             target_schemas = fetch_available_schemas(connection, cfg)
+
+            is_multi = len(target_schemas) > 1 or cfg.is_all_schemas
+            console.print(
+                f"[cyan]Schemas to process:[/cyan] [bold]{', '.join(target_schemas[:10])}{'...' if len(target_schemas) > 10 else ''}[/bold] (Total: {len(target_schemas)})\n"
+            )
+
+            totals = {
+                "tables": 0,
+                "views": 0,
+                "mviews": 0,
+                "code_objects": 0,
+                "triggers": 0,
+                "sequences": 0,
+                "indexes": 0,
+                "synonyms": 0,
+            }
+            total_md = 0
+            total_ann = 0
+            all_schemas_meta: list[SchemaMetadata] = []
+
+            with _create_progress_bar() as progress:
+                overall_task = (
+                    progress.add_task(
+                        f"[bold cyan]Overall Pipeline[/bold cyan] (0/{len(target_schemas)} schemas)",
+                        total=len(target_schemas),
+                    )
+                    if is_multi
+                    else None
+                )
+                schema_task = progress.add_task("Processing...", total=100)
+
+                for s_idx, schema_name in enumerate(target_schemas, 1):
+                    schema_obj_count = [0]
+                    progress.reset(
+                        schema_task,
+                        total=100,
+                        description=f"Processing [bold yellow]{schema_name}[/bold yellow]",
+                    )
+                    progress.refresh()
+
+                    def _cb(cat: str, count: int, step_idx: int, total_steps: int, s_name=schema_name) -> None:
+                        if count > 0:
+                            schema_obj_count[0] += count
+                        pct = int((step_idx / total_steps) * 100) if total_steps else 100
+                        progress.update(
+                            schema_task,
+                            completed=pct,
+                            total=100,
+                            description=f"Extracting [bold yellow]{s_name}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({schema_obj_count[0]:,} objects) [dim]│ {cat}[/dim]",
+                        )
+                        progress.refresh()
+
+                    schema_meta = fetch_schema_metadata(
+                        cfg, schema_name=schema_name, callback=_cb, connection=connection
+                    )
+                    all_schemas_meta.append(schema_meta)
+
+                    totals["tables"] += len(schema_meta.tables)
+                    totals["views"] += len(schema_meta.views)
+                    totals["mviews"] += len(schema_meta.mviews)
+                    totals["code_objects"] += len(schema_meta.code_objects)
+                    totals["triggers"] += len(schema_meta.triggers)
+                    totals["sequences"] += len(schema_meta.sequences)
+                    totals["indexes"] += len(schema_meta.indexes)
+                    totals["synonyms"] += len(schema_meta.synonyms)
+
+                    # 1. Save RAW Snapshot
+                    save_raw_schema(schema_meta, cfg.rawPath, multi_schema=True)
+
+                    # 2 & 3. Sync Annotations and Compile Docs with granular object progress
+                    schema_total_objs = count_schema_objects(schema_meta, cfg.object_types)
+                    progress.reset(
+                        schema_task,
+                        total=schema_total_objs,
+                        description=f"Compiling [bold yellow]{schema_name}[/bold yellow]",
+                    )
+
+                    def _on_gen_progress(cat: str, name: str, current: int, total: int, s_title=schema_name) -> None:
+                        pct = int((current / total) * 100) if total else 100
+                        progress.update(
+                            schema_task,
+                            completed=current,
+                            total=total,
+                            description=f"Compiling [bold yellow]{s_title}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({current:,}/{total:,} objs) [dim]│ {cat} {name}[/dim]",
+                        )
+                        progress.refresh()
+
+                    generated_md, generated_ann = write_schema_docs(
+                        schema_meta,
+                        doc_path=cfg.docPath,
+                        annotations_path=cfg.annotationsPath,
+                        docs_overrides=cfg.docs,
+                        multi_schema=True,
+                        object_types=cfg.object_types,
+                        all_schemas=all_schemas_meta,
+                        with_traces=with_traces,
+                        max_depth=depth,
+                        generate_rag_chunks=rag_json,
+                        progress_callback=_on_gen_progress,
+                    )
+                    total_md += len(generated_md)
+                    total_ann += len(generated_ann)
+
+                    if overall_task is not None:
+                        progress.advance(overall_task, 1)
+                        progress.update(
+                            overall_task,
+                            description=f"[bold cyan]Overall Pipeline[/bold cyan] ({s_idx}/{len(target_schemas)} schemas)",
+                        )
         finally:
             connection.close()
-
-        is_multi = len(target_schemas) > 1 or cfg.is_all_schemas
-        console.print(
-            f"[cyan]Schemas to process:[/cyan] [bold]{', '.join(target_schemas[:10])}{'...' if len(target_schemas) > 10 else ''}[/bold] (Total: {len(target_schemas)})\n"
-        )
-
-        totals = {
-            "tables": 0,
-            "views": 0,
-            "mviews": 0,
-            "code_objects": 0,
-            "triggers": 0,
-            "sequences": 0,
-            "indexes": 0,
-            "synonyms": 0,
-        }
-        total_md = 0
-        total_ann = 0
-        all_schemas_meta: list[SchemaMetadata] = []
-
-        with _create_progress_bar() as progress:
-            overall_task = (
-                progress.add_task(
-                    f"[bold cyan]Overall Pipeline[/bold cyan] (0/{len(target_schemas)} schemas)",
-                    total=len(target_schemas),
-                )
-                if is_multi
-                else None
-            )
-            schema_task = progress.add_task("Processing...", total=100)
-
-            for s_idx, schema_name in enumerate(target_schemas, 1):
-                schema_obj_count = [0]
-                progress.reset(
-                    schema_task,
-                    total=100,
-                    description=f"Processing [bold yellow]{schema_name}[/bold yellow]",
-                )
-                progress.refresh()
-
-                def _cb(cat: str, count: int, step_idx: int, total_steps: int, s_name=schema_name) -> None:
-                    if count > 0:
-                        schema_obj_count[0] += count
-                    pct = int((step_idx / total_steps) * 100) if total_steps else 100
-                    progress.update(
-                        schema_task,
-                        completed=pct,
-                        total=100,
-                        description=f"Extracting [bold yellow]{s_name}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({schema_obj_count[0]:,} objects) [dim]│ {cat}[/dim]",
-                    )
-                    progress.refresh()
-
-                schema_meta = fetch_schema_metadata(cfg, schema_name=schema_name, callback=_cb)
-                all_schemas_meta.append(schema_meta)
-
-                totals["tables"] += len(schema_meta.tables)
-                totals["views"] += len(schema_meta.views)
-                totals["mviews"] += len(schema_meta.mviews)
-                totals["code_objects"] += len(schema_meta.code_objects)
-                totals["triggers"] += len(schema_meta.triggers)
-                totals["sequences"] += len(schema_meta.sequences)
-                totals["indexes"] += len(schema_meta.indexes)
-                totals["synonyms"] += len(schema_meta.synonyms)
-
-                # 1. Save RAW Snapshot
-                save_raw_schema(schema_meta, cfg.rawPath, multi_schema=True)
-
-                # 2 & 3. Sync Annotations and Compile Docs with granular object progress
-                schema_total_objs = count_schema_objects(schema_meta, cfg.object_types)
-                progress.reset(
-                    schema_task,
-                    total=schema_total_objs,
-                    description=f"Compiling [bold yellow]{schema_name}[/bold yellow]",
-                )
-
-                def _on_gen_progress(cat: str, name: str, current: int, total: int, s_title=schema_name) -> None:
-                    pct = int((current / total) * 100) if total else 100
-                    progress.update(
-                        schema_task,
-                        completed=current,
-                        total=total,
-                        description=f"Compiling [bold yellow]{s_title}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({current:,}/{total:,} objs) [dim]│ {cat} {name}[/dim]",
-                    )
-                    progress.refresh()
-
-                generated_md, generated_ann = write_schema_docs(
-                    schema_meta,
-                    doc_path=cfg.docPath,
-                    annotations_path=cfg.annotationsPath,
-                    docs_overrides=cfg.docs,
-                    multi_schema=True,
-                    object_types=cfg.object_types,
-                    all_schemas=all_schemas_meta,
-                    with_traces=with_traces,
-                    max_depth=depth,
-                    generate_rag_chunks=rag_json,
-                    progress_callback=_on_gen_progress,
-                )
-                total_md += len(generated_md)
-                total_ann += len(generated_ann)
-
-                if overall_task is not None:
-                    progress.advance(overall_task, 1)
-                    progress.update(
-                        overall_task,
-                        description=f"[bold cyan]Overall Pipeline[/bold cyan] ({s_idx}/{len(target_schemas)} schemas)",
-                    )
 
         elapsed = time.perf_counter() - start_time
         out_paths = {
@@ -1120,8 +1242,6 @@ def trace(
 ) -> None:
     """Generates in-depth technical dossier and Mermaid.js dependency graph for a specific object."""
     from rich.tree import Tree
-
-    from leai.docs import _calculate_risk_level
 
     try:
         depth = int(getattr(depth, "default", depth))
@@ -1606,3 +1726,119 @@ def run_workflow_command(
     except Exception as exc:
         console.print(f"[red]Workflow execution failed:[/red] {exc}")
         raise typer.Exit(code=1)
+
+
+# ==============================================================================
+# BUSINESS GLOSSARY & RULES CLI SUB-COMMANDS (`leai rule`)
+# ==============================================================================
+rule_app = typer.Typer(help="Manage global business glossary, domain terms, and canonical SQL rules.")
+app.add_typer(rule_app, name="rule")
+
+
+@rule_app.command("list")
+def list_rules_command(
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+) -> None:
+    """List all defined business glossary terms and canonical rules."""
+    from leai.glossary import load_glossary
+
+    try:
+        cfg = load_config(config)
+    except Exception:
+        cfg = LeaiConfig()
+
+    glossary = load_glossary(cfg.annotationsPath)
+    if not glossary.terms:
+        console.print(f"[yellow]No business rules found in '{cfg.annotationsPath}/glossary.yml'.[/yellow]")
+        console.print("Use [bold cyan]leai rule add <term>[/bold cyan] to register rules.")
+        return
+
+    table = Table(
+        title="[bold cyan]📖 LEAI Business Glossary & Canonical Rules[/bold cyan]",
+        box=box.ROUNDED,
+        header_style="bold magenta",
+    )
+    table.add_column("Business Term", style="bold yellow")
+    table.add_column("Primary Table", style="bold cyan")
+    table.add_column("Canonical SQL Filter", style="green")
+    table.add_column("Definition", style="white")
+
+    for t in glossary.terms:
+        table.add_row(
+            t.term,
+            t.primary_table or "-",
+            t.canonical_filter or "-",
+            t.definition,
+        )
+
+    console.print()
+    console.print(table)
+    console.print(f"\n[dim]Total: {len(glossary.terms)} terms defined in {cfg.annotationsPath}/glossary.yml[/dim]\n")
+
+
+@rule_app.command("add")
+def add_rule_command(
+    term: str = typer.Argument(..., help="Name of the business term or domain concept"),
+    definition: str = typer.Option(..., "--definition", "-d", help="Business definition and functional meaning"),
+    table: str = typer.Option(None, "--table", "-t", help="Primary table associated with this concept"),
+    canonical_filter: str = typer.Option(None, "--filter", "-f", help="Canonical SQL filter condition (e.g. STATUS = 'A')"),
+    tags: str = typer.Option(None, "--tags", help="Comma-separated tags (e.g. 'rh,seguranca')"),
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+) -> None:
+    """Register or update a business glossary term in annotations/glossary.yml."""
+    from leai.glossary import add_or_update_term
+    from leai.models import GlossaryTerm
+
+    try:
+        cfg = load_config(config)
+    except Exception:
+        cfg = LeaiConfig()
+
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+
+    new_term = GlossaryTerm(
+        term=term.strip(),
+        definition=definition.strip(),
+        primary_table=table.strip().upper() if table else None,
+        canonical_filter=canonical_filter.strip() if canonical_filter else None,
+        tags=tag_list,
+    )
+
+    add_or_update_term(cfg.annotationsPath, new_term)
+    console.print(f"[green]✓ Term '[bold]{new_term.term}[/bold]' saved to [bold cyan]{cfg.annotationsPath}/glossary.yml[/bold cyan]![/green]")
+
+
+@rule_app.command("show")
+def show_rule_command(
+    term: str = typer.Argument(..., help="Term name to display"),
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+) -> None:
+    """Show details of a specific business glossary term."""
+    from leai.glossary import load_glossary, search_glossary
+
+    try:
+        cfg = load_config(config)
+    except Exception:
+        cfg = LeaiConfig()
+
+    glossary = load_glossary(cfg.annotationsPath)
+    matches = search_glossary(glossary, term)
+    if not matches:
+        console.print(f"[yellow]Term '{term}' not found in glossary.[/yellow]")
+        return
+
+    top_term, _ = matches[0]
+    content = [
+        f"[bold white]Term:[/bold white] [bold yellow]{top_term.term}[/bold yellow]",
+        f"[bold white]Definition:[/bold white] {top_term.definition}",
+        f"[bold white]Primary Table:[/bold white] [bold cyan]{top_term.primary_table or '-'}[/bold cyan]",
+        f"[bold white]Canonical SQL Filter:[/bold white] [green]{top_term.canonical_filter or '-'}[/green]",
+    ]
+    if top_term.related_tables:
+        content.append(f"[bold white]Related Tables:[/bold white] {', '.join(top_term.related_tables)}")
+    if top_term.tags:
+        content.append(f"[bold white]Tags:[/bold white] {', '.join(top_term.tags)}")
+
+    console.print()
+    console.print(Panel("\n".join(content), title=f"[bold cyan]📖 Glossary Term: {top_term.term}[/bold cyan]", border_style="cyan"))
+    console.print()

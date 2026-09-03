@@ -659,6 +659,10 @@ class InteractiveTUISession:
             self._run_audit(sub_arg, extra_arg)
             return True
 
+        if cmd in ("/rule", "/rules", "/learn", "/glossary"):
+            self._run_rule(parts[1:])
+            return True
+
         console.print(f"[yellow]Unknown command '{cmd}'. Type [bold cyan]/help[/bold cyan] for available commands.[/yellow]")
         return True
 
@@ -738,6 +742,95 @@ class InteractiveTUISession:
         else:
             console.print(f"[red]✕ {msg}[/red]\n")
 
+    def _run_rule(self, args: list[str]) -> None:
+        """Manages the global business glossary and domain rules."""
+        from rich.prompt import Prompt
+        from leai.glossary import load_glossary, add_or_update_term, search_glossary
+        from leai.models import GlossaryTerm
+
+        subcmd = args[0].lower() if args else "list"
+
+        if subcmd in ("list", "ls"):
+            glossary = load_glossary(self.config.annotationsPath)
+            if not glossary.terms:
+                console.print("\n[dim]Nenhuma regra de negócio cadastrada ainda em annotations/glossary.yml.[/dim]")
+                console.print("[dim]Use [bold cyan]/rule add[/bold cyan] para cadastrar uma nova regra.[/dim]\n")
+                return
+
+            tbl = Table(title="[bold cyan]📖 Glossário de Negócio & Regras Canônicas[/bold cyan]", box=box.ROUNDED)
+            tbl.add_column("Termo / Conceito", style="bold yellow", width=22)
+            tbl.add_column("Tabela Primária", style="bold cyan", width=16)
+            tbl.add_column("Filtro SQL Canônico", style="green", width=34)
+            tbl.add_column("Definição", style="white")
+
+            for t in glossary.terms:
+                tbl.add_row(
+                    t.term,
+                    t.primary_table or "-",
+                    t.canonical_filter or "-",
+                    t.definition,
+                )
+            console.print()
+            console.print(tbl)
+            console.print(f"[dim]Total: {len(glossary.terms)} termos definidos em {self.config.annotationsPath}/glossary.yml[/dim]\n")
+            return
+
+        if subcmd in ("find", "search"):
+            if len(args) < 2:
+                console.print("[yellow]Uso: /rule find <termo ou palavra-chave>[/yellow]\n")
+                return
+            query = " ".join(args[1:])
+            glossary = load_glossary(self.config.annotationsPath)
+            matches = search_glossary(glossary, query)
+            if not matches:
+                console.print(f"[yellow]Nenhum termo encontrado para '{query}'.[/yellow]\n")
+                return
+
+            tbl = Table(title=f"[bold cyan]🔍 Resultados no Glossário para '{query}'[/bold cyan]", box=box.ROUNDED)
+            tbl.add_column("Termo", style="bold yellow")
+            tbl.add_column("Tabela", style="bold cyan")
+            tbl.add_column("Filtro SQL Canônico", style="green")
+            tbl.add_column("Definição", style="white")
+            for term, score in matches:
+                tbl.add_row(term.term, term.primary_table or "-", term.canonical_filter or "-", term.definition)
+            console.print()
+            console.print(tbl)
+            console.print()
+            return
+
+        if subcmd in ("add", "new"):
+            console.print("\n[bold cyan]➕ Cadastrar Nova Regra de Negócio / Termo no Glossário[/bold cyan]")
+            term_name = " ".join(args[1:]).strip() if len(args) > 1 else ""
+            if not term_name:
+                term_name = Prompt.ask("[bold yellow]Nome do Termo / Conceito[/bold yellow] (ex: Usuário Ativo, Vacanciados no Ano)")
+            if not term_name.strip():
+                console.print("[red]Cancelado: Nome do termo é obrigatório.[/red]\n")
+                return
+
+            definition = Prompt.ask("[bold yellow]Definição de Negócio[/bold yellow]")
+            primary_table = Prompt.ask("[bold yellow]Tabela Primária[/bold yellow] (opcional, ex: USUARIOS, VINCULOS)", default="")
+            canonical_filter = Prompt.ask(
+                "[bold yellow]Filtro SQL Canônico[/bold yellow] (opcional, ex: STATUS = 'A' AND DT_EXPIRACAO > SYSDATE)",
+                default="",
+            )
+            tags_str = Prompt.ask("[bold yellow]Tags[/bold yellow] (opcional, separadas por vírgula)", default="")
+            tags = [t.strip() for t in tags_str.split(",") if t.strip()]
+
+            new_term = GlossaryTerm(
+                term=term_name.strip(),
+                definition=definition.strip(),
+                primary_table=primary_table.strip().upper() if primary_table.strip() else None,
+                canonical_filter=canonical_filter.strip() if canonical_filter.strip() else None,
+                tags=tags,
+            )
+
+            add_or_update_term(self.config.annotationsPath, new_term)
+            console.print(f"\n[green]✓ Regra '[bold]{new_term.term}[/bold]' salva com sucesso em [bold cyan]{self.config.annotationsPath}/glossary.yml[/bold cyan]![/green]")
+            console.print("[dim]A IA agora consultará essa regra automaticamente no chat e em comandos de SQL.[/dim]\n")
+            return
+
+        console.print(f"[yellow]Uso: [bold cyan]/rule list[/bold cyan] | [bold cyan]/rule add [termo][/bold cyan] | [bold cyan]/rule find <termo>[/bold cyan][/yellow]\n")
+
     def _run_doc(self, object_name: str | None = None) -> None:
         """Launches the in-terminal interactive documentation editor."""
         if not self.schemas:
@@ -783,63 +876,65 @@ class InteractiveTUISession:
         try:
             with console.status("[cyan]Connecting to Oracle database...[/cyan]", spinner="dots"):
                 connection = oracledb.connect(**_build_connect_kwargs(extract_cfg.dsn))
-                try:
-                    target_schemas = fetch_available_schemas(connection, extract_cfg)
-                finally:
-                    connection.close()
+            try:
+                target_schemas = fetch_available_schemas(connection, extract_cfg)
 
-            is_multi = len(target_schemas) > 1 or extract_cfg.is_all_schemas
-            days_banner = f" • [bold yellow]Incremental (last {days} days)[/bold yellow]" if days else ""
-            console.print(
-                f"[cyan]Extracting metadata for schema(s):[/cyan] [bold yellow]{', '.join(target_schemas)}[/bold yellow] ({len(target_schemas)} total){days_banner}\n"
-            )
-
-            total_tables = 0
-            total_views = 0
-            total_code = 0
-
-            with _create_progress_bar() as progress:
-                overall_task = (
-                    progress.add_task(
-                        f"[bold cyan]Overall Pipeline[/bold cyan] (0/{len(target_schemas)} schemas)",
-                        total=len(target_schemas),
-                    )
-                    if is_multi
-                    else None
+                is_multi = len(target_schemas) > 1 or extract_cfg.is_all_schemas
+                days_banner = f" • [bold yellow]Incremental (last {days} days)[/bold yellow]" if days else ""
+                console.print(
+                    f"[cyan]Extracting metadata for schema(s):[/cyan] [bold yellow]{', '.join(target_schemas)}[/bold yellow] ({len(target_schemas)} total){days_banner}\n"
                 )
-                schema_task = progress.add_task("Processing...", total=100)
 
-                for s_idx, s_name in enumerate(target_schemas, 1):
-                    schema_obj_count = [0]
-                    progress.reset(
-                        schema_task,
-                        total=100,
-                        description=f"Extracting [bold yellow]{s_name}[/bold yellow]",
+                total_tables = 0
+                total_views = 0
+                total_code = 0
+
+                with _create_progress_bar() as progress:
+                    overall_task = (
+                        progress.add_task(
+                            f"[bold cyan]Overall Pipeline[/bold cyan] (0/{len(target_schemas)} schemas)",
+                            total=len(target_schemas),
+                        )
+                        if is_multi
+                        else None
                     )
+                    schema_task = progress.add_task("Processing...", total=100)
 
-                    def _cb(cat: str, count: int, step_idx: int, total_steps: int, s_title=s_name) -> None:
-                        if count > 0:
-                            schema_obj_count[0] += count
-                        pct = int((step_idx / total_steps) * 100) if total_steps else 100
-                        progress.update(
+                    for s_idx, s_name in enumerate(target_schemas, 1):
+                        schema_obj_count = [0]
+                        progress.reset(
                             schema_task,
-                            completed=pct,
                             total=100,
-                            description=f"Extracting [bold yellow]{s_title}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({schema_obj_count[0]:,} objects) [dim]│ {cat}[/dim]",
+                            description=f"Extracting [bold yellow]{s_name}[/bold yellow]",
                         )
 
-                    schema_meta = fetch_schema_metadata(extract_cfg, schema_name=s_name, callback=_cb, days=days)
-                    save_raw_schema(schema_meta, extract_cfg.rawPath, multi_schema=True)
-                    total_tables += len(schema_meta.tables)
-                    total_views += len(schema_meta.views)
-                    total_code += len(schema_meta.code_objects)
+                        def _cb(cat: str, count: int, step_idx: int, total_steps: int, s_title=s_name) -> None:
+                            if count > 0:
+                                schema_obj_count[0] += count
+                            pct = int((step_idx / total_steps) * 100) if total_steps else 100
+                            progress.update(
+                                schema_task,
+                                completed=pct,
+                                total=100,
+                                description=f"Extracting [bold yellow]{s_title}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({schema_obj_count[0]:,} objects) [dim]│ {cat}[/dim]",
+                            )
 
-                    if overall_task is not None:
-                        progress.update(
-                            overall_task,
-                            advance=1,
-                            description=f"[bold cyan]Overall Pipeline[/bold cyan] ({s_idx}/{len(target_schemas)} schemas)",
+                        schema_meta = fetch_schema_metadata(
+                            extract_cfg, schema_name=s_name, callback=_cb, days=days, connection=connection
                         )
+                        save_raw_schema(schema_meta, extract_cfg.rawPath, multi_schema=True)
+                        total_tables += len(schema_meta.tables)
+                        total_views += len(schema_meta.views)
+                        total_code += len(schema_meta.code_objects)
+
+                        if overall_task is not None:
+                            progress.update(
+                                overall_task,
+                                advance=1,
+                                description=f"[bold cyan]Overall Pipeline[/bold cyan] ({s_idx}/{len(target_schemas)} schemas)",
+                            )
+            finally:
+                connection.close()
 
             elapsed = time.perf_counter() - start_time
 
@@ -1241,6 +1336,7 @@ class InteractiveTUISession:
 
         # Documentation & Studio
         table.add_row("/doc [obj]", "Documentation", "Interactive terminal editor for YAML annotations and docs")
+        table.add_row("/rule [list|add|find]", "Glossary", "Manage global business rules and canonical domain filters")
         table.add_row("/enrich [obj]", "AI Studio", "Auto-enrich descriptions and business rules with AI")
         table.add_row("/compile [obj]", "Pipeline", "Compile final Markdown files into docs/ (supports single object)")
         table.add_row("/annotate", "Pipeline", "Synchronize YAML annotation stubs into annotations/")

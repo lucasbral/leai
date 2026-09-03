@@ -1151,6 +1151,11 @@ def write_schema_docs(
         index_md = render_schema_index_markdown(schema, trace_map=trace_map, annotations_map=annotations_map)
         generated_md.append(_write_single_doc(index_path, index_md))
 
+    # 10. Global Business Glossary & Domain Rules
+    gloss_file = write_glossary_doc(annotations_path, doc_path)
+    if gloss_file:
+        generated_md.append(gloss_file)
+
     return generated_md, generated_ann
 
 
@@ -1314,6 +1319,65 @@ def generate_rag_json(trace_result: ObjectTraceResult, annotation: ObjectAnnotat
             "dependencies": deps_info,
         },
     }
+
+
+def write_glossary_doc(annotations_path: Path, doc_path: Path) -> Path | None:
+    """Generates docs/GLOSSARY.md summarizing global business rules and canonical filters."""
+    try:
+        from leai.glossary import load_glossary
+
+        glossary = load_glossary(annotations_path)
+        if not glossary.terms:
+            return None
+
+        lines = [
+            "# Business Glossary & Canonical Domain Rules",
+            "",
+            "> [!NOTE]",
+            "> This document defines the organizational business rules, domain terms, and canonical SQL filters",
+            "> governing the database schema. These definitions are consumed by humans and the LEAI AI Copilot.",
+            "",
+            "## Summary of Terms",
+            "",
+            "| Business Term | Primary Table | Canonical SQL Filter | Tags |",
+            "| :--- | :--- | :--- | :--- |",
+        ]
+
+        for t in glossary.terms:
+            tbl = f"`{t.primary_table}`" if t.primary_table else "*-*"
+            filt = f"`{t.canonical_filter}`" if t.canonical_filter else "*-*"
+            tags = ", ".join(f"`{tag}`" for tag in t.tags) if t.tags else "*-*"
+            lines.append(f"| **{t.term}** | {tbl} | {filt} | {tags} |")
+
+        lines.extend(["", "---", "", "## Detailed Business Rules", ""])
+
+        for t in glossary.terms:
+            lines.append(f"### 📖 {t.term}")
+            lines.append(f"**Definition:** {t.definition}")
+            lines.append("")
+            if t.primary_table:
+                lines.append(f"- **Primary Table:** `{t.primary_table}`")
+            if t.related_tables:
+                lines.append(f"- **Related Tables:** {', '.join(f'`{rt}`' for rt in t.related_tables)}")
+            if t.canonical_filter:
+                lines.append("- **Canonical SQL Filter:**")
+                lines.append("```sql")
+                lines.append(t.canonical_filter)
+                lines.append("```")
+            if t.tags:
+                lines.append(f"- **Tags:** {', '.join(f'`{tag}`' for tag in t.tags)}")
+            if t.examples:
+                lines.append("- **Examples / Scenarios:**")
+                for ex in t.examples:
+                    lines.append(f"  - {ex}")
+            lines.append("")
+
+        out_file = doc_path / "GLOSSARY.md"
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+        out_file.write_text("\n".join(lines), encoding="utf-8")
+        return out_file
+    except Exception:
+        return None
 
 
 def write_rag_json_file(

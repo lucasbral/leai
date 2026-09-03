@@ -127,6 +127,20 @@ class ObjectAnnotation(BaseModel):
     columns: dict[str, str] = Field(default_factory=dict)
 
 
+class GlossaryTerm(BaseModel):
+    term: str
+    definition: str
+    primary_table: str | None = None
+    canonical_filter: str | None = None
+    related_tables: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    examples: list[str] = Field(default_factory=list)
+
+
+class BusinessGlossary(BaseModel):
+    terms: list[GlossaryTerm] = Field(default_factory=list)
+
+
 class SchemaMetadata(BaseModel):
     schema_name: str = ""
     tables: list[TableMeta] = Field(default_factory=list)
