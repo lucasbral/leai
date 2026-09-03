@@ -33,6 +33,7 @@ from leai.config import ConfigError, LeaiConfig, load_config
 from leai.models import SchemaMetadata
 from leai.raw import load_raw_schemas
 
+
 def _build_connect_kwargs(*args, **kwargs):
     from leai.oracle import _build_connect_kwargs as fn
 
@@ -384,9 +385,7 @@ def extract(
                         )
                         progress.refresh()
 
-                    schema_meta = fetch_schema_metadata(
-                        cfg, schema_name=schema_name, callback=_cb, days=days, connection=connection
-                    )
+                    schema_meta = fetch_schema_metadata(cfg, schema_name=schema_name, callback=_cb, days=days, connection=connection)
 
                     totals["tables"] += len(schema_meta.tables)
                     totals["views"] += len(schema_meta.views)
@@ -1066,9 +1065,7 @@ def generate(
                         )
                         progress.refresh()
 
-                    schema_meta = fetch_schema_metadata(
-                        cfg, schema_name=schema_name, callback=_cb, connection=connection
-                    )
+                    schema_meta = fetch_schema_metadata(cfg, schema_name=schema_name, callback=_cb, connection=connection)
                     all_schemas_meta.append(schema_meta)
 
                     totals["tables"] += len(schema_meta.tables)
@@ -1805,7 +1802,9 @@ def add_rule_command(
     )
 
     add_or_update_term(cfg.annotationsPath, new_term)
-    console.print(f"[green]✓ Term '[bold]{new_term.term}[/bold]' saved to [bold cyan]{cfg.annotationsPath}/glossary.yml[/bold cyan]![/green]")
+    console.print(
+        f"[green]✓ Term '[bold]{new_term.term}[/bold]' saved to [bold cyan]{cfg.annotationsPath}/glossary.yml[/bold cyan]![/green]"
+    )
 
 
 @rule_app.command("show")
