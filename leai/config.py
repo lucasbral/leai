@@ -33,6 +33,15 @@ class AIConfig(BaseModel):
     providers: dict[str, AIProviderConfig] = Field(default_factory=dict)
 
 
+class GitConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    enabled: bool = True
+    auto_pull_on_start: bool = False
+    remote: str = "origin"
+    branch: str = "main"
+    tracked_paths: list[str] = Field(default_factory=lambda: ["annotations", "docs", "raw", "leai.yml"])
+
+
 class LeaiConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -46,6 +55,7 @@ class LeaiConfig(BaseModel):
     object_types: list[str] = Field(default_factory=lambda: list(DEFAULT_OBJECT_TYPES))
     docs: dict[str, dict[str, str]] = Field(default_factory=dict)
     ai: AIConfig = Field(default_factory=AIConfig)
+    git: GitConfig = Field(default_factory=GitConfig)
 
     @property
     def schema_name(self) -> str:

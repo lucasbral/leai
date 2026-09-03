@@ -1841,3 +1841,101 @@ def show_rule_command(
     console.print()
     console.print(Panel("\n".join(content), title=f"[bold cyan]📖 Glossary Term: {top_term.term}[/bold cyan]", border_style="cyan"))
     console.print()
+
+
+# ==============================================================================
+# GIT / GITLAB INTEGRATION CLI SUB-COMMANDS (`leai git`)
+# ==============================================================================
+git_app = typer.Typer(help="Manage Git and GitLab repository synchronization for database metadata.")
+app.add_typer(git_app, name="git")
+
+
+@git_app.command("status")
+def git_status_command(
+    fetch: bool = typer.Option(True, "--fetch/--no-fetch", help="Fetch remote updates to check behind/ahead status"),
+) -> None:
+    """Check Git / GitLab repository status, active branch, and local modifications."""
+    from leai.git_ops import get_git_status
+
+    with console.status("[cyan]Checking Git/GitLab repository status...[/cyan]", spinner="dots"):
+        info = get_git_status(fetch=fetch)
+
+    if not info.is_repo:
+        console.print("[yellow]! Current directory is not a Git repository.[/yellow]")
+        console.print("[dim]Initialize with: git init && git remote add origin <GITLAB_URL>[/dim]\n")
+        return
+
+    table = Table(
+        title=f"[bold cyan]🌿 LEAI Git Repository Status ({info.platform_name})[/bold cyan]",
+        box=box.ROUNDED,
+        header_style="bold magenta",
+    )
+    table.add_column("Property", style="bold yellow", width=22)
+    table.add_column("Value", style="white")
+
+    table.add_row("Platform", f"[bold green]{info.platform_name}[/bold green]")
+    table.add_row("Active Branch", f"[bold cyan]{info.branch}[/bold cyan]")
+    table.add_row("Remote (origin)", info.remote_url or "[dim]No remote configured[/dim]")
+
+    sync_status = []
+    if info.behind > 0:
+        sync_status.append(f"[bold yellow]⤓ {info.behind} commit(s) behind remote (run 'leai git pull')[/bold yellow]")
+    if info.ahead > 0:
+        sync_status.append(f"[bold green]⤒ {info.ahead} commit(s) ahead of remote[/bold green]")
+    if not sync_status:
+        sync_status.append("[bold green]● Up to date with remote[/bold green]")
+    table.add_row("Sync Status", ", ".join(sync_status))
+
+    mod_count = len(info.modified_files)
+    untr_count = len(info.untracked_files)
+    changes = []
+    if mod_count > 0:
+        changes.append(f"{mod_count} modified file(s)")
+    if untr_count > 0:
+        changes.append(f"{untr_count} untracked file(s)")
+    if not changes:
+        changes.append("[green]Working tree clean[/green]")
+    table.add_row("Local Changes", ", ".join(changes))
+
+    console.print()
+    console.print(table)
+
+    if info.modified_files or info.untracked_files:
+        console.print("\n[dim]Modified metadata / documentation files:[/dim]")
+        for f in (info.modified_files + info.untracked_files)[:8]:
+            console.print(f"  [dim yellow]• {f}[/dim yellow]")
+        if len(info.modified_files + info.untracked_files) > 8:
+            console.print(f"  [dim]... and {len(info.modified_files + info.untracked_files) - 8} more file(s)[/dim]")
+        console.print("\n[dim]To stage, commit, and push to remote: [bold cyan]leai git sync[/bold cyan][/dim]\n")
+    else:
+        console.print()
+
+
+@git_app.command("pull")
+def git_pull_command() -> None:
+    """Pull latest metadata, annotations, and glossary updates from GitLab/remote."""
+    from leai.git_ops import git_pull
+
+    console.print("[cyan]⤓ Pulling updates from remote repository...[/cyan]")
+    ok, msg = git_pull()
+    if ok:
+        console.print(f"[green]✓ {msg}[/green]\n")
+    else:
+        console.print(f"[red]✕ Error pulling updates:[/red] {msg}\n")
+        raise typer.Exit(code=1)
+
+
+@git_app.command("sync")
+def git_sync_command(
+    message: str = typer.Option(None, "--message", "-m", help="Custom commit message"),
+) -> None:
+    """Stage metadata, annotations, and docs, commit and push to GitLab/remote."""
+    from leai.git_ops import git_sync
+
+    console.print("[cyan]⤒ Synchronizing database metadata with remote (add + commit + push)...[/cyan]")
+    ok, msg = git_sync(message=message)
+    if ok:
+        console.print(f"[green]✓ {msg}[/green]\n")
+    else:
+        console.print(f"[red]✕ Sync failed:[/red] {msg}\n")
+        raise typer.Exit(code=1)
