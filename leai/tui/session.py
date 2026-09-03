@@ -745,7 +745,8 @@ class InteractiveTUISession:
     def _run_rule(self, args: list[str]) -> None:
         """Manages the global business glossary and domain rules."""
         from rich.prompt import Prompt
-        from leai.glossary import load_glossary, add_or_update_term, search_glossary
+
+        from leai.glossary import add_or_update_term, load_glossary, search_glossary
         from leai.models import GlossaryTerm
 
         subcmd = args[0].lower() if args else "list"
@@ -825,11 +826,15 @@ class InteractiveTUISession:
             )
 
             add_or_update_term(self.config.annotationsPath, new_term)
-            console.print(f"\n[green]✓ Regra '[bold]{new_term.term}[/bold]' salva com sucesso em [bold cyan]{self.config.annotationsPath}/glossary.yml[/bold cyan]![/green]")
+            console.print(
+                f"\n[green]✓ Regra '[bold]{new_term.term}[/bold]' salva com sucesso em [bold cyan]{self.config.annotationsPath}/glossary.yml[/bold cyan]![/green]"
+            )
             console.print("[dim]A IA agora consultará essa regra automaticamente no chat e em comandos de SQL.[/dim]\n")
             return
 
-        console.print(f"[yellow]Uso: [bold cyan]/rule list[/bold cyan] | [bold cyan]/rule add [termo][/bold cyan] | [bold cyan]/rule find <termo>[/bold cyan][/yellow]\n")
+        console.print(
+            "[yellow]Uso: [bold cyan]/rule list[/bold cyan] | [bold cyan]/rule add [termo][/bold cyan] | [bold cyan]/rule find <termo>[/bold cyan][/yellow]\n"
+        )
 
     def _run_doc(self, object_name: str | None = None) -> None:
         """Launches the in-terminal interactive documentation editor."""
@@ -919,9 +924,7 @@ class InteractiveTUISession:
                                 description=f"Extracting [bold yellow]{s_title}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({schema_obj_count[0]:,} objects) [dim]│ {cat}[/dim]",
                             )
 
-                        schema_meta = fetch_schema_metadata(
-                            extract_cfg, schema_name=s_name, callback=_cb, days=days, connection=connection
-                        )
+                        schema_meta = fetch_schema_metadata(extract_cfg, schema_name=s_name, callback=_cb, days=days, connection=connection)
                         save_raw_schema(schema_meta, extract_cfg.rawPath, multi_schema=True)
                         total_tables += len(schema_meta.tables)
                         total_views += len(schema_meta.views)
