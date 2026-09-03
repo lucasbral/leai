@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import urllib.error
 import urllib.request
 from typing import Any
@@ -45,12 +46,14 @@ class GeminiClient(BaseLLMClient):
         model: str | None = None,
         base_url: str | None = None,
         temperature: float = 0.2,
+        timeout: float = 300.0,
     ):
         super().__init__(
             api_key=api_key or "",
             model=model or "gemini-2.5-flash",
             base_url=(base_url or "https://generativelanguage.googleapis.com/v1beta").rstrip("/"),
             temperature=temperature,
+            timeout=timeout,
         )
 
     def _send_request(self, prompt: str, system_prompt: str | None = None, response_mime_type: str = "text/plain") -> str:
@@ -84,7 +87,7 @@ class GeminiClient(BaseLLMClient):
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
         try:
-            with urllib.request.urlopen(req, timeout=90) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 resp_data = json.loads(resp.read().decode("utf-8"))
                 usage = resp_data.get("usageMetadata", {})
                 self.record_usage(
@@ -183,7 +186,7 @@ class GeminiClient(BaseLLMClient):
 
         collected_text = []
         try:
-            with urllib.request.urlopen(req, timeout=90) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 for raw_line in resp:
                     line = raw_line.decode("utf-8").strip()
                     if not line or not line.startswith("data:"):
@@ -284,7 +287,7 @@ class GeminiClient(BaseLLMClient):
                     resp_obj = {"output": raw_c}
                 gemini_contents.append(
                     {
-                        "role": "function",
+                        "role": "user",
                         "parts": [
                             {
                                 "functionResponse": {
@@ -316,51 +319,68 @@ class GeminiClient(BaseLLMClient):
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
-        try:
-            with urllib.request.urlopen(req, timeout=90) as resp:
-                resp_data = json.loads(resp.read().decode("utf-8"))
-                usage = resp_data.get("usageMetadata", {})
-                self.record_usage(
-                    prompt_tokens=usage.get("promptTokenCount", 0),
-                    completion_tokens=usage.get("candidatesTokenCount", 0),
-                    total_tokens=usage.get("totalTokenCount"),
-                )
-                candidates = resp_data.get("candidates", [])
-                if not candidates:
-                    raise RuntimeError(f"Gemini API returned response with no candidates: {resp_data}")
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                    resp_data = json.loads(resp.read().decode("utf-8"))
+                    usage = resp_data.get("usageMetadata", {})
+                    self.record_usage(
+                        prompt_tokens=usage.get("promptTokenCount", 0),
+                        completion_tokens=usage.get("candidatesTokenCount", 0),
+                        total_tokens=usage.get("totalTokenCount"),
+                    )
+                    candidates = resp_data.get("candidates", [])
+                    if not candidates:
+                        raise RuntimeError(f"Gemini API returned response with no candidates: {resp_data}")
 
-                cand_content = candidates[0].get("content", {})
-                parts = cand_content.get("parts", [])
+                    cand_content = candidates[0].get("content", {})
+                    parts = cand_content.get("parts", [])
 
-                text_parts = []
-                tool_calls = []
+                    text_parts = []
+                    tool_calls = []
 
-                for p in parts:
-                    if "text" in p:
-                        text_parts.append(p["text"])
-                    if "functionCall" in p:
-                        fc = p["functionCall"]
-                        tc_dict = {
-                            "id": f"call_{fc.get('name', 'fn')}",
-                            "name": fc.get("name", ""),
-                            "arguments": fc.get("args", {}),
-                        }
-                        ts = p.get("thoughtSignature") or p.get("thought_signature")
-                        if ts:
-                            tc_dict["thought_signature"] = ts
-                        tool_calls.append(tc_dict)
+                    for p in parts:
+                        if "text" in p:
+                            text_parts.append(p["text"])
+                        if "functionCall" in p:
+                            fc = p["functionCall"]
+                            tc_dict = {
+                                "id": f"call_{fc.get('name', 'fn')}",
+                                "name": fc.get("name", ""),
+                                "arguments": fc.get("args", {}),
+                            }
+                            ts = p.get("thoughtSignature") or p.get("thought_signature")
+                            if ts:
+                                tc_dict["thought_signature"] = ts
+                            tool_calls.append(tc_dict)
 
-                combined_text = "\n".join(text_parts).strip() if text_parts else None
-                return combined_text, tool_calls
-        except urllib.error.HTTPError as exc:
-            err_body = exc.read().decode("utf-8", errors="replace")
-            # If function calling is not supported or errors, fallback to generate_chat without tools
-            if exc.code in (400, 404, 422) and tools:
-                fallback_res = self.generate_chat(messages, system_prompt=system_prompt)
-                return fallback_res, []
-            raise RuntimeError(f"Gemini API error (HTTP {exc.code}): {err_body}") from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError(f"Connection error with Gemini: {exc.reason}") from exc
+                    combined_text = "\n".join(text_parts).strip() if text_parts else None
+                    return combined_text, tool_calls
+            except urllib.error.HTTPError as exc:
+                err_body = exc.read().decode("utf-8", errors="replace")
+                if exc.code in (429, 500, 502, 503, 504) and attempt < max_retries - 1:
+                    sleep_s = 2.0 * (2**attempt)
+                    try:
+                        err_json = json.loads(err_body)
+                        for d in err_json.get("error", {}).get("details", []):
+                            if "retryDelay" in d:
+                                rd = str(d["retryDelay"]).rstrip("s")
+                                sleep_s = max(float(rd), sleep_s)
+                    except Exception:
+                        pass
+                    time.sleep(min(sleep_s, 20.0))
+                    continue
+                # If function calling is not supported or errors, fallback to generate_chat without tools
+                if exc.code in (400, 404, 422) and tools:
+                    fallback_res = self.generate_chat(messages, system_prompt=system_prompt)
+                    return fallback_res, []
+                raise RuntimeError(f"Gemini API error (HTTP {exc.code}): {err_body}") from exc
+            except urllib.error.URLError as exc:
+                if attempt < max_retries - 1:
+                    time.sleep(2.0 * (attempt + 1))
+                    continue
+                raise RuntimeError(f"Connection error with Gemini: {exc.reason}") from exc
 
     def list_models(self) -> list[dict[str, str]]:
         if not self.api_key:

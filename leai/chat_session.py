@@ -117,20 +117,24 @@ class ChatSession:
         on_token: Callable[[str], None] | None = None,
     ) -> tuple[str, list[str]]:
         """Processes user input, runs agent tool execution loop, and retrieves AI response."""
-        # 1. Update RAG context with the new question (inject compact catalog only on initial turn to save tokens)
-        is_first_turn = len(self.messages) == 0
-        rag_context, detected = build_rag_context(user_input, self.schemas, self.config, include_catalog=is_first_turn)
+        # 1. Update RAG context with detected focal entities (without dumping entire catalog into tokens)
+        rag_context, detected = build_rag_context(user_input, self.schemas, self.config, include_catalog=False)
         for entity in detected:
             self.active_entities.add(entity)
 
-        # 2. Assemble System Prompt with tools instruction + accumulated RAG memory
+        # 2. Assemble System Prompt with tools instruction + lightweight schema scope
+        schema_names = [s.schema_name for s in self.schemas] if self.schemas else []
         combined_sys = (
             f"{AGENT_SYSTEM_PROMPT}\n\n"
             f"{ASK_SYSTEM_PROMPT}\n\n"
-            f"### [CONVERSATION MEMORY & INITIAL SCHEMA CONTEXT]\n"
-            f"Active entities in conversation: {', '.join(self.active_entities) if self.active_entities else 'None'}\n\n"
-            f"Database Context Overview:\n{rag_context}"
+            f"### [CONVERSATION MEMORY & DATABASE SCOPE]\n"
+            f"Available Schemas: {', '.join(schema_names)}\n"
+            f"Active entities in conversation: {', '.join(sorted(self.active_entities)) if self.active_entities else 'None'}\n"
+            "Use the provided tools dynamically (e.g. get_table_schema, search_column_comments, search_database_objects) "
+            "to inspect schemas, columns, comments, rules, and documentation as needed to answer the user accurately."
         )
+        if rag_context:
+            combined_sys += f"\n\nFocal Context Dossier:\n{rag_context}"
 
         # 3. Add user message
         self.add_user_message(user_input)

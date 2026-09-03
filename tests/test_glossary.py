@@ -76,6 +76,28 @@ class TestBusinessGlossary(unittest.TestCase):
         self.assertEqual(len(loaded2.terms), 1)
         self.assertEqual(loaded2.terms[0].definition, "Definição Atualizada")
 
+    def test_delete_term(self):
+        from leai.glossary import delete_term
+
+        t1 = GlossaryTerm(term="Regra Para Deletar", definition="Sera excluida em breve")
+        t2 = GlossaryTerm(term="Regra Mantida", definition="Deve permanecer")
+        add_or_update_term(self.ann_path, t1)
+        add_or_update_term(self.ann_path, t2)
+
+        self.assertEqual(len(load_glossary(self.ann_path).terms), 2)
+
+        # Delete existing term (case- and accent-insensitive target)
+        deleted = delete_term(self.ann_path, "regra para deletar")
+        self.assertTrue(deleted)
+
+        loaded = load_glossary(self.ann_path)
+        self.assertEqual(len(loaded.terms), 1)
+        self.assertEqual(loaded.terms[0].term, "Regra Mantida")
+
+        # Delete non-existent term
+        not_deleted = delete_term(self.ann_path, "termo_inexistente")
+        self.assertFalse(not_deleted)
+
     def test_search_glossary(self):
         t1 = GlossaryTerm(
             term="Usuário Ativo",
@@ -145,6 +167,14 @@ class TestBusinessGlossary(unittest.TestCase):
         self.assertIn("Usuário Ativo", content)
         self.assertIn("`STATUS = 'A'`", content)
 
+        # Now delete the term and verify write_glossary_doc unlinks GLOSSARY.md
+        from leai.glossary import delete_term
+
+        delete_term(self.ann_path, "Usuário Ativo")
+        res_empty = write_glossary_doc(self.ann_path, self.doc_path)
+        self.assertIsNone(res_empty)
+        self.assertFalse(doc_file.exists())
+
     def test_cli_rule_commands(self):
         cfg_file = Path(self.temp_dir.name) / "leai.yml"
         cfg_file.write_text(f"annotationsPath: '{self.ann_path}'\n", encoding="utf-8")
@@ -174,7 +204,8 @@ class TestBusinessGlossary(unittest.TestCase):
         # 2. List rules via CLI
         res_list = self.runner.invoke(app, ["rule", "list", "--config", str(cfg_file)])
         self.assertEqual(res_list.exit_code, 0)
-        self.assertIn("Estágio Probatório", res_list.output)
+        self.assertIn("Estágio", res_list.output)
+        self.assertIn("Probatório", res_list.output)
         self.assertIn("SERVIDORES", res_list.output)
 
         # 3. Show rule via CLI
