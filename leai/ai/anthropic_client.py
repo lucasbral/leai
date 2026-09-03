@@ -105,12 +105,14 @@ class AnthropicClient(BaseLLMClient):
         model: str | None = None,
         base_url: str | None = None,
         temperature: float = 0.2,
+        timeout: float = 300.0,
     ):
         super().__init__(
             api_key=api_key or "",
             model=model or "claude-3-5-sonnet-20241022",
             base_url=(base_url or "https://api.anthropic.com/v1").rstrip("/"),
             temperature=temperature,
+            timeout=timeout,
         )
 
     def _send_request(self, prompt: str, system_prompt: str | None = None) -> str:
@@ -139,7 +141,7 @@ class AnthropicClient(BaseLLMClient):
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
         try:
-            with urllib.request.urlopen(req, timeout=90) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 resp_data = json.loads(resp.read().decode("utf-8"))
                 usage = resp_data.get("usage", {})
                 self.record_usage(
@@ -227,7 +229,7 @@ class AnthropicClient(BaseLLMClient):
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
         try:
-            with urllib.request.urlopen(req, timeout=90) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 resp_data = json.loads(resp.read().decode("utf-8"))
                 usage = resp_data.get("usage", {})
                 self.record_usage(
@@ -303,7 +305,7 @@ class AnthropicClient(BaseLLMClient):
 
         collected_text = []
         try:
-            with urllib.request.urlopen(req, timeout=90) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 for raw_line in resp:
                     line = raw_line.decode("utf-8").strip()
                     if not line or not line.startswith("data:"):

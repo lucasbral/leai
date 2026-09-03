@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import socket
 import unittest
+import urllib.error
 import urllib.request
 from unittest.mock import patch
 
@@ -17,6 +18,9 @@ class MockChatLLMClient:
 
     def generate_chat_with_tools(self, messages, tools=None, system_prompt=None, tool_choice_mode="auto"):
         return "Hello from Web Copilot! Here is your SQL:\n```sql\nSELECT * FROM EMPLOYEES;\n```", []
+
+    def generate_chat(self, messages, system_prompt=None):
+        return "Specialist synthesis completed."
 
 
 def _find_free_port() -> int:
@@ -67,15 +71,11 @@ class WebChatTests(unittest.TestCase):
         except Exception:
             pass
 
-    def test_serve_chat_html(self):
+    def test_chat_html_removed_returns_404(self):
         req = urllib.request.Request(f"{self.url}/chat")
-        with urllib.request.urlopen(req) as resp:
-            self.assertEqual(resp.status, 200)
-            html = resp.read().decode("utf-8")
-            self.assertIn("LEAI", html)
-            self.assertIn("AI Copilot Chat", html)
-            self.assertIn("marked", html)
-            self.assertIn("highlight.js", html)
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req)
+        self.assertEqual(ctx.exception.code, 404)
 
     def test_api_chat_models(self):
         req = urllib.request.Request(f"{self.url}/api/chat/models")
@@ -86,6 +86,16 @@ class WebChatTests(unittest.TestCase):
             self.assertEqual(data.get("default_provider"), "openai")
             self.assertIn("openai", data.get("providers", {}))
             self.assertIn("gemini", data.get("providers", {}))
+
+    def test_api_catalog_format(self):
+        req = urllib.request.Request(f"{self.url}/api/catalog")
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 200)
+            data = json.loads(resp.read().decode("utf-8"))
+            self.assertIn("schemas", data)
+            self.assertEqual(len(data["schemas"]), 1)
+            self.assertEqual(data["schemas"][0]["schema_name"], "HR")
+            self.assertEqual(len(data["schemas"][0]["tables"]), 2)
 
     @patch("leai.web.server.get_llm_client")
     def test_api_chat_stream_sse(self, mock_get_client):
@@ -136,6 +146,41 @@ class WebChatTests(unittest.TestCase):
             body = resp.read().decode("utf-8")
             self.assertIn("Hello from Web Copilot!", body)
             self.assertIn("[DONE]", body)
+
+    @patch("leai.web.server.get_llm_client")
+    def test_api_chat_stream_workflow_command(self, mock_get_client):
+        mock_get_client.return_value = self.mock_client
+
+        req = urllib.request.Request(
+            f"{self.url}/api/chat/stream",
+            data=json.dumps({"prompt": "/workflow impact EMPLOYEES"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            self.assertEqual(resp.status, 200)
+            body = resp.read().decode("utf-8")
+            self.assertIn("data: ", body)
+            self.assertIn("[DONE]", body)
+            self.assertIn("tool_start", body)
+            self.assertIn("tool_end", body)
+
+    @patch("leai.web.server.get_llm_client")
+    def test_api_chat_stream_specialist_command(self, mock_get_client):
+        mock_get_client.return_value = self.mock_client
+
+        req = urllib.request.Request(
+            f"{self.url}/api/chat/stream",
+            data=json.dumps({"prompt": "@catalog_researcher Find all tables with employees"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            self.assertEqual(resp.status, 200)
+            body = resp.read().decode("utf-8")
+            self.assertIn("data: ", body)
+            self.assertIn("[DONE]", body)
+            self.assertIn("Hello from Web Copilot!", body)
 
 
 if __name__ == "__main__":

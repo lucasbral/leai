@@ -59,14 +59,17 @@ class AIIntegrationTests(unittest.TestCase):
         client_default = get_llm_client(cfg)
         self.assertIsInstance(client_default, OpenAICompatibleClient)
         self.assertEqual(client_default.model, "gpt-4o")
+        self.assertEqual(client_default.timeout, 300.0)
 
         client_gemini = get_llm_client(cfg, provider_override="gemini")
         self.assertIsInstance(client_gemini, GeminiClient)
         self.assertEqual(client_gemini.model, "gemini-1.5-pro")
+        self.assertEqual(client_gemini.timeout, 300.0)
 
         client_claude = get_llm_client(cfg, provider_override="anthropic")
         self.assertIsInstance(client_claude, AnthropicClient)
         self.assertEqual(client_claude.model, "claude-3-5-sonnet")
+        self.assertEqual(client_claude.timeout, 300.0)
 
         client_deepseek = get_llm_client(cfg, provider_override="deepseek")
         self.assertIsInstance(client_deepseek, OpenAICompatibleClient)

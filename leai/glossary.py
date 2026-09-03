@@ -80,6 +80,18 @@ def add_or_update_term(annotations_path: Path | str, new_term: GlossaryTerm) -> 
     save_glossary(annotations_path, glossary)
 
 
+def delete_term(annotations_path: Path | str, term_name: str) -> bool:
+    """Removes a glossary term by name. Returns True if found and deleted, False otherwise."""
+    glossary = load_glossary(annotations_path)
+    norm_target = _normalize_text(term_name)
+    initial_len = len(glossary.terms)
+    glossary.terms = [t for t in glossary.terms if _normalize_text(t.term) != norm_target]
+    if len(glossary.terms) < initial_len:
+        save_glossary(annotations_path, glossary)
+        return True
+    return False
+
+
 def search_glossary(glossary: BusinessGlossary, query: str) -> list[tuple[GlossaryTerm, int]]:
     """Searches glossary terms returning matches sorted by relevance score."""
     if not query.strip():

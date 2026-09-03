@@ -157,6 +157,30 @@
       opacity: 0.9;
       transform: translateY(-1px);
     }
+    .lang-selector-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 7px;
+      padding: 4px 8px;
+      font-size: 12px;
+      color: var(--text-primary);
+    }
+    .lang-selector-wrap select {
+      background: transparent;
+      border: none;
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 12px;
+      outline: none;
+      cursor: pointer;
+    }
+    .lang-selector-wrap select option {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+    }
 
     /* Main Layout */
     .app-container {
@@ -764,15 +788,269 @@
       white-space: pre;
     }
 
-    /* Lineage Mermaid Container */
-    .mermaid-box {
+    /* Lineage & Impact Styling */
+    .lineage-kpis {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .lineage-kpi-card {
       background: var(--bg-secondary);
       border: 1px solid var(--border-color);
       border-radius: 8px;
-      padding: 24px;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 160px;
+    }
+    .lineage-kpi-val {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--accent);
+      font-family: var(--font-mono);
+    }
+    .lineage-kpi-lbl {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .lineage-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+    }
+    .lineage-controls-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .lineage-filter-chip {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      border-radius: 16px;
+      padding: 4px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .lineage-filter-chip:hover {
+      border-color: var(--accent);
+      color: var(--text-primary);
+    }
+    .lineage-filter-chip.active {
+      background: var(--accent);
+      color: #0f172a;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+    .lineage-filter-chip .chip-badge {
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 10px;
+      padding: 1px 6px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .lineage-filter-chip.active .chip-badge {
+      background: rgba(0, 0, 0, 0.4);
+      color: #fff;
+    }
+
+    .lineage-graph-container {
+      position: relative;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      min-height: 520px;
+      height: 600px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .lineage-graph-container.fullscreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 9999;
+      border-radius: 0;
+    }
+    .lineage-floating-controls {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      z-index: 10;
+      display: flex;
+      gap: 6px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 4px;
+    }
+    .lineage-floating-controls button {
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .lineage-floating-controls button:hover {
+      background: var(--bg-tertiary);
+      color: var(--accent);
+    }
+    .lineage-canvas-viewport {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+      overflow: hidden;
+      position: relative;
       display: flex;
       justify-content: center;
-      min-height: 250px;
+      align-items: center;
+    }
+    .lineage-canvas-viewport.grabbing {
+      cursor: grabbing;
+      user-select: none;
+    }
+    .lineage-canvas-content {
+      transform-origin: center center;
+      transition: transform 0.05s ease-out;
+      will-change: transform;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .lineage-canvas-content svg {
+      max-width: none !important;
+      height: auto !important;
+    }
+    .lineage-canvas-content .node {
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .lineage-canvas-content .node:hover {
+      opacity: 0.85;
+      filter: drop-shadow(0 0 6px var(--accent));
+    }
+
+    .lineage-dense-warning {
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: 6px;
+      padding: 8px 14px;
+      margin-bottom: 12px;
+      font-size: 12px;
+      color: #fbbf24;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    /* Table View Styling */
+    .lineage-table-view {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .lineage-search-box {
+      position: relative;
+      max-width: 400px;
+      flex: 1;
+    }
+    .lineage-search-box input {
+      width: 100%;
+      padding: 8px 12px 8px 34px;
+      font-size: 13px;
+      border-radius: 6px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+    }
+    .lineage-search-box .search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    .lineage-section-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .lineage-data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .lineage-data-table th {
+      background: var(--bg-tertiary);
+      text-align: left;
+      padding: 10px 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+    }
+    .lineage-data-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-primary);
+    }
+    .lineage-data-table tr:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .lineage-row-btn {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--accent);
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s;
+    }
+    .lineage-row-btn:hover {
+      background: var(--accent);
+      color: #0f172a;
+      border-color: var(--accent);
     }
 
     /* Toast Notification */
@@ -920,6 +1198,236 @@
       accent-color: var(--accent);
       cursor: pointer;
     }
+
+    /* Header Modes Switcher */
+    .header-nav-modes {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--bg-primary);
+      padding: 3px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      margin-left: 16px;
+    }
+    .nav-mode-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      outline: none;
+      font-family: inherit;
+    }
+    .nav-mode-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-hover);
+    }
+    .nav-mode-btn.active {
+      color: var(--accent);
+      background: var(--bg-secondary);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    .nav-badge {
+      background: var(--bg-tertiary);
+      color: var(--text-muted);
+      padding: 1px 6px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .nav-mode-btn.active .nav-badge {
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+
+    /* Glossary Studio Styles */
+    .glossary-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 20px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      flex-wrap: wrap;
+    }
+    .glossary-tag-filters {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .glossary-tag-chip {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      padding: 3px 10px;
+      border-radius: 14px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .glossary-tag-chip:hover {
+      border-color: var(--accent);
+      color: var(--text-primary);
+    }
+    .glossary-tag-chip.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .glossary-form-card {
+      margin: 16px 20px;
+      background: #131d31;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 10px;
+      padding: 18px 20px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+    .glossary-form-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .glossary-form-header h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .field-hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    .form-label.required::after {
+      content: " *";
+      color: var(--danger);
+    }
+    .glossary-cards-grid {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .glossary-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 9px;
+      padding: 16px 18px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .glossary-card:hover {
+      border-color: rgba(56, 189, 248, 0.5);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+    }
+    .glossary-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .glossary-card-title-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .glossary-card-title {
+      font-size: 16px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: #38bdf8;
+    }
+    .glossary-pill {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 5px;
+      border: 1px solid transparent;
+      font-family: var(--font-mono);
+    }
+    .glossary-pill-table {
+      background: rgba(251, 191, 36, 0.12);
+      color: #fbbf24;
+      border-color: rgba(251, 191, 36, 0.25);
+    }
+    .glossary-pill-tag {
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      border-color: var(--border-color);
+    }
+    .glossary-card-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .glossary-card-def {
+      font-size: 13.5px;
+      color: var(--text-primary);
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+    .glossary-filter-block {
+      background: #090d16;
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin: 10px 0;
+      position: relative;
+    }
+    .glossary-filter-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .glossary-filter-code {
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      color: #7dd3fc;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.5;
+    }
+    .glossary-meta-row {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+      flex-wrap: wrap;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .glossary-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .glossary-meta-item strong {
+      color: var(--text-secondary);
+    }
   </style>
 </head>
 <body>
@@ -931,18 +1439,33 @@
       <span class="badge" id="ai-model-badge">AI: READY</span>
     </a>
 
+    <div class="header-nav-modes">
+      <button type="button" class="nav-mode-btn active" id="btn-mode-catalog" onclick="switchAppMode('catalog')">
+        <span>📁</span> <span data-i18n="nav_catalog">Catálogo</span>
+      </button>
+      <button type="button" class="nav-mode-btn" id="btn-mode-glossary" onclick="switchAppMode('glossary')">
+        <span>📖</span> <span data-i18n="nav_glossary">Regras Universais</span>
+        <span class="nav-badge" id="nav-glossary-count">0</span>
+      </button>
+    </div>
+
     <div class="header-center">
       <div class="search-box">
         <span class="search-icon">🔍</span>
-        <input type="text" id="global-search" placeholder="Search table, view, package, procedure, or business rule..." oninput="filterCatalog(this.value)">
+        <input type="text" id="global-search" placeholder="Search table, view, package, procedure, or business rule..." data-i18n-placeholder="search_placeholder" oninput="filterCatalog(this.value)">
       </div>
     </div>
 
     <div class="header-actions">
-      <a href="/chat" class="btn btn-ai" style="text-decoration: none; font-weight: 600;">💬 Chat IA</a>
-      <button class="btn btn-secondary" onclick="loadCatalog()">🔄 Refresh</button>
-      <button class="btn btn-secondary" onclick="compileAll()">📦 Recompile All</button>
-      <button class="btn btn-secondary" style="font-size: 15px; padding: 6px 12px;" onclick="openSettingsModal()" title="Settings (leai.yml)">⚙️</button>
+      <!-- Language Selector -->
+      <div class="lang-selector-wrap" title="Idioma / Language">
+        <span>🌐</span>
+        <select id="langSelect" onchange="setLanguage(this.value)">
+          <option value="pt">PT</option>
+          <option value="en">EN</option>
+        </select>
+      </div>
+      <button class="btn btn-secondary" style="font-size: 15px; padding: 6px 12px;" onclick="openSettingsModal()" title="Settings (leai.yml)" data-i18n-title="settings_title">⚙️</button>
     </div>
   </header>
 
@@ -951,11 +1474,11 @@
     <!-- Sidebar Object Navigator -->
     <aside class="sidebar">
       <div class="sidebar-header">
-        <span>Object Catalog</span>
+        <span data-i18n="object_catalog">Object Catalog</span>
         <span id="catalog-count" style="color: var(--accent); font-family: var(--font-mono);">0 objects</span>
       </div>
       <div class="sidebar-tree" id="sidebar-tree">
-        <div style="padding: 20px; text-align: center; color: var(--text-muted);">Loading catalog...</div>
+        <div style="padding: 20px; text-align: center; color: var(--text-muted);" data-i18n="loading_catalog">Loading catalog...</div>
       </div>
     </aside>
 
@@ -964,8 +1487,8 @@
       <!-- Empty Placeholder -->
       <div id="empty-state-view" class="empty-state">
         <div style="font-size: 48px;">📂</div>
-        <h2>Select an Object in Catalog</h2>
-        <p style="max-width: 420px; font-size: 13px;">Browse tables, views, and packages in the sidebar to view compiled documentation and edit annotations in real time.</p>
+        <h2 data-i18n="empty_title">Select an Object in Catalog</h2>
+        <p style="max-width: 420px; font-size: 13px;" data-i18n="empty_desc">Browse tables, views, and packages in the sidebar to view compiled documentation and edit annotations in real time.</p>
       </div>
 
       <!-- Object Workspace (Hidden by default) -->
@@ -979,58 +1502,58 @@
           </div>
 
           <div style="display: flex; gap: 8px;">
-            <button class="btn btn-ai" id="btn-ai-enrich" onclick="runAiEnrich()">✨ Suggest with AI</button>
-            <button class="btn btn-primary" onclick="saveAnnotations()">💾 Save & Recompile</button>
+            <button class="btn btn-ai" id="btn-ai-enrich" onclick="runAiEnrich()"><span data-i18n="btn_ai_suggest">✨ Suggest with AI</span></button>
+            <button class="btn btn-primary" id="btn-save-ann" onclick="saveAnnotations()"><span data-i18n="btn_save_recompile">💾 Save & Recompile</span></button>
           </div>
         </div>
 
         <div class="tabs-bar">
-          <button class="tab-btn active" onclick="switchTab('edit')">✏️ Annotation Editor</button>
-          <button class="tab-btn" onclick="switchTab('doc')">📄 Compiled Docs</button>
-          <button class="tab-btn" onclick="switchTab('lineage')">📊 Lineage & Impact</button>
+          <button class="tab-btn active" onclick="switchTab('edit')"><span data-i18n="tab_editor">✏️ Annotation Editor</span></button>
+          <button class="tab-btn" onclick="switchTab('doc')"><span data-i18n="tab_docs">📄 Compiled Docs</span></button>
+          <button class="tab-btn" onclick="switchTab('lineage')"><span data-i18n="tab_lineage">📊 Lineage & Impact</span></button>
         </div>
 
         <div class="tab-content">
           <!-- TAB 1: Editor Pane -->
           <div class="tab-pane active" id="tab-pane-edit">
             <div class="form-group">
-              <label class="form-label">📝 Business Description / Entity Purpose</label>
-              <textarea id="edit-description" class="form-control" style="min-height: 80px;" placeholder="Describe the functional purpose of this table/routine for business rules..."></textarea>
+              <label class="form-label" data-i18n="lbl_description">📝 Business Description / Entity Purpose</label>
+              <textarea id="edit-description" class="form-control" style="min-height: 80px;" placeholder="Describe the functional purpose of this table/routine for business rules..." data-i18n-placeholder="ph_description"></textarea>
             </div>
 
             <div class="form-group">
-              <label class="form-label">📌 Business Rules</label>
+              <label class="form-label" data-i18n="lbl_rules">📌 Business Rules</label>
               <div class="rules-list" id="rules-container"></div>
-              <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('rules-container', '', 'e.g. Every active employee must belong to a valid department...')">+ Add Rule</button>
+              <button type="button" class="btn btn-secondary" id="btn-add-rule" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('rules-container', '', getDynamicPlaceholder('rules'))"><span data-i18n="btn_add_rule">+ Add Rule</span></button>
             </div>
 
             <div class="form-group">
-              <label class="form-label">💡 Use Cases & Sample Queries</label>
+              <label class="form-label" data-i18n="lbl_use_cases">💡 Use Cases & Sample Queries</label>
               <div class="rules-list" id="use-cases-container"></div>
-              <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('use-cases-container', '', 'e.g. Analytical query for earnings and deduction calculations...')">+ Add Use Case</button>
+              <button type="button" class="btn btn-secondary" id="btn-add-use-case" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('use-cases-container', '', getDynamicPlaceholder('use_cases'))"><span data-i18n="btn_add_use_case">+ Add Use Case</span></button>
             </div>
 
             <div class="form-group">
-              <label class="form-label">⚠️ Technical Alerts & Warnings</label>
+              <label class="form-label" data-i18n="lbl_warnings">⚠️ Technical Alerts & Warnings</label>
               <div class="rules-list" id="warnings-container"></div>
-              <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('warnings-container', '', 'e.g. Monthly partitioned table; always filter on DT_COMPETENCIA column...')">+ Add Warning</button>
+              <button type="button" class="btn btn-secondary" id="btn-add-warning" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('warnings-container', '', getDynamicPlaceholder('warnings'))"><span data-i18n="btn_add_warning">+ Add Warning</span></button>
             </div>
 
             <div class="form-group">
-              <label class="form-label">🔗 Business Relationships / Connected Objects</label>
+              <label class="form-label" data-i18n="lbl_related">🔗 Business Relationships / Connected Objects</label>
               <div class="rules-list" id="related-objects-container"></div>
-              <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('related-objects-container', '', 'e.g. TAB_DEPARTMENTS, PKG_PAYROLL...')">+ Add Related Object</button>
+              <button type="button" class="btn btn-secondary" id="btn-add-related" style="font-size: 12px; padding: 5px 10px;" onclick="addDynamicItem('related-objects-container', '', getDynamicPlaceholder('related'))"><span data-i18n="btn_add_related">+ Add Related Object</span></button>
             </div>
 
             <div class="form-group" id="columns-section">
-              <label class="form-label">📋 Column Dictionary (Field Descriptions)</label>
+              <label class="form-label" data-i18n="lbl_columns">📋 Column Dictionary (Field Descriptions)</label>
               <div class="table-container">
                 <table class="data-table">
                   <thead>
                     <tr>
-                      <th style="width: 25%;">Column</th>
-                      <th style="width: 15%;">Data Type</th>
-                      <th style="width: 60%;">Business Description</th>
+                      <th style="width: 25%;" data-i18n="th_column">Column</th>
+                      <th style="width: 15%;" data-i18n="th_datatype">Data Type</th>
+                      <th style="width: 60%;" data-i18n="th_desc">Business Description</th>
                     </tr>
                   </thead>
                   <tbody id="columns-table-body"></tbody>
@@ -1039,8 +1562,8 @@
             </div>
 
             <div class="form-group">
-              <label class="form-label">🏷️ Classification Tags (comma-separated)</label>
-              <input type="text" id="edit-tags" class="form-control" placeholder="e.g. HR, PAYROLL, SENSITIVE">
+              <label class="form-label" data-i18n="lbl_tags">🏷️ Classification Tags (comma-separated)</label>
+              <input type="text" id="edit-tags" class="form-control" placeholder="e.g. HR, PAYROLL, SENSITIVE" data-i18n-placeholder="ph_tags">
             </div>
           </div>
 
@@ -1053,27 +1576,329 @@
               </div>
               <div style="display: flex; gap: 8px; align-items: center;">
                 <div class="doc-segmented-control">
-                  <button type="button" class="seg-btn active" id="seg-btn-rendered" onclick="setDocViewMode('rendered')">👁️ Rendered</button>
-                  <button type="button" class="seg-btn" id="seg-btn-source" onclick="setDocViewMode('source')">📝 Source Code (.md)</button>
+                  <button type="button" class="seg-btn active" id="seg-btn-rendered" onclick="setDocViewMode('rendered')"><span data-i18n="btn_rendered">👁️ Rendered</span></button>
+                  <button type="button" class="seg-btn" id="seg-btn-source" onclick="setDocViewMode('source')"><span data-i18n="btn_source">📝 Source Code (.md)</span></button>
                 </div>
-                <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 12px;" onclick="copyCompiledMarkdown()">📋 Copy Markdown</button>
+                <button type="button" class="btn btn-secondary" id="btn-copy-md" style="font-size: 12px; padding: 5px 12px;" onclick="copyCompiledMarkdown()"><span data-i18n="btn_copy_markdown">📋 Copy Markdown</span></button>
               </div>
             </div>
 
             <div class="markdown-body" id="doc-rendered-content">
-              <p>Loading preview...</p>
+              <p data-i18n="loading_preview">Loading preview...</p>
             </div>
             <pre class="doc-source-code" id="doc-source-content" style="display: none;"></pre>
           </div>
 
           <!-- TAB 3: Lineage Pane -->
           <div class="tab-pane" id="tab-pane-lineage">
-            <div class="mermaid-box" id="mermaid-container">
-              <pre class="mermaid" id="mermaid-code">
+            <!-- KPIs Header -->
+            <div class="lineage-kpis">
+              <div class="lineage-kpi-card">
+                <span style="font-size: 24px;">🔗</span>
+                <div>
+                  <div class="lineage-kpi-val" id="lineage-kpi-total">0</div>
+                  <div class="lineage-kpi-lbl" data-i18n="lineage_kpi_total">Total Connections</div>
+                </div>
+              </div>
+              <div class="lineage-kpi-card">
+                <span style="font-size: 24px;">⬆️</span>
+                <div>
+                  <div class="lineage-kpi-val" id="lineage-kpi-upstream">0</div>
+                  <div class="lineage-kpi-lbl" data-i18n="lineage_kpi_upstream">Consumes (Upstream)</div>
+                </div>
+              </div>
+              <div class="lineage-kpi-card">
+                <span style="font-size: 24px;">⬇️</span>
+                <div>
+                  <div class="lineage-kpi-val" id="lineage-kpi-downstream">0</div>
+                  <div class="lineage-kpi-lbl" data-i18n="lineage_kpi_downstream">Consumed By (Downstream)</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Toolbar: View Switcher, Depth, and Filters -->
+            <div class="lineage-toolbar">
+              <div class="lineage-controls-group">
+                <!-- Mode View Switcher -->
+                <div class="segmented-control" style="margin: 0;">
+                  <button type="button" class="seg-btn active" id="btn-lineage-view-graph" onclick="switchLineageView('graph')">
+                    <span data-i18n="lineage_view_graph">📊 Visual Graph</span>
+                  </button>
+                  <button type="button" class="seg-btn" id="btn-lineage-view-table" onclick="switchLineageView('table')">
+                    <span data-i18n="lineage_view_table">📋 Impact Table</span>
+                  </button>
+                </div>
+
+                <!-- Depth Switcher -->
+                <div class="segmented-control" style="margin: 0;">
+                  <button type="button" class="seg-btn active" id="btn-lineage-depth-1" onclick="changeLineageDepth(1)">
+                    <span data-i18n="lineage_depth_1">1 Level (Direct)</span>
+                  </button>
+                  <button type="button" class="seg-btn" id="btn-lineage-depth-2" onclick="changeLineageDepth(2)">
+                    <span data-i18n="lineage_depth_2">2 Levels (Cascade)</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Filter Chips -->
+              <div class="lineage-controls-group" id="lineage-filter-chips">
+                <button type="button" class="lineage-filter-chip active" id="chip-filter-all" onclick="setLineageFilter('all')">
+                  <span data-i18n="lineage_filter_all">All</span> <span class="chip-badge" id="chip-count-all">0</span>
+                </button>
+                <button type="button" class="lineage-filter-chip" id="chip-filter-upstream" onclick="setLineageFilter('upstream')">
+                  <span>⬆️</span> <span data-i18n="lineage_filter_upstream">Upstream</span> <span class="chip-badge" id="chip-count-upstream">0</span>
+                </button>
+                <button type="button" class="lineage-filter-chip" id="chip-filter-downstream" onclick="setLineageFilter('downstream')">
+                  <span>⬇️</span> <span data-i18n="lineage_filter_downstream">Downstream</span> <span class="chip-badge" id="chip-count-downstream">0</span>
+                </button>
+                <button type="button" class="lineage-filter-chip" id="chip-filter-table" onclick="setLineageFilter('TABLE')">
+                  <span>📊</span> <span data-i18n="cat_tables">Tables</span> <span class="chip-badge" id="chip-count-table">0</span>
+                </button>
+                <button type="button" class="lineage-filter-chip" id="chip-filter-view" onclick="setLineageFilter('VIEW')">
+                  <span>👁️</span> <span data-i18n="cat_views">Views</span> <span class="chip-badge" id="chip-count-view">0</span>
+                </button>
+                <button type="button" class="lineage-filter-chip" id="chip-filter-code" onclick="setLineageFilter('CODE')">
+                  <span>⚙️</span> <span data-i18n="cat_routines">Routines</span> <span class="chip-badge" id="chip-count-code">0</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Dense Warning Banner -->
+            <div id="lineage-dense-warning" class="lineage-dense-warning" style="display: none;">
+              <span>⚠️ <span data-i18n="lineage_dense_warning">This entity has many connections. Use the filter chips above or switch to Impact Table for detailed inspection.</span></span>
+              <button type="button" class="lineage-row-btn" onclick="switchLineageView('table')"><span data-i18n="lineage_view_table">📋 View Table</span></button>
+            </div>
+
+            <!-- VIEW 1: Graph Container with Zoom & Pan -->
+            <div id="lineage-graph-wrapper" class="lineage-graph-container">
+              <div class="lineage-floating-controls">
+                <button type="button" onclick="zoomLineage(0.2)" title="Zoom In" data-i18n-title="lineage_zoom_in">➕</button>
+                <button type="button" onclick="zoomLineage(-0.2)" title="Zoom Out" data-i18n-title="lineage_zoom_out">➖</button>
+                <button type="button" onclick="resetLineageZoom()" title="Reset (1:1)" data-i18n-title="lineage_zoom_reset">↺ 1:1</button>
+                <button type="button" onclick="toggleLineageFullscreen()" title="Fullscreen" data-i18n-title="lineage_fullscreen">⛶</button>
+              </div>
+              <div class="lineage-canvas-viewport" id="lineage-viewport">
+                <div class="lineage-canvas-content" id="lineage-canvas-content">
+                  <div class="mermaid" id="lineage-mermaid-render">
 graph TD
   A[Loading Lineage...]
-              </pre>
+                  </div>
+                </div>
+              </div>
             </div>
+
+            <!-- VIEW 2: Table / Impact Matrix Container -->
+            <div id="lineage-table-wrapper" class="lineage-table-view" style="display: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                <div class="lineage-search-box">
+                  <span class="search-icon">🔍</span>
+                  <input type="text" id="lineage-table-search" placeholder="Search connections by name or relation..." data-i18n-placeholder="lineage_search_ph" oninput="filterLineageTable(this.value)">
+                </div>
+                <div style="font-size: 12px; color: var(--text-muted);" id="lineage-table-status"></div>
+              </div>
+
+              <!-- Upstream Section -->
+              <div id="lineage-upstream-section">
+                <div class="lineage-section-title">
+                  <span>⬆️</span>
+                  <span data-i18n="lineage_section_upstream">Objects Consumed / Referenced by This Entity (Upstream)</span>
+                  <span class="chip-badge" id="table-count-upstream">0</span>
+                </div>
+                <div style="overflow-x: auto;">
+                  <table class="lineage-data-table">
+                    <thead>
+                      <tr>
+                        <th data-i18n="lineage_col_name">Object Name</th>
+                        <th data-i18n="lineage_col_type">Type</th>
+                        <th data-i18n="lineage_col_relation">Relation</th>
+                        <th data-i18n="lineage_col_depth">Level</th>
+                        <th data-i18n="lineage_col_action">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="lineage-tbody-upstream"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Downstream Section -->
+              <div id="lineage-downstream-section">
+                <div class="lineage-section-title">
+                  <span>⬇️</span>
+                  <span data-i18n="lineage_section_downstream">Objects That Depend on / Consume This Entity (Downstream Impact)</span>
+                  <span class="chip-badge" id="table-count-downstream">0</span>
+                </div>
+                <div style="overflow-x: auto;">
+                  <table class="lineage-data-table">
+                    <thead>
+                      <tr>
+                        <th data-i18n="lineage_col_name">Object Name</th>
+                        <th data-i18n="lineage_col_type">Type</th>
+                        <th data-i18n="lineage_col_relation">Relation</th>
+                        <th data-i18n="lineage_col_depth">Level</th>
+                        <th data-i18n="lineage_col_action">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="lineage-tbody-downstream"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Glossary Workspace (Universal Business Rules) -->
+      <div id="glossary-workspace" style="display: none; height: 100%; flex-direction: column; overflow: hidden;">
+        <!-- Header -->
+        <div class="object-header">
+          <div class="object-title-wrap">
+            <span class="object-type-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.3);">GLOSSARY</span>
+            <div class="object-name">
+              <span class="object-schema-name" data-i18n="glossary_title_prefix">Regras Universais •</span>
+              <span id="view-glossary-title" data-i18n="glossary_title">Glossário de Negócio & Filtros Canônicos</span>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button type="button" class="btn btn-primary" id="btn-new-rule" onclick="toggleGlossaryForm(true)">
+              <span>➕</span> <span data-i18n="btn_new_rule">+ Nova Regra</span>
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="fetchGlossary()" title="Recarregar regras">
+              <span>🔄</span> <span data-i18n="btn_refresh">Atualizar</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tabs Bar -->
+        <div class="tabs-bar">
+          <button type="button" class="tab-btn active" id="glossary-tab-btn-rules" onclick="switchGlossaryTab('rules')">
+            <span data-i18n="tab_glossary_rules">📋 Termos & Regras</span>
+          </button>
+          <button type="button" class="tab-btn" id="glossary-tab-btn-doc" onclick="switchGlossaryTab('doc')">
+            <span data-i18n="tab_glossary_doc">📄 Documentação Compilada (GLOSSARY.md)</span>
+          </button>
+        </div>
+
+        <!-- Tab Content -->
+        <div class="tab-content" style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+          <!-- TAB 1: Rules & Terms List + Inline Form -->
+          <div class="tab-pane active" id="glossary-tab-pane-rules" style="flex: 1; overflow-y: auto; padding: 0;">
+            <!-- Filter Toolbar -->
+            <div class="glossary-toolbar">
+              <div class="search-box" style="max-width: 420px; flex: 1;">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="glossary-search" placeholder="Filtrar por termo, tabela, SQL canônico, tags..." data-i18n-placeholder="glossary_search_ph" oninput="filterGlossaryTerms(this.value)">
+              </div>
+              <div class="glossary-tag-filters" id="glossary-tag-filters">
+                <button type="button" class="glossary-tag-chip active" onclick="setGlossaryTagFilter('all')">
+                  <span data-i18n="tag_filter_all">Todas as Tags</span>
+                </button>
+              </div>
+              <div>
+                <span id="glossary-count-badge" class="badge" style="background: var(--accent-dim); color: var(--accent); font-family: var(--font-mono); font-size: 12px;">0 regras</span>
+              </div>
+            </div>
+
+            <!-- Inline Expandable Form (Add / Edit) -->
+            <div id="glossary-form-container" class="glossary-form-card" style="display: none;">
+              <div class="glossary-form-header">
+                <h3 id="glossary-form-title">
+                  <span>➕</span> <span id="glossary-form-title-text" data-i18n="glossary_form_title_new">Nova Regra Universal</span>
+                </h3>
+                <button type="button" class="btn-icon" onclick="toggleGlossaryForm(false)" title="Fechar">✕</button>
+              </div>
+
+              <form id="glossary-rule-form" onsubmit="handleGlossaryFormSubmit(event)">
+                <input type="hidden" id="form-is-editing" value="false">
+                <input type="hidden" id="form-original-term" value="">
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                  <div class="form-group">
+                    <label class="form-label required" data-i18n="form_lbl_term">Termo / Nome da Regra *</label>
+                    <input type="text" id="form-rule-term" class="form-control" placeholder="ex: SERVIDOR_ATIVO" required style="font-family: var(--font-mono);">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" data-i18n="form_lbl_primary_table">Tabela Primária (Referência)</label>
+                    <input type="text" id="form-rule-primary-table" class="form-control" placeholder="ex: VINCULOS" style="font-family: var(--font-mono);">
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label required" data-i18n="form_lbl_definition">Definição Funcional da Regra *</label>
+                  <textarea id="form-rule-definition" class="form-control" style="min-height: 75px;" placeholder="Descreva o propósito funcional desta regra de negócio..." required></textarea>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" data-i18n="form_lbl_canonical_filter">Filtro SQL Canônico (Expressão WHERE oficial)</label>
+                  <textarea id="form-rule-filter" class="form-control" style="min-height: 80px; font-family: var(--font-mono); color: #7dd3fc; background: #090d16;" placeholder="ex: SIT_VINC = 'A' AND DTVAC IS NULL"></textarea>
+                  <div class="field-hint" data-i18n="form_hint_filter">Expressão SQL oficial utilizada pelo time e pelo Copilot de IA para filtrar esta regra.</div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                  <div class="form-group">
+                    <label class="form-label" data-i18n="form_lbl_related_tables">Tabelas Relacionadas (separadas por vírgula)</label>
+                    <input type="text" id="form-rule-related" class="form-control" placeholder="ex: PESSOAS, CARGOS">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" data-i18n="form_lbl_tags">Tags / Domínio (separadas por vírgula)</label>
+                    <input type="text" id="form-rule-tags" class="form-control" placeholder="ex: RH, FOLHA, CADASTRO">
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" data-i18n="form_lbl_examples">Exemplos / Cenários de Aplicação</label>
+                  <div id="form-examples-container" class="rules-list"></div>
+                  <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 4px 10px; margin-top: 6px;" onclick="addDynamicItem('form-examples-container', '', 'ex: Contagem de ativos: SELECT COUNT(*) FROM VINCULOS WHERE ...')">
+                    <span data-i18n="btn_add_example">+ Adicionar Exemplo</span>
+                  </button>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-color);">
+                  <button type="button" class="btn btn-secondary" onclick="toggleGlossaryForm(false)">
+                    <span data-i18n="btn_cancel">Cancelar</span>
+                  </button>
+                  <button type="submit" class="btn btn-primary" id="btn-save-glossary-term">
+                    <span>💾</span> <span data-i18n="btn_save_rule">Salvar Regra</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <!-- Rules Cards Container -->
+            <div id="glossary-cards-container" class="glossary-cards-grid">
+              <div style="padding: 40px 20px; text-align: center; color: var(--text-muted);">
+                <div style="font-size: 36px; margin-bottom: 8px;">⏳</div>
+                <div data-i18n="loading_preview">Carregando regras universais...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 2: Compiled Markdown (GLOSSARY.md) -->
+          <div class="tab-pane" id="glossary-tab-pane-doc" style="flex: 1; overflow-y: auto;">
+            <div class="doc-toolbar">
+              <div class="doc-path-badge">
+                <span>📄</span>
+                <span>docs/GLOSSARY.md</span>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <div class="doc-segmented-control">
+                  <button type="button" class="seg-btn active" id="seg-btn-glossary-rendered" onclick="setGlossaryDocMode('rendered')">
+                    <span data-i18n="btn_rendered">👁️ Renderizado</span>
+                  </button>
+                  <button type="button" class="seg-btn" id="seg-btn-glossary-source" onclick="setGlossaryDocMode('source')">
+                    <span data-i18n="btn_source">📝 Código-Fonte (.md)</span>
+                  </button>
+                </div>
+                <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 5px 12px;" onclick="copyGlossaryMarkdown()">
+                  <span data-i18n="btn_copy_markdown">📋 Copiar Markdown</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="markdown-body" id="glossary-doc-rendered" style="padding: 24px 32px;">
+              <p data-i18n="loading_preview">Carregando visualização...</p>
+            </div>
+            <pre class="doc-source-code" id="glossary-doc-source" style="display: none; padding: 24px 32px;"></pre>
           </div>
         </div>
       </div>
@@ -1084,43 +1909,46 @@ graph TD
   <div id="settings-modal" class="modal-backdrop" onclick="if(event.target === this) closeSettingsModal()">
     <div class="modal-dialog">
       <div class="modal-header">
-        <div class="modal-title">⚙️ Project Settings (<code>leai.yml</code>)</div>
-        <button type="button" class="btn-icon" onclick="closeSettingsModal()" title="Close">✕</button>
+        <div class="modal-title" data-i18n="modal_title">⚙️ Project Settings (<code>leai.yml</code>)</div>
+        <button type="button" class="btn-icon" onclick="closeSettingsModal()" title="Close" data-i18n-title="modal_close_title">✕</button>
       </div>
 
       <div class="modal-nav">
-        <button type="button" class="modal-nav-btn active" id="btn-modal-tab-conn" onclick="switchSettingsTab('conn')">🔌 Connection & Schemas</button>
-        <button type="button" class="modal-nav-btn" id="btn-modal-tab-paths" onclick="switchSettingsTab('paths')">📁 Directories</button>
-        <button type="button" class="modal-nav-btn" id="btn-modal-tab-ai" onclick="switchSettingsTab('ai')">🤖 Artificial Intelligence</button>
+        <button type="button" class="modal-nav-btn active" id="btn-modal-tab-conn" onclick="switchSettingsTab('conn')"><span data-i18n="tab_conn">🔌 Connection & Schemas</span></button>
+        <button type="button" class="modal-nav-btn" id="btn-modal-tab-paths" onclick="switchSettingsTab('paths')"><span data-i18n="tab_paths">📁 Directories</span></button>
+        <button type="button" class="modal-nav-btn" id="btn-modal-tab-ai" onclick="switchSettingsTab('ai')"><span data-i18n="tab_ai">🤖 AI Provider</span></button>
       </div>
 
       <div class="modal-body">
         <!-- Tab 1: Connection & Schemas -->
         <div id="settings-tab-conn">
           <div class="form-group">
-            <label class="form-label">🔗 Oracle Connection String (DSN)</label>
-            <input type="text" id="cfg-dsn" class="form-control" placeholder="user/password@host:1521/service or ${ORACLE_DSN}">
-            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Accepts direct credentials or environment variables like <code>${LEAI_DSN}</code>.</span>
+            <label class="form-label" data-i18n="lbl_dsn">🔗 Oracle Connection String (DSN)</label>
+            <div style="position: relative; display: flex; align-items: center;">
+              <input type="password" id="cfg-dsn" class="form-control" style="padding-right: 42px;" placeholder="user/password@host:1521/service or ${ORACLE_DSN}">
+              <button type="button" id="btn-toggle-dsn" onclick="toggleDsnVisibility()" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; color: var(--text-secondary); font-size: 16px; padding: 4px; border-radius: 4px;" title="Mostrar/Ocultar DSN">👁️</button>
+            </div>
+            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;" data-i18n="hint_dsn">Accepts direct credentials or environment variables like <code>${LEAI_DSN}</code>.</span>
           </div>
 
           <div class="form-group">
-            <label class="form-label">📁 Schemas to Document (comma-separated)</label>
+            <label class="form-label" data-i18n="lbl_schemas">📁 Schemas to Document (comma-separated)</label>
             <input type="text" id="cfg-schemas" class="form-control" placeholder="HR, FINANCE, ERGON, ALL">
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="form-group">
-              <label class="form-label">🔍 Include Only (Include)</label>
+              <label class="form-label" data-i18n="lbl_include">🔍 Include Only (Include)</label>
               <input type="text" id="cfg-include" class="form-control" placeholder="TAB_*, PRC_* (optional)">
             </div>
             <div class="form-group">
-              <label class="form-label">🚫 Exclude (Exclude)</label>
+              <label class="form-label" data-i18n="lbl_exclude">🚫 Exclude (Exclude)</label>
               <input type="text" id="cfg-exclude" class="form-control" placeholder="TMP_*, BAK_* (optional)">
             </div>
           </div>
 
           <div class="form-group">
-            <label class="form-label">📦 Object Types to Extract / Compile</label>
+            <label class="form-label" data-i18n="lbl_obj_types">📦 Object Types to Extract / Compile</label>
             <div class="checkbox-grid" id="cfg-object-types-grid">
               <label class="checkbox-label"><input type="checkbox" name="cfg-obj-type" value="tables" checked> tables</label>
               <label class="checkbox-label"><input type="checkbox" name="cfg-obj-type" value="views" checked> views</label>
@@ -1140,28 +1968,28 @@ graph TD
         <!-- Tab 2: Directories -->
         <div id="settings-tab-paths" style="display: none;">
           <div class="form-group">
-            <label class="form-label">📦 Raw Metadata Directory (rawPath)</label>
+            <label class="form-label" data-i18n="lbl_raw_path">📦 Raw Metadata Directory (rawPath)</label>
             <input type="text" id="cfg-raw-path" class="form-control" placeholder="./raw">
-            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Directory where raw Oracle JSON snapshot files are stored.</span>
+            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;" data-i18n="hint_raw_path">Directory where raw Oracle JSON snapshot files are stored.</span>
           </div>
 
           <div class="form-group">
-            <label class="form-label">✏️ YAML Annotations Directory (annotationsPath)</label>
+            <label class="form-label" data-i18n="lbl_ann_path">✏️ YAML Annotations Directory (annotationsPath)</label>
             <input type="text" id="cfg-ann-path" class="form-control" placeholder="./annotations">
-            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Directory where functional annotations and business rules are stored.</span>
+            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;" data-i18n="hint_ann_path">Directory where functional annotations and business rules are stored.</span>
           </div>
 
           <div class="form-group">
-            <label class="form-label">📄 Markdown Docs Directory (docPath)</label>
+            <label class="form-label" data-i18n="lbl_doc_path">📄 Markdown Docs Directory (docPath)</label>
             <input type="text" id="cfg-doc-path" class="form-control" placeholder="./docs">
-            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Directory where compiled Markdown (.md) documents are generated.</span>
+            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;" data-i18n="hint_doc_path">Directory where compiled Markdown (.md) documents are generated.</span>
           </div>
         </div>
 
         <!-- Tab 3: Artificial Intelligence -->
         <div id="settings-tab-ai" style="display: none;">
           <div class="form-group">
-            <label class="form-label">🤖 Default AI Provider (default_provider)</label>
+            <label class="form-label" data-i18n="lbl_default_provider">🤖 Default AI Provider (default_provider)</label>
             <select id="cfg-ai-provider" class="form-control" onchange="onAiProviderChanged()">
               <option value="gemini">Google Gemini</option>
               <option value="openai">OpenAI (GPT-4o, etc.)</option>
@@ -1176,22 +2004,28 @@ graph TD
           </div>
 
           <div class="form-group">
-            <label class="form-label">🧠 Selected Provider Model (model)</label>
-            <input type="text" id="cfg-ai-model" class="form-control" placeholder="e.g. gemini-1.5-flash, gpt-4o, claude-3-5-sonnet-20241022...">
+            <label class="form-label" data-i18n="lbl_model">🧠 Selected Provider Model (model)</label>
+            <div style="display: flex; gap: 8px;">
+              <select id="cfg-ai-model-select" class="form-control" style="flex: 1;" onchange="onModelSelectChanged()">
+                <!-- Populated dynamically based on chosen provider -->
+              </select>
+              <input type="text" id="cfg-ai-model" class="form-control" style="flex: 1;" placeholder="e.g. gemini-2.5-flash, gpt-4o...">
+            </div>
+            <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;" data-i18n="hint_model">Escolha um modelo sugerido na lista ou digite manualmente um modelo específico.</span>
           </div>
 
           <div class="form-group">
-            <label class="form-label">🔑 API Key (api_key)</label>
-            <input type="password" id="cfg-ai-apikey" class="form-control" placeholder="Leave blank to keep existing key or use ${ENV_VAR}">
+            <label class="form-label" data-i18n="lbl_apikey">🔑 API Key (api_key)</label>
+            <input type="password" id="cfg-ai-apikey" class="form-control" placeholder="Leave blank to keep existing key or use ${ENV_VAR}" data-i18n-placeholder="ph_apikey">
           </div>
 
           <div class="form-group">
-            <label class="form-label">🌐 Custom Base URL (optional)</label>
-            <input type="text" id="cfg-ai-baseurl" class="form-control" placeholder="e.g. http://localhost:11434 (for Ollama or proxy)">
+            <label class="form-label" data-i18n="lbl_baseurl">🌐 Custom Base URL (optional)</label>
+            <input type="text" id="cfg-ai-baseurl" class="form-control" placeholder="e.g. http://localhost:11434 (for Ollama or proxy)" data-i18n-placeholder="ph_baseurl">
           </div>
 
           <div class="form-group">
-            <label class="form-label">🌡️ Creativity Temperature</label>
+            <label class="form-label" data-i18n="lbl_temperature">🌡️ Creativity Temperature</label>
             <div style="display: flex; align-items: center; gap: 12px;">
               <input type="range" id="cfg-ai-temp" min="0" max="1" step="0.05" value="0.2" class="form-control" style="flex: 1;" oninput="document.getElementById('cfg-ai-temp-val').textContent = parseFloat(this.value).toFixed(2)">
               <span id="cfg-ai-temp-val" style="font-family: var(--font-mono); font-weight: 700; width: 40px; color: var(--accent);">0.20</span>
@@ -1201,8 +2035,8 @@ graph TD
       </div>
 
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="saveSettings()">💾 Save to leai.yml</button>
+        <button type="button" class="btn btn-secondary" onclick="closeSettingsModal()"><span data-i18n="btn_modal_cancel">Cancel</span></button>
+        <button type="button" class="btn btn-primary" onclick="saveSettings()"><span data-i18n="btn_modal_save">💾 Save to leai.yml</span></button>
       </div>
     </div>
   </div>
@@ -1232,9 +2066,416 @@ graph TD
     let collapsedCategories = new Set();
     let isInitialCatalogLoad = true;
 
+    // Lineage State
+    let currentLineageData = null;
+    let currentLineageDepth = 1;
+    let currentLineageView = 'graph';
+    let currentLineageFilter = 'all';
+    let lineageZoom = { scale: 1, translateX: 0, translateY: 0, isDragging: false, startX: 0, startY: 0 };
+
+    // App Mode & Glossary State
+    let currentAppMode = 'catalog'; // 'catalog' | 'glossary'
+    let currentGlossaryTerms = [];
+    let currentGlossaryTagFilter = 'all';
+    let currentGlossaryCompiledMd = '';
+    let currentGlossaryDocMode = 'rendered';
+
+    // I18n Dictionary for LEAI Docs
+    const INDEX_I18N = {
+      pt: {
+        page_title: "LEAI Docs — Oracle Database Documentation & Annotation Studio",
+        search_placeholder: "Pesquisar tabela, view, package, procedure ou regra de negócio...",
+        settings_title: "Configurações (leai.yml)",
+        object_catalog: "Catálogo de Objetos",
+        loading_catalog: "Carregando catálogo...",
+        empty_title: "Selecione um Objeto no Catálogo",
+        empty_desc: "Navegue pelas tabelas, views e packages na barra lateral para visualizar a documentação compilada e editar anotações em tempo real.",
+        nav_catalog: "Catálogo",
+        nav_glossary: "Regras Universais",
+        glossary_title_prefix: "Regras Universais •",
+        glossary_title: "Glossário de Negócio & Filtros Canônicos",
+        tab_glossary_rules: "📋 Termos & Regras",
+        tab_glossary_doc: "📄 Documentação Compilada (GLOSSARY.md)",
+        btn_new_rule: "+ Nova Regra",
+        btn_refresh: "Atualizar",
+        glossary_search_ph: "Filtrar por termo, tabela, SQL canônico, tags...",
+        tag_filter_all: "Todas as Tags",
+        glossary_count_singular: "regra",
+        glossary_count_plural: "regras",
+        glossary_empty_title: "Nenhuma regra universal cadastrada",
+        glossary_empty_desc: "Cadastre termos de negócio e regras canônicas para documentação e uso pelo Copilot de IA.",
+        glossary_form_title_new: "Nova Regra Universal",
+        glossary_form_title_edit: "Editar Regra Universal",
+        form_lbl_term: "Termo / Nome da Regra *",
+        form_lbl_primary_table: "Tabela Primária (Referência)",
+        form_lbl_definition: "Definição Funcional da Regra *",
+        form_lbl_canonical_filter: "Filtro SQL Canônico (Expressão WHERE oficial)",
+        form_hint_filter: "Expressão SQL oficial utilizada pelo time e pelo Copilot de IA para filtrar esta regra.",
+        form_lbl_related_tables: "Tabelas Relacionadas (separadas por vírgula)",
+        form_lbl_tags: "Tags / Domínio (separadas por vírgula)",
+        form_lbl_examples: "Exemplos / Cenários de Aplicação",
+        btn_add_example: "+ Adicionar Exemplo",
+        btn_cancel: "Cancelar",
+        btn_save_rule: "Salvar Regra",
+        btn_edit: "Editar",
+        btn_delete: "Excluir",
+        confirm_delete_rule: "Tem certeza que deseja excluir a regra universal '{term}'? Esta ação removerá o termo do YAML e do GLOSSARY.md.",
+        toast_rule_saved: "✓ Regra universal salva e GLOSSARY.md atualizado!",
+        toast_rule_deleted: "✓ Regra universal excluída com sucesso!",
+        toast_rule_error: "Falha ao salvar regra universal:",
+        toast_rule_delete_error: "Falha ao excluir regra universal:",
+        canonical_filter_label: "Filtro SQL Canônico (WHERE):",
+        primary_table_label: "Tabela Primária:",
+        related_tables_label: "Tabelas Relacionadas:",
+        examples_label: "Exemplos / Cenários:",
+        copy_sql_btn: "Copiar SQL",
+        btn_ai_suggest: "✨ Sugerir com IA",
+        btn_ai_generating: "⏳ Gerando com IA...",
+        btn_save_recompile: "💾 Salvar e Recompilar",
+        tab_editor: "✏️ Editor de Anotações",
+        tab_docs: "📄 Docs Compilados",
+        tab_lineage: "📊 Linhagem e Impacto",
+        lbl_description: "📝 Descrição de Negócio / Propósito da Entidade",
+        ph_description: "Descreva o propósito funcional desta tabela/rotina para regras de negócio...",
+        lbl_rules: "📌 Regras de Negócio",
+        btn_add_rule: "+ Adicionar Regra",
+        ph_rules: "Ex.: Todo funcionário ativo deve pertencer a um departamento válido...",
+        lbl_use_cases: "💡 Casos de Uso e Consultas de Exemplo",
+        btn_add_use_case: "+ Adicionar Caso de Uso",
+        ph_use_cases: "Ex.: Consulta analítica para cálculo de proventos e descontos...",
+        lbl_warnings: "⚠️ Alertas Técnicos e Avisos",
+        btn_add_warning: "+ Adicionar Aviso",
+        ph_warnings: "Ex.: Tabela particionada por mês; sempre filtrar pela coluna DT_COMPETENCIA...",
+        lbl_related: "🔗 Relações de Negócio / Objetos Conectados",
+        btn_add_related: "+ Adicionar Objeto Conectado",
+        ph_related: "Ex.: TAB_DEPARTMENTS, PKG_PAYROLL...",
+        lbl_columns: "📋 Dicionário de Colunas (Descrições dos Campos)",
+        th_column: "Coluna",
+        th_datatype: "Tipo de Dado",
+        th_desc: "Descrição de Negócio",
+        ph_col_desc: "Descrição para a coluna",
+        lbl_tags: "🏷️ Tags de Classificação (separadas por vírgula)",
+        ph_tags: "Ex.: RH, FOLHA, SENSIVEL",
+        btn_rendered: "👁️ Renderizado",
+        btn_source: "📝 Código-Fonte (.md)",
+        btn_copy_markdown: "📋 Copiar Markdown",
+        loading_preview: "Carregando visualização...",
+        modal_title: "⚙️ Configurações do Projeto (<code>leai.yml</code>)",
+        modal_close_title: "Fechar",
+        tab_conn: "🔌 Conexão e Schemas",
+        tab_paths: "📁 Diretórios",
+        tab_ai: "🤖 Provedor de IA",
+        lbl_dsn: "🔗 String de Conexão Oracle (DSN)",
+        hint_dsn: "Aceita credenciais diretas ou variáveis de ambiente como <code>${LEAI_DSN}</code>.",
+        lbl_schemas: "📁 Schemas para Documentar (separados por vírgula)",
+        lbl_include: "🔍 Incluir Apenas (Include)",
+        lbl_exclude: "🚫 Excluir (Exclude)",
+        lbl_obj_types: "📦 Tipos de Objeto para Extrair / Compilar",
+        lbl_raw_path: "📦 Diretório de Metadados Brutos (rawPath)",
+        hint_raw_path: "Diretório onde os arquivos de snapshot JSON brutos do Oracle são salvos.",
+        lbl_ann_path: "✏️ Diretório de Anotações YAML (annotationsPath)",
+        hint_ann_path: "Diretório onde as anotações funcionais e regras de negócio são salvas.",
+        lbl_doc_path: "📄 Diretório de Documentação Markdown (docPath)",
+        hint_doc_path: "Diretório onde os documentos Markdown (.md) compilados são gerados.",
+        lbl_default_provider: "🤖 Provedor Padrão de IA (default_provider)",
+        lbl_model: "🧠 Modelo do Provedor Selecionado (model)",
+        hint_model: "Escolha um modelo sugerido na lista ou digite manualmente um modelo específico.",
+        lbl_apikey: "🔑 Chave de API (api_key)",
+        ph_apikey: "Deixe em branco para manter a chave salva ou use ${VAR_AMB}",
+        ph_apikey_saved: "•••••••• (Chave salva preservada se em branco)",
+        lbl_baseurl: "🌐 URL Base Customizada (opcional)",
+        ph_baseurl: "Ex.: http://localhost:11434 (para Ollama ou proxy)",
+        lbl_temperature: "🌡️ Temperatura de Criatividade",
+        btn_modal_cancel: "Cancelar",
+        btn_modal_save: "💾 Salvar no leai.yml",
+        cat_tables: "Tabelas",
+        cat_views: "Views",
+        cat_mviews: "Materialized Views",
+        cat_routines: "Rotinas (PL/SQL)",
+        cat_triggers: "Triggers",
+        cat_synonyms: "Sinônimos",
+        cat_sequences: "Sequences",
+        objects_singular: "objeto",
+        objects_plural: "objetos",
+        documented: "Documentado",
+        pending: "Pendente",
+        toast_save_success: "✓ Anotação salva e documentação recompilada!",
+        toast_save_error: "Falha ao salvar:",
+        toast_load_obj_error: "Falha ao carregar objeto",
+        toast_ai_success: "✨ Sugestões geradas com sucesso pela IA!",
+        toast_ai_error: "Erro da IA:",
+        toast_ai_comm_error: "Falha ao comunicar com a IA",
+        toast_copied_md: "✓ Documentação Markdown copiada para a área de transferência!",
+        toast_no_md_copy: "Nenhum markdown para copiar",
+        toast_cfg_saved: "✓ Configuração salva no leai.yml com sucesso!",
+        toast_cfg_error: "Falha ao salvar configuração",
+        code_copy_btn: "📋 Copiar",
+        code_copied_btn: "✓ Copiado!",
+        no_compiled_doc: "# Nenhuma documentação compilada ainda.",
+        custom_model_option: "✏️ Outro (digitar manualmente)...",
+        dsn_show_title: "Mostrar DSN",
+        dsn_hide_title: "Ocultar DSN",
+        remove_item_title: "Remover item",
+        lineage_kpi_total: "Total de Conexões",
+        lineage_kpi_upstream: "Consome (Upstream)",
+        lineage_kpi_downstream: "Consumido por (Downstream)",
+        lineage_view_graph: "📊 Grafo Visual",
+        lineage_view_table: "📋 Matriz de Impacto",
+        lineage_depth_1: "1 Nível (Direto)",
+        lineage_depth_2: "2 Níveis (Cascata)",
+        lineage_filter_all: "Todos",
+        lineage_filter_upstream: "Upstream",
+        lineage_filter_downstream: "Downstream",
+        lineage_search_ph: "Filtrar conexões por nome ou relação...",
+        lineage_section_upstream: "Objetos que este item consome / referencia (Upstream)",
+        lineage_section_downstream: "Objetos que dependem deste item (Impacto Downstream / Consumidores)",
+        lineage_col_name: "Nome do Objeto",
+        lineage_col_type: "Tipo",
+        lineage_col_relation: "Relação Técnica",
+        lineage_col_depth: "Nível",
+        lineage_col_action: "Ação",
+        lineage_action_go: "Abrir Objeto",
+        lineage_zoom_in: "Aproximar Zoom",
+        lineage_zoom_out: "Afastar Zoom",
+        lineage_zoom_reset: "Resetar Zoom (1:1)",
+        lineage_fullscreen: "Alternar Tela Cheia",
+        lineage_dense_warning: "Esta entidade possui muitas referências. Use os filtros de categoria acima ou alterne para a Matriz de Impacto para examinar em detalhes.",
+        lineage_no_connections: "Nenhuma conexão encontrada para este objeto.",
+        lineage_obj_not_in_catalog: "Objeto não encontrado no catálogo dos schemas carregados."
+      },
+      en: {
+        page_title: "LEAI Docs — Oracle Database Documentation & Annotation Studio",
+        search_placeholder: "Search table, view, package, procedure, or business rule...",
+        settings_title: "Settings (leai.yml)",
+        object_catalog: "Object Catalog",
+        loading_catalog: "Loading catalog...",
+        empty_title: "Select an Object in Catalog",
+        empty_desc: "Browse tables, views, and packages in the sidebar to view compiled documentation and edit annotations in real time.",
+        nav_catalog: "Catalog",
+        nav_glossary: "Universal Rules",
+        glossary_title_prefix: "Universal Rules •",
+        glossary_title: "Business Glossary & Canonical Filters",
+        tab_glossary_rules: "📋 Terms & Rules",
+        tab_glossary_doc: "📄 Compiled Docs (GLOSSARY.md)",
+        btn_new_rule: "+ New Rule",
+        btn_refresh: "Refresh",
+        glossary_search_ph: "Filter by term, table, canonical SQL, tags...",
+        tag_filter_all: "All Tags",
+        glossary_count_singular: "rule",
+        glossary_count_plural: "rules",
+        glossary_empty_title: "No universal rules registered",
+        glossary_empty_desc: "Register business terms and canonical rules for documentation and AI Copilot usage.",
+        glossary_form_title_new: "New Universal Rule",
+        glossary_form_title_edit: "Edit Universal Rule",
+        form_lbl_term: "Term / Rule Name *",
+        form_lbl_primary_table: "Primary Table (Reference)",
+        form_lbl_definition: "Functional Definition *",
+        form_lbl_canonical_filter: "Canonical SQL Filter (Official WHERE expression)",
+        form_hint_filter: "Official SQL expression used by the team and AI Copilot to filter this rule.",
+        form_lbl_related_tables: "Related Tables (comma-separated)",
+        form_lbl_tags: "Tags / Domain (comma-separated)",
+        form_lbl_examples: "Examples / Application Scenarios",
+        btn_add_example: "+ Add Example",
+        btn_cancel: "Cancel",
+        btn_save_rule: "Save Rule",
+        btn_edit: "Edit",
+        btn_delete: "Delete",
+        confirm_delete_rule: "Are you sure you want to delete the universal rule '{term}'? This will remove the term from YAML and GLOSSARY.md.",
+        toast_rule_saved: "✓ Universal rule saved and GLOSSARY.md updated!",
+        toast_rule_deleted: "✓ Universal rule deleted successfully!",
+        toast_rule_error: "Failed to save universal rule:",
+        toast_rule_delete_error: "Failed to delete universal rule:",
+        canonical_filter_label: "Canonical SQL Filter (WHERE):",
+        primary_table_label: "Primary Table:",
+        related_tables_label: "Related Tables:",
+        examples_label: "Examples / Scenarios:",
+        copy_sql_btn: "Copy SQL",
+        btn_ai_suggest: "✨ Suggest with AI",
+        btn_ai_generating: "⏳ Generating with AI...",
+        btn_save_recompile: "💾 Save & Recompile",
+        tab_editor: "✏️ Annotation Editor",
+        tab_docs: "📄 Compiled Docs",
+        tab_lineage: "📊 Lineage & Impact",
+        lbl_description: "📝 Business Description / Entity Purpose",
+        ph_description: "Describe the functional purpose of this table/routine for business rules...",
+        lbl_rules: "📌 Business Rules",
+        btn_add_rule: "+ Add Rule",
+        ph_rules: "e.g. Every active employee must belong to a valid department...",
+        lbl_use_cases: "💡 Use Cases & Sample Queries",
+        btn_add_use_case: "+ Add Use Case",
+        ph_use_cases: "e.g. Analytical query for earnings and deduction calculations...",
+        lbl_warnings: "⚠️ Technical Alerts & Warnings",
+        btn_add_warning: "+ Add Warning",
+        ph_warnings: "e.g. Monthly partitioned table; always filter on DT_COMPETENCIA column...",
+        lbl_related: "🔗 Business Relationships / Connected Objects",
+        btn_add_related: "+ Add Related Object",
+        ph_related: "e.g. TAB_DEPARTMENTS, PKG_PAYROLL...",
+        lbl_columns: "📋 Column Dictionary (Field Descriptions)",
+        th_column: "Column",
+        th_datatype: "Data Type",
+        th_desc: "Business Description",
+        ph_col_desc: "Description for column",
+        lbl_tags: "🏷️ Classification Tags (comma-separated)",
+        ph_tags: "e.g. HR, PAYROLL, SENSITIVE",
+        btn_rendered: "👁️ Rendered",
+        btn_source: "📝 Source Code (.md)",
+        btn_copy_markdown: "📋 Copy Markdown",
+        loading_preview: "Loading preview...",
+        modal_title: "⚙️ Project Settings (<code>leai.yml</code>)",
+        modal_close_title: "Close",
+        tab_conn: "🔌 Connection & Schemas",
+        tab_paths: "📁 Directories",
+        tab_ai: "🤖 AI Provider",
+        lbl_dsn: "🔗 Oracle Connection String (DSN)",
+        hint_dsn: "Accepts direct credentials or environment variables like <code>${LEAI_DSN}</code>.",
+        lbl_schemas: "📁 Schemas to Document (comma-separated)",
+        lbl_include: "🔍 Include Only (Include)",
+        lbl_exclude: "🚫 Exclude (Exclude)",
+        lbl_obj_types: "📦 Object Types to Extract / Compile",
+        lbl_raw_path: "📦 Raw Metadata Directory (rawPath)",
+        hint_raw_path: "Directory where raw Oracle JSON snapshot files are stored.",
+        lbl_ann_path: "✏️ YAML Annotations Directory (annotationsPath)",
+        hint_ann_path: "Directory where functional annotations and business rules are stored.",
+        lbl_doc_path: "📄 Markdown Docs Directory (docPath)",
+        hint_doc_path: "Directory where compiled Markdown (.md) documents are generated.",
+        lbl_default_provider: "🤖 Default AI Provider (default_provider)",
+        lbl_model: "🧠 Selected Provider Model (model)",
+        hint_model: "Choose a suggested model from the list or type a specific model manually.",
+        lbl_apikey: "🔑 API Key (api_key)",
+        ph_apikey: "Leave blank to keep existing key or use ${ENV_VAR}",
+        ph_apikey_saved: "•••••••• (Saved key preserved if blank)",
+        lbl_baseurl: "🌐 Custom Base URL (optional)",
+        ph_baseurl: "e.g. http://localhost:11434 (for Ollama or proxy)",
+        lbl_temperature: "🌡️ Creativity Temperature",
+        btn_modal_cancel: "Cancel",
+        btn_modal_save: "💾 Save to leai.yml",
+        cat_tables: "Tables",
+        cat_views: "Views",
+        cat_mviews: "Materialized Views",
+        cat_routines: "Routines (PL/SQL)",
+        cat_triggers: "Triggers",
+        cat_synonyms: "Synonyms",
+        cat_sequences: "Sequences",
+        objects_singular: "object",
+        objects_plural: "objects",
+        documented: "Documented",
+        pending: "Pending",
+        toast_save_success: "✓ Annotation saved and documentation recompiled!",
+        toast_save_error: "Failed to save:",
+        toast_load_obj_error: "Failed to load object",
+        toast_ai_success: "✨ Suggestions generated successfully by AI!",
+        toast_ai_error: "AI error:",
+        toast_ai_comm_error: "Failed to communicate with AI",
+        toast_copied_md: "✓ Markdown documentation copied to clipboard!",
+        toast_no_md_copy: "No markdown to copy",
+        toast_cfg_saved: "✓ Configuration saved to leai.yml successfully!",
+        toast_cfg_error: "Failed to save configuration",
+        code_copy_btn: "📋 Copy",
+        code_copied_btn: "✓ Copied!",
+        no_compiled_doc: "# No compiled documentation yet.",
+        custom_model_option: "✏️ Other (type manually)...",
+        dsn_show_title: "Show DSN",
+        dsn_hide_title: "Hide DSN",
+        remove_item_title: "Remove item",
+        lineage_kpi_total: "Total Connections",
+        lineage_kpi_upstream: "Consumes (Upstream)",
+        lineage_kpi_downstream: "Consumed By (Downstream)",
+        lineage_view_graph: "📊 Visual Graph",
+        lineage_view_table: "📋 Impact Matrix",
+        lineage_depth_1: "1 Level (Direct)",
+        lineage_depth_2: "2 Levels (Cascade)",
+        lineage_filter_all: "All",
+        lineage_filter_upstream: "Upstream",
+        lineage_filter_downstream: "Downstream",
+        lineage_search_ph: "Filter connections by name or relation...",
+        lineage_section_upstream: "Objects Consumed / Referenced by This Entity (Upstream)",
+        lineage_section_downstream: "Objects That Depend on / Consume This Entity (Downstream Impact)",
+        lineage_col_name: "Object Name",
+        lineage_col_type: "Type",
+        lineage_col_relation: "Technical Relation",
+        lineage_col_depth: "Level",
+        lineage_col_action: "Action",
+        lineage_action_go: "Open Object",
+        lineage_zoom_in: "Zoom In",
+        lineage_zoom_out: "Zoom Out",
+        lineage_zoom_reset: "Reset Zoom (1:1)",
+        lineage_fullscreen: "Toggle Fullscreen",
+        lineage_dense_warning: "This entity has many connections. Use the filter chips above or switch to Impact Matrix for detailed inspection.",
+        lineage_no_connections: "No connections found for this object.",
+        lineage_obj_not_in_catalog: "Object not found in currently loaded schemas catalog."
+      }
+    };
+
+    let currentLang = localStorage.getItem('leai_language') || 'pt';
+
+    function setLanguage(lang) {
+      currentLang = (lang === 'en') ? 'en' : 'pt';
+      localStorage.setItem('leai_language', currentLang);
+      const sel = document.getElementById('langSelect');
+      if (sel) sel.value = currentLang;
+      applyTranslations();
+      if (currentCatalog && currentCatalog.length > 0) {
+        const filterVal = document.getElementById('global-search')?.value || '';
+        renderCatalogTree(currentCatalog, filterVal);
+      }
+      if (currentGlossaryTerms && currentGlossaryTerms.length > 0) {
+        const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+        renderGlossaryTagChips();
+        renderGlossaryCards();
+        const total = currentGlossaryTerms.length;
+        const countUnit = total === 1 ? dict.glossary_count_singular : dict.glossary_count_plural;
+        const countBadge = document.getElementById('glossary-count-badge');
+        if (countBadge) countBadge.textContent = `${total} ${countUnit}`;
+      }
+    }
+
+    function applyTranslations() {
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+      document.title = dict.page_title;
+
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (dict[key]) {
+          if (dict[key].includes('<')) {
+            el.innerHTML = dict[key];
+          } else {
+            el.textContent = dict[key];
+          }
+        }
+      });
+
+      document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        if (dict[key]) el.placeholder = dict[key];
+      });
+
+      document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        if (dict[key]) el.title = dict[key];
+      });
+
+      const modelSelect = document.getElementById('cfg-ai-model-select');
+      if (modelSelect) {
+        const customOpt = Array.from(modelSelect.options).find(o => o.value === '__custom__');
+        if (customOpt) customOpt.textContent = dict.custom_model_option;
+      }
+    }
+
+    function getDynamicPlaceholder(type) {
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+      if (type === 'rules') return dict.ph_rules;
+      if (type === 'use_cases') return dict.ph_use_cases;
+      if (type === 'warnings') return dict.ph_warnings;
+      if (type === 'related') return dict.ph_related;
+      return '';
+    }
+
     async function init() {
+      setLanguage(currentLang);
       await checkStatus();
       await loadCatalog();
+      initModelInputSync();
+      fetchGlossary(false);
     }
 
     async function checkStatus() {
@@ -1260,9 +2501,10 @@ graph TD
           isInitialCatalogLoad = false;
         }
 
-        renderCatalogTree(currentCatalog, document.getElementById('global-search').value);
+        const filterVal = document.getElementById('global-search')?.value || '';
+        renderCatalogTree(currentCatalog, filterVal);
       } catch (e) {
-        showToast('Failed to load catalog', true);
+        console.error('Failed to load catalog:', e);
       }
     }
 
@@ -1273,7 +2515,8 @@ graph TD
       } else {
         collapsedSchemas.add(schemaName);
       }
-      renderCatalogTree(currentCatalog, document.getElementById('global-search').value);
+      const filterVal = document.getElementById('global-search')?.value || '';
+      renderCatalogTree(currentCatalog, filterVal);
     }
 
     function toggleCategory(schemaKey, catKey, e) {
@@ -1284,24 +2527,27 @@ graph TD
       } else {
         collapsedCategories.add(fullKey);
       }
-      renderCatalogTree(currentCatalog, document.getElementById('global-search').value);
+      const filterVal = document.getElementById('global-search')?.value || '';
+      renderCatalogTree(currentCatalog, filterVal);
     }
 
     let lastFilterText = '';
 
-    function renderCatalogTree(schemas, filter = '') {
+    function renderCatalogTree(catalog, filter = '') {
       const container = document.getElementById('sidebar-tree');
+      if (!container) return;
       container.innerHTML = '';
       let totalObjects = 0;
       const lowerFilter = filter.toLowerCase().trim();
       const isFiltering = lowerFilter.length > 0;
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
 
-      schemas.forEach(schema => {
+      catalog.forEach(schema => {
         let schemaMatch = false;
         const schemaEl = document.createElement('div');
         schemaEl.className = 'tree-schema';
 
-        const isSchemaCollapsed = collapsedSchemas.has(schema.schema_name);
+        const isSchemaCollapsed = isFiltering ? false : collapsedSchemas.has(schema.schema_name);
 
         const title = document.createElement('div');
         title.className = 'tree-schema-title';
@@ -1319,12 +2565,13 @@ graph TD
         schemaBody.className = `tree-schema-body ${isSchemaCollapsed ? 'collapsed' : ''}`;
 
         const cats = [
-          { key: 'tables', label: 'Tables', icon: '📊', type: 'TABLE' },
-          { key: 'views', label: 'Views', icon: '👁️', type: 'VIEW' },
-          { key: 'code_objects', label: 'Routines (PL/SQL)', icon: '⚙️', type: 'CODE' },
-          { key: 'triggers', label: 'Triggers', icon: '⚡', type: 'TRIGGER' },
-          { key: 'synonyms', label: 'Synonyms', icon: '🔗', type: 'SYNONYM' },
-          { key: 'sequences', label: 'Sequences', icon: '🔢', type: 'SEQUENCE' },
+          { key: 'tables', label: dict.cat_tables, icon: '📊', type: 'TABLE' },
+          { key: 'views', label: dict.cat_views, icon: '👁️', type: 'VIEW' },
+          { key: 'mviews', label: dict.cat_mviews, icon: '📑', type: 'MVIEW' },
+          { key: 'code_objects', label: dict.cat_routines, icon: '⚙️', type: 'CODE' },
+          { key: 'triggers', label: dict.cat_triggers, icon: '⚡', type: 'TRIGGER' },
+          { key: 'synonyms', label: dict.cat_synonyms, icon: '🔗', type: 'SYNONYM' },
+          { key: 'sequences', label: dict.cat_sequences, icon: '🔢', type: 'SEQUENCE' },
         ];
 
         cats.forEach(cat => {
@@ -1364,7 +2611,7 @@ graph TD
               }
               itemEl.innerHTML = `
                 <span>${item.name}</span>
-                <span class="item-badge ${item.is_annotated ? 'annotated' : ''}" title="${item.is_annotated ? 'Documented' : 'Pending'}"></span>
+                <span class="item-badge ${item.is_annotated ? 'annotated' : ''}" title="${item.is_annotated ? dict.documented : dict.pending}"></span>
               `;
               itemEl.onclick = () => selectObject(schema.schema_name, cat.type, item.name);
               catBody.appendChild(itemEl);
@@ -1382,7 +2629,8 @@ graph TD
         }
       });
 
-      document.getElementById('catalog-count').textContent = `${totalObjects} objects`;
+      const objUnit = totalObjects === 1 ? dict.objects_singular : dict.objects_plural;
+      document.getElementById('catalog-count').textContent = `${totalObjects} ${objUnit}`;
     }
 
     function filterCatalog(text) {
@@ -1391,7 +2639,7 @@ graph TD
         // When typing a new search, expand matching nodes so results are visible immediately
         currentCatalog.forEach(schema => {
           collapsedSchemas.delete(schema.schema_name);
-          ['tables', 'views', 'code_objects', 'triggers', 'synonyms', 'sequences'].forEach(k => {
+          ['tables', 'views', 'mviews', 'code_objects', 'triggers', 'synonyms', 'sequences'].forEach(k => {
             collapsedCategories.delete(`${schema.schema_name}:${k}`);
           });
         });
@@ -1408,11 +2656,12 @@ graph TD
     function addDynamicItem(containerId, value = '', placeholder = '') {
       const container = document.getElementById(containerId);
       if (!container) return;
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
       const div = document.createElement('div');
       div.className = 'rule-item';
       div.innerHTML = `
         <input type="text" class="form-control dynamic-item-input" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}">
-        <button type="button" class="btn-icon" onclick="this.parentElement.remove()" title="Remove item">✕</button>
+        <button type="button" class="btn-icon" onclick="this.parentElement.remove()" title="${dict.remove_item_title}">✕</button>
       `;
       container.appendChild(div);
     }
@@ -1436,6 +2685,7 @@ graph TD
     }
 
     async function selectObject(schema, type, name) {
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
       // Ensure parent schema and category are expanded
       collapsedSchemas.delete(schema);
       const catKeyMap = { 'TABLE': 'tables', 'VIEW': 'views', 'CODE': 'code_objects', 'PACKAGE': 'code_objects', 'PROCEDURE': 'code_objects', 'TRIGGER': 'triggers', 'SYNONYM': 'synonyms', 'SEQUENCE': 'sequences' };
@@ -1448,14 +2698,16 @@ graph TD
       if (activeEl) activeEl.classList.add('active');
 
       try {
-        const res = await fetch(`/api/object?schema=${encodeURIComponent(schema)}&type=${encodeURIComponent(type)}&name=${encodeURIComponent(name)}`);
+        const res = await fetch(`/api/object?schema=${encodeURIComponent(schema)}&type=${encodeURIComponent(type)}&name=${encodeURIComponent(name)}&depth=${currentLineageDepth}`);
         const data = await res.json();
         currentObject = { schema, type, name };
         currentRawData = data;
 
-        document.getElementById('empty-state-view').style.display = 'none';
-        const ws = document.getElementById('object-workspace');
-        ws.style.display = 'flex';
+        if (currentAppMode !== 'glossary') {
+          document.getElementById('empty-state-view').style.display = 'none';
+          const ws = document.getElementById('object-workspace');
+          ws.style.display = 'flex';
+        }
 
         document.getElementById('view-obj-schema').textContent = `${schema}.`;
         document.getElementById('view-obj-name').textContent = name;
@@ -1467,10 +2719,10 @@ graph TD
         document.getElementById('edit-tags').value = (ann.tags || []).join(', ');
 
         // Populate Dynamic Lists
-        populateDynamicList('rules-container', ann.business_rules, 'e.g. Every active employee must belong to a valid department...');
-        populateDynamicList('use-cases-container', ann.use_cases, 'e.g. Analytical query for earnings and deduction calculations...');
-        populateDynamicList('warnings-container', ann.warnings, 'e.g. Monthly partitioned table; always filter on DT_COMPETENCIA column...');
-        populateDynamicList('related-objects-container', ann.related_objects, 'e.g. TAB_DEPARTMENTS, PKG_PAYROLL...');
+        populateDynamicList('rules-container', ann.business_rules, dict.ph_rules);
+        populateDynamicList('use-cases-container', ann.use_cases, dict.ph_use_cases);
+        populateDynamicList('warnings-container', ann.warnings, dict.ph_warnings);
+        populateDynamicList('related-objects-container', ann.related_objects, dict.ph_related);
 
         // Populate Columns
         const colSection = document.getElementById('columns-section');
@@ -1495,7 +2747,7 @@ graph TD
               </td>
               <td><span class="col-type">${c.data_type}</span></td>
               <td>
-                <input type="text" class="form-control col-desc-input" data-col-name="${c.name}" value="${escapeHtml(existingDesc)}" placeholder="Description for column ${c.name}...">
+                <input type="text" class="form-control col-desc-input" data-col-name="${c.name}" value="${escapeHtml(existingDesc)}" placeholder="${dict.ph_col_desc} ${c.name}...">
               </td>
             `;
             colBody.appendChild(tr);
@@ -1505,18 +2757,19 @@ graph TD
         }
 
         // Populate Markdown Doc Preview
-        renderMarkdownDoc(data.markdown_doc || '# No compiled documentation yet.');
+        renderMarkdownDoc(data.markdown_doc || dict.no_compiled_doc);
 
-        // Populate Mermaid Lineage
-        renderMermaidLineage(data.lineage_mermaid || `graph TD\n  ${name}[${name}]`);
+        // Populate Lineage & Impact (Graph + Table)
+        renderLineage(data);
 
       } catch (e) {
-        showToast('Failed to load object', true);
+        showToast(dict.toast_load_obj_error, true);
       }
     }
 
     async function saveAnnotations() {
       if (!currentObject) return;
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
 
       const desc = document.getElementById('edit-description').value.trim();
       const tagsStr = document.getElementById('edit-tags').value.trim();
@@ -1557,22 +2810,23 @@ graph TD
         });
         const result = await res.json();
         if (result.success) {
-          showToast(`✓ Annotation saved and documentation recompiled!`);
+          showToast(dict.toast_save_success);
           await selectObject(currentObject.schema, currentObject.type, currentObject.name);
           await loadCatalog();
         } else {
-          showToast(`Failed to save: ${result.error}`, true);
+          showToast(`${dict.toast_save_error} ${result.error}`, true);
         }
       } catch (e) {
-        showToast('Failed to save annotation', true);
+        showToast(dict.toast_save_error, true);
       }
     }
 
     async function runAiEnrich() {
       if (!currentObject) return;
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
       const btn = document.getElementById('btn-ai-enrich');
       btn.disabled = true;
-      btn.textContent = '⏳ Generating with AI...';
+      btn.textContent = dict.btn_ai_generating;
 
       try {
         const res = await fetch('/api/enrich', {
@@ -1591,16 +2845,16 @@ graph TD
             document.getElementById('edit-description').value = e.business_description;
           }
           if (e.business_rules) {
-            populateDynamicList('rules-container', e.business_rules, 'e.g. Every active employee must belong to a valid department...');
+            populateDynamicList('rules-container', e.business_rules, dict.ph_rules);
           }
           if (e.use_cases) {
-            populateDynamicList('use-cases-container', e.use_cases, 'e.g. Analytical query for earnings and deduction calculations...');
+            populateDynamicList('use-cases-container', e.use_cases, dict.ph_use_cases);
           }
           if (e.warnings) {
-            populateDynamicList('warnings-container', e.warnings, 'e.g. Monthly partitioned table; always filter on DT_COMPETENCIA column...');
+            populateDynamicList('warnings-container', e.warnings, dict.ph_warnings);
           }
           if (e.related_objects) {
-            populateDynamicList('related-objects-container', e.related_objects, 'e.g. TAB_DEPARTMENTS, PKG_PAYROLL...');
+            populateDynamicList('related-objects-container', e.related_objects, dict.ph_related);
           }
           if (e.tags && e.tags.length > 0) {
             document.getElementById('edit-tags').value = e.tags.join(', ');
@@ -1614,30 +2868,15 @@ graph TD
               }
             });
           }
-          showToast('✨ Suggestions generated successfully by AI!');
+          showToast(dict.toast_ai_success);
         } else {
-          showToast(`AI error: ${data.error || 'No response'}`, true);
+          showToast(`${dict.toast_ai_error} ${data.error || 'No response'}`, true);
         }
       } catch (err) {
-        showToast('Failed to communicate with AI', true);
+        showToast(dict.toast_ai_comm_error, true);
       } finally {
         btn.disabled = false;
-        btn.textContent = '✨ Suggest with AI';
-      }
-    }
-
-    async function compileAll() {
-      try {
-        const res = await fetch('/api/compile', { method: 'POST' });
-        const data = await res.json();
-        if (data.success) {
-          showToast(`✓ All documentation compiled successfully!`);
-          if (currentObject) {
-            await selectObject(currentObject.schema, currentObject.type, currentObject.name);
-          }
-        }
-      } catch (e) {
-        showToast('Error during recompilation', true);
+        btn.textContent = dict.btn_ai_suggest;
       }
     }
 
@@ -1649,7 +2888,13 @@ graph TD
       document.getElementById(`tab-pane-${tabId}`).classList.add('active');
 
       if (tabId === 'lineage') {
-        setTimeout(() => mermaid.run(), 50);
+        if (currentLineageData) {
+          if (currentLineageView === 'graph') {
+            setTimeout(() => renderLineageGraph(), 50);
+          } else {
+            renderLineageTable();
+          }
+        }
       }
     }
 
@@ -1764,6 +3009,7 @@ graph TD
         const langClass = Array.from(codeBlock.classList).find(c => c.startsWith('language-'));
         const langName = langClass ? langClass.replace('language-', '').toUpperCase() : 'SQL / PLSQL';
 
+        const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
         const wrapper = document.createElement('div');
         wrapper.className = 'code-block-wrapper';
 
@@ -1771,7 +3017,7 @@ graph TD
         header.className = 'code-block-header';
         header.innerHTML = `
           <span>${escapeHtml(langName)}</span>
-          <button type="button" class="code-copy-btn" onclick="copySnippetCode(this)">📋 Copy</button>
+          <button type="button" class="code-copy-btn" onclick="copySnippetCode(this)">${dict.code_copy_btn}</button>
         `;
 
         pre.parentNode.insertBefore(wrapper, pre);
@@ -1800,13 +3046,14 @@ graph TD
     }
 
     async function copyCompiledMarkdown() {
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
       if (!currentMarkdownDoc) {
-        showToast('No markdown to copy', true);
+        showToast(dict.toast_no_md_copy, true);
         return;
       }
       try {
         await navigator.clipboard.writeText(currentMarkdownDoc);
-        showToast('✓ Markdown documentation copied to clipboard!');
+        showToast(dict.toast_copied_md);
       } catch (e) {
         const ta = document.createElement('textarea');
         ta.value = currentMarkdownDoc;
@@ -1814,11 +3061,12 @@ graph TD
         ta.select();
         document.execCommand('copy');
         document.body.removeChild(ta);
-        showToast('✓ Markdown documentation copied!');
+        showToast(dict.toast_copied_md);
       }
     }
 
     async function copySnippetCode(btn) {
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
       const wrapper = btn.closest('.code-block-wrapper');
       if (!wrapper) return;
       const codeEl = wrapper.querySelector('pre code');
@@ -1826,33 +3074,389 @@ graph TD
       const text = codeEl.innerText;
       try {
         await navigator.clipboard.writeText(text);
-        btn.textContent = '✓ Copied!';
-        setTimeout(() => { btn.textContent = '📋 Copy'; }, 2000);
+        btn.textContent = dict.code_copied_btn;
+        setTimeout(() => { btn.textContent = dict.code_copy_btn; }, 2000);
       } catch (e) {
-        btn.textContent = '✓ Copied!';
-        setTimeout(() => { btn.textContent = '📋 Copy'; }, 2000);
+        btn.textContent = dict.code_copied_btn;
+        setTimeout(() => { btn.textContent = dict.code_copy_btn; }, 2000);
       }
     }
 
-    async function renderMermaidLineage(mermaidCode) {
-      const container = document.getElementById('mermaid-container');
-      const uniqueId = 'mermaid-graph-' + Math.floor(Math.random() * 1000000);
+    // ==========================================
+    // Lineage & Impact Management (Graph & Table)
+    // ==========================================
+    function renderLineage(data) {
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+      currentLineageData = data.lineage || {
+        depth: currentLineageDepth,
+        total: 0,
+        upstream_count: 0,
+        downstream_count: 0,
+        links: [],
+        mermaid_code: data.lineage_mermaid || ''
+      };
+
+      // Update Depth Buttons
+      const btnD1 = document.getElementById('btn-lineage-depth-1');
+      const btnD2 = document.getElementById('btn-lineage-depth-2');
+      if (btnD1) btnD1.classList.toggle('active', currentLineageDepth === 1);
+      if (btnD2) btnD2.classList.toggle('active', currentLineageDepth === 2);
+
+      renderLineageKPIs();
+      renderLineageFilterChips();
+
+      // Show dense warning if too many connections
+      const warnBox = document.getElementById('lineage-dense-warning');
+      if (warnBox) {
+        warnBox.style.display = (currentLineageData.total > 25) ? 'flex' : 'none';
+      }
+
+      renderLineageGraph();
+      renderLineageTable();
+      setupLineageZoomPan();
+    }
+
+    function renderLineageKPIs() {
+      const d = currentLineageData || { total: 0, upstream_count: 0, downstream_count: 0 };
+      const elTotal = document.getElementById('lineage-kpi-total');
+      const elUp = document.getElementById('lineage-kpi-upstream');
+      const elDown = document.getElementById('lineage-kpi-downstream');
+      if (elTotal) elTotal.textContent = d.total || 0;
+      if (elUp) elUp.textContent = d.upstream_count || 0;
+      if (elDown) elDown.textContent = d.downstream_count || 0;
+    }
+
+    function renderLineageFilterChips() {
+      const links = (currentLineageData && currentLineageData.links) || [];
+      const total = links.length;
+      const up = links.filter(l => l.direction === 'upstream').length;
+      const down = links.filter(l => l.direction === 'downstream').length;
+      const tbl = links.filter(l => l.related_type === 'TABLE').length;
+      const vw = links.filter(l => l.related_type && l.related_type.includes('VIEW')).length;
+      const cd = links.filter(l => ['PACKAGE', 'PROCEDURE', 'FUNCTION', 'CODE', 'TRIGGER', 'SYNONYM'].includes(l.related_type)).length;
+
+      const setVal = (id, v) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = v;
+      };
+      setVal('chip-count-all', total);
+      setVal('chip-count-upstream', up);
+      setVal('chip-count-downstream', down);
+      setVal('chip-count-table', tbl);
+      setVal('chip-count-view', vw);
+      setVal('chip-count-code', cd);
+    }
+
+    function switchLineageView(viewMode) {
+      currentLineageView = viewMode;
+      const gWrap = document.getElementById('lineage-graph-wrapper');
+      const tWrap = document.getElementById('lineage-table-wrapper');
+      const btnG = document.getElementById('btn-lineage-view-graph');
+      const btnT = document.getElementById('btn-lineage-view-table');
+
+      if (viewMode === 'table') {
+        if (gWrap) gWrap.style.display = 'none';
+        if (tWrap) tWrap.style.display = 'flex';
+        if (btnG) btnG.classList.remove('active');
+        if (btnT) btnT.classList.add('active');
+        renderLineageTable();
+      } else {
+        if (gWrap) gWrap.style.display = 'flex';
+        if (tWrap) tWrap.style.display = 'none';
+        if (btnG) btnG.classList.add('active');
+        if (btnT) btnT.classList.remove('active');
+        renderLineageGraph();
+      }
+    }
+
+    async function changeLineageDepth(newDepth) {
+      if (currentLineageDepth === newDepth) return;
+      currentLineageDepth = newDepth;
+      const btnD1 = document.getElementById('btn-lineage-depth-1');
+      const btnD2 = document.getElementById('btn-lineage-depth-2');
+      if (btnD1) btnD1.classList.toggle('active', newDepth === 1);
+      if (btnD2) btnD2.classList.toggle('active', newDepth === 2);
+
+      if (currentObject) {
+        try {
+          const res = await fetch(`/api/object?schema=${encodeURIComponent(currentObject.schema)}&type=${encodeURIComponent(currentObject.type)}&name=${encodeURIComponent(currentObject.name)}&depth=${currentLineageDepth}`);
+          const data = await res.json();
+          currentRawData = data;
+          renderLineage(data);
+        } catch (e) {
+          console.error('Failed to change depth:', e);
+        }
+      }
+    }
+
+    function setLineageFilter(filterKey) {
+      currentLineageFilter = filterKey;
+      document.querySelectorAll('#lineage-filter-chips .lineage-filter-chip').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-filter') === filterKey);
+      });
+      renderLineageGraph();
+    }
+
+    function getFilteredLineageLinks() {
+      const links = (currentLineageData && currentLineageData.links) || [];
+      if (currentLineageFilter === 'all') return links;
+      if (currentLineageFilter === 'upstream') return links.filter(l => l.direction === 'upstream');
+      if (currentLineageFilter === 'downstream') return links.filter(l => l.direction === 'downstream');
+      if (currentLineageFilter === 'TABLE') return links.filter(l => l.related_type === 'TABLE');
+      if (currentLineageFilter === 'VIEW') return links.filter(l => l.related_type && l.related_type.includes('VIEW'));
+      if (currentLineageFilter === 'CODE') return links.filter(l => ['PACKAGE', 'PROCEDURE', 'FUNCTION', 'CODE', 'TRIGGER', 'SYNONYM'].includes(l.related_type));
+      return links;
+    }
+
+    async function renderLineageGraph() {
+      const container = document.getElementById('lineage-canvas-content');
+      if (!container || !currentObject) return;
+
+      const focalName = currentObject.name;
+      const filteredLinks = getFilteredLineageLinks();
+      const uniqueId = 'mermaid-lineage-' + Math.floor(Math.random() * 1000000);
+
+      // Build clean Mermaid diagram code
+      let mermaidCode = '';
+      if (filteredLinks.length === 0) {
+        const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+        const focalId = focalName.replace(/[\$\.]/g, '_');
+        mermaidCode = `graph TD\n  ${focalId}["⭐ ${focalName} (${dict.lineage_no_connections})"]:::focalClass\n  classDef focalClass fill:#ff9800,stroke:#e65100,stroke-width:3px,font-weight:bold,color:#000;`;
+      } else {
+        const lines = ['graph TD'];
+        const focalId = focalName.replace(/[\$\.]/g, '_');
+        lines.push(`    ${focalId}["⭐ ${focalName} (Focal)"]:::focalClass`);
+        const nodeSet = new Set([focalName.toUpperCase()]);
+
+        const getIcon = (type) => {
+          if (type === 'TABLE') return '📊';
+          if (type && type.includes('VIEW')) return '👁️';
+          if (['TRIGGER', 'SUBPROGRAM', 'PROCEDURE', 'FUNCTION'].includes(type)) return '⚡';
+          return '⚙️';
+        };
+
+        filteredLinks.forEach(dep => {
+          const sId = dep.source_name.replace(/[\$\.]/g, '_');
+          const tId = dep.target_name.replace(/[\$\.]/g, '_');
+
+          if (!nodeSet.has(dep.source_name.toUpperCase())) {
+            nodeSet.add(dep.source_name.toUpperCase());
+            lines.push(`    ${sId}["${getIcon(dep.source_type)} ${dep.source_name}"]`);
+          }
+          if (!nodeSet.has(dep.target_name.toUpperCase())) {
+            nodeSet.add(dep.target_name.toUpperCase());
+            lines.push(`    ${tId}["${getIcon(dep.target_type)} ${dep.target_name}"]`);
+          }
+
+          const label = (dep.relation_type || 'RELATES_TO').replace(/_/g, ' ');
+          lines.push(`    ${sId} -->|${label}| ${tId}`);
+        });
+
+        lines.push('');
+        lines.push('    classDef focalClass fill:#ff9800,stroke:#e65100,stroke-width:3px,font-weight:bold,color:#000;');
+        mermaidCode = lines.join('\n');
+      }
+
       container.innerHTML = `<div class="mermaid" id="${uniqueId}">${escapeHtml(mermaidCode)}</div>`;
+
       try {
         await mermaid.run({
           nodes: [document.getElementById(uniqueId)]
         });
+        resetLineageZoom();
+        attachNodeClickHandlers(container);
       } catch (e) {
         console.warn('Mermaid rendering error:', e);
         container.innerHTML = `
           <div style="text-align: center; color: var(--warning); padding: 24px; font-size: 13px;">
-            <p>⚠️ Large or complex dependency graph.</p>
-            <details style="text-align: left; margin-top: 12px; max-width: 650px; margin-left: auto; margin-right: auto;">
-              <summary style="cursor: pointer; color: var(--accent); font-weight: 600;">View generated Mermaid code</summary>
-              <pre style="background: var(--bg-tertiary); padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 11px; margin-top: 8px;">${escapeHtml(mermaidCode)}</pre>
-            </details>
+            <p>⚠️ Layout complexo para renderizar em grafo único.</p>
+            <p style="margin-top: 6px; color: var(--text-muted);">Use os chips de filtro acima para isolar conexões ou alterne para a Matriz de Impacto.</p>
+            <button type="button" class="btn btn-secondary" style="margin-top: 12px;" onclick="switchLineageView('table')">Ver em Tabela</button>
           </div>
         `;
+      }
+    }
+
+    function attachNodeClickHandlers(container) {
+      const svg = container.querySelector('svg');
+      if (!svg) return;
+      svg.querySelectorAll('.node').forEach(nodeEl => {
+        nodeEl.style.cursor = 'pointer';
+        nodeEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const rawText = nodeEl.textContent || '';
+          const cleanName = rawText.replace(/[⭐📊👁️⚡⚙️]/g, '').replace(/\(Focal\)/g, '').replace(/\(L\d+\)/g, '').trim().split(' ')[0];
+          if (cleanName && currentObject && cleanName.toUpperCase() !== currentObject.name.toUpperCase()) {
+            navigateToLineageObject(cleanName);
+          }
+        });
+      });
+    }
+
+    function filterLineageTable(term) {
+      renderLineageTable(term);
+    }
+
+    function renderLineageTable(term = '') {
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+      const links = (currentLineageData && currentLineageData.links) || [];
+      const cleanTerm = (term || '').trim().toLowerCase();
+
+      const filtered = links.filter(l => {
+        if (!cleanTerm) return true;
+        return (l.related_object && l.related_object.toLowerCase().includes(cleanTerm)) ||
+               (l.relation_type && l.relation_type.toLowerCase().includes(cleanTerm)) ||
+               (l.related_type && l.related_type.toLowerCase().includes(cleanTerm));
+      });
+
+      const upstream = filtered.filter(l => l.direction === 'upstream');
+      const downstream = filtered.filter(l => l.direction === 'downstream');
+
+      const countUp = document.getElementById('table-count-upstream');
+      const countDown = document.getElementById('table-count-downstream');
+      if (countUp) countUp.textContent = upstream.length;
+      if (countDown) countDown.textContent = downstream.length;
+
+      const renderTbody = (tbodyId, list) => {
+        const tbody = document.getElementById(tbodyId);
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        if (list.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 16px;">
+                ${escapeHtml(dict.lineage_no_connections)}
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        const getIcon = (type) => {
+          if (type === 'TABLE') return '📊';
+          if (type && type.includes('VIEW')) return '👁️';
+          if (['TRIGGER', 'SUBPROGRAM', 'PROCEDURE', 'FUNCTION'].includes(type)) return '⚡';
+          return '⚙️';
+        };
+
+        list.forEach(item => {
+          const tr = document.createElement('tr');
+          const relObj = item.related_object || '';
+          const relType = item.related_type || 'OBJECT';
+          const icon = getIcon(relType);
+          const depthLabel = `L${item.depth || 1}`;
+          const relLabel = (item.relation_type || '').replace(/_/g, ' ');
+
+          tr.innerHTML = `
+            <td>
+              <span style="margin-right: 6px;">${icon}</span>
+              <strong style="cursor: pointer; color: var(--accent);" onclick="navigateToLineageObject('${escapeHtml(relObj)}')">${escapeHtml(relObj)}</strong>
+            </td>
+            <td><span class="tree-cat-badge" style="font-size: 11px;">${escapeHtml(relType)}</span></td>
+            <td><code>${escapeHtml(relLabel)}</code></td>
+            <td><span style="font-family: var(--font-mono); color: var(--text-muted);">${escapeHtml(depthLabel)}</span></td>
+            <td>
+              <button type="button" class="lineage-row-btn" onclick="navigateToLineageObject('${escapeHtml(relObj)}')">
+                <span>${escapeHtml(dict.lineage_action_go)}</span> ➔
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      };
+
+      renderTbody('lineage-tbody-upstream', upstream);
+      renderTbody('lineage-tbody-downstream', downstream);
+    }
+
+    function navigateToLineageObject(objectName) {
+      if (!objectName || !currentCatalog) return;
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+      const cleanUpper = objectName.trim().toUpperCase();
+
+      for (const s of currentCatalog) {
+        const cats = [
+          { key: 'tables', type: 'TABLE' },
+          { key: 'views', type: 'VIEW' },
+          { key: 'mviews', type: 'MVIEW' },
+          { key: 'code_objects', type: 'CODE' },
+          { key: 'triggers', type: 'TRIGGER' },
+          { key: 'synonyms', type: 'SYNONYM' },
+          { key: 'sequences', type: 'SEQUENCE' },
+        ];
+        for (const c of cats) {
+          const items = s[c.key] || [];
+          const found = items.find(it => it.name.toUpperCase() === cleanUpper);
+          if (found) {
+            selectObject(s.schema_name, c.type, found.name);
+            return;
+          }
+        }
+      }
+      showToast(dict.lineage_obj_not_in_catalog, true);
+    }
+
+    let zoomPanInitialized = false;
+
+    function setupLineageZoomPan() {
+      const viewport = document.getElementById('lineage-viewport');
+      if (!viewport || zoomPanInitialized) return;
+      zoomPanInitialized = true;
+
+      viewport.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 0.15 : -0.15;
+        zoomLineage(delta);
+      }, { passive: false });
+
+      viewport.addEventListener('mousedown', (e) => {
+        if (e.target.closest('button')) return;
+        lineageZoom.isDragging = true;
+        lineageZoom.startX = e.clientX - lineageZoom.translateX;
+        lineageZoom.startY = e.clientY - lineageZoom.translateY;
+        viewport.classList.add('grabbing');
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!lineageZoom.isDragging) return;
+        lineageZoom.translateX = e.clientX - lineageZoom.startX;
+        lineageZoom.translateY = e.clientY - lineageZoom.startY;
+        applyLineageTransform();
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (lineageZoom.isDragging) {
+          lineageZoom.isDragging = false;
+          viewport.classList.remove('grabbing');
+        }
+      });
+    }
+
+    function applyLineageTransform() {
+      const content = document.getElementById('lineage-canvas-content');
+      if (content) {
+        content.style.transform = `translate(${lineageZoom.translateX}px, ${lineageZoom.translateY}px) scale(${lineageZoom.scale})`;
+      }
+    }
+
+    function zoomLineage(delta) {
+      lineageZoom.scale = Math.max(0.2, Math.min(4.0, lineageZoom.scale + delta));
+      applyLineageTransform();
+    }
+
+    function resetLineageZoom() {
+      lineageZoom.scale = 1;
+      lineageZoom.translateX = 0;
+      lineageZoom.translateY = 0;
+      lineageZoom.isDragging = false;
+      applyLineageTransform();
+    }
+
+    function toggleLineageFullscreen() {
+      const wrapper = document.getElementById('lineage-graph-wrapper');
+      if (wrapper) {
+        wrapper.classList.toggle('fullscreen');
       }
     }
 
@@ -1873,7 +3477,15 @@ graph TD
         globalConfig = data;
 
         // Populate Connection & Schemas
-        document.getElementById('cfg-dsn').value = data.dsn || '';
+        const dsnInput = document.getElementById('cfg-dsn');
+        dsnInput.type = 'password';
+        const dsnBtn = document.getElementById('btn-toggle-dsn');
+        const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+        if (dsnBtn) {
+          dsnBtn.textContent = '👁️';
+          dsnBtn.title = dict.dsn_show_title;
+        }
+        dsnInput.value = data.dsn || '';
         document.getElementById('cfg-schemas').value = (data.schemas || []).join(', ');
         document.getElementById('cfg-include').value = (data.include || []).join(', ');
         document.getElementById('cfg-exclude').value = (data.exclude || []).join(', ');
@@ -1888,7 +3500,7 @@ graph TD
         document.getElementById('cfg-ann-path').value = data.annotationsPath || './annotations';
         document.getElementById('cfg-doc-path').value = data.docPath || './docs';
 
-        // Populate AI
+        // Populate AI Provider
         const ai = data.ai || {};
         const provSelect = document.getElementById('cfg-ai-provider');
         const activeProv = (ai.default_provider || 'openai').toLowerCase();
@@ -1923,6 +3535,21 @@ graph TD
       }
     }
 
+    function toggleDsnVisibility() {
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+      const dsnInput = document.getElementById('cfg-dsn');
+      const dsnBtn = document.getElementById('btn-toggle-dsn');
+      if (dsnInput.type === 'password') {
+        dsnInput.type = 'text';
+        dsnBtn.textContent = '🙈';
+        dsnBtn.title = dict.dsn_hide_title;
+      } else {
+        dsnInput.type = 'password';
+        dsnBtn.textContent = '👁️';
+        dsnBtn.title = dict.dsn_show_title;
+      }
+    }
+
     function closeSettingsModal() {
       document.getElementById('settings-modal').classList.remove('show');
     }
@@ -1936,22 +3563,160 @@ graph TD
       });
     }
 
+    const PROVIDER_MODELS = {
+      gemini: [
+        { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (Recomendado)" },
+        { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro (Raciocínio Avançado)" },
+        { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+        { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" },
+        { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" }
+      ],
+      openai: [
+        { value: "gpt-4o", label: "GPT-4o (Omni - Recomendado)" },
+        { value: "gpt-4o-mini", label: "GPT-4o Mini (Rápido e Econômico)" },
+        { value: "o1", label: "o1 (Raciocínio Complexo)" },
+        { value: "o3-mini", label: "o3-mini (Raciocínio Rápido)" },
+        { value: "gpt-4-turbo", label: "GPT-4 Turbo" }
+      ],
+      anthropic: [
+        { value: "claude-3-7-sonnet-latest", label: "Claude 3.7 Sonnet (Hybrid Reasoning)" },
+        { value: "claude-3-5-sonnet-latest", label: "Claude 3.5 Sonnet (Recomendado)" },
+        { value: "claude-3-5-haiku-latest", label: "Claude 3.5 Haiku (Rápido)" },
+        { value: "claude-3-opus-latest", label: "Claude 3 Opus" }
+      ],
+      deepseek: [
+        { value: "deepseek-chat", label: "DeepSeek V3 (deepseek-chat)" },
+        { value: "deepseek-reasoner", label: "DeepSeek R1 (deepseek-reasoner)" }
+      ],
+      grok: [
+        { value: "grok-2-latest", label: "Grok 2 (xAI)" },
+        { value: "grok-beta", label: "Grok Beta" }
+      ],
+      xai: [
+        { value: "grok-2-latest", label: "Grok 2 (xAI)" },
+        { value: "grok-beta", label: "Grok Beta" }
+      ],
+      qwen: [
+        { value: "qwen-max", label: "Qwen Max (Flagship)" },
+        { value: "qwen-plus", label: "Qwen Plus" },
+        { value: "qwen-turbo", label: "Qwen Turbo" }
+      ],
+      kimi: [
+        { value: "moonshot-v1-8k", label: "Moonshot v1 8k" },
+        { value: "moonshot-v1-32k", label: "Moonshot v1 32k" },
+        { value: "moonshot-v1-128k", label: "Moonshot v1 128k" }
+      ],
+      ollama: [
+        { value: "llama3.3", label: "Llama 3.3 (Meta)" },
+        { value: "llama3.1", label: "Llama 3.1" },
+        { value: "qwen2.5-coder", label: "Qwen 2.5 Coder" },
+        { value: "deepseek-r1", label: "DeepSeek R1 Local" },
+        { value: "mistral", label: "Mistral" }
+      ],
+      openrouter: [
+        { value: "anthropic/claude-3.5-sonnet", label: "Claude 3.5 Sonnet" },
+        { value: "openai/gpt-4o", label: "GPT-4o" },
+        { value: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash (Free)" },
+        { value: "deepseek/deepseek-r1", label: "DeepSeek R1" }
+      ],
+      groq: [
+        { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile" },
+        { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant" },
+        { value: "deepseek-r1-distill-llama-70b", label: "DeepSeek R1 Distill 70B" }
+      ]
+    };
+
     function onAiProviderChanged() {
       if (!globalConfig) return;
-      const provName = document.getElementById('cfg-ai-provider').value;
+      const provName = (document.getElementById('cfg-ai-provider').value || 'openai').toLowerCase();
       const provData = (globalConfig.ai && globalConfig.ai.providers && (globalConfig.ai.providers[provName] || globalConfig.ai.providers[provName.toLowerCase()])) || {};
 
-      document.getElementById('cfg-ai-model').value = provData.model || '';
+      const currentModel = provData.model || '';
       document.getElementById('cfg-ai-baseurl').value = provData.base_url || '';
       document.getElementById('cfg-ai-apikey').value = '';
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
       if (provData.has_api_key) {
-        document.getElementById('cfg-ai-apikey').placeholder = '•••••••• (Saved key preserved if blank)';
+        document.getElementById('cfg-ai-apikey').placeholder = dict.ph_apikey_saved;
       } else {
-        document.getElementById('cfg-ai-apikey').placeholder = 'Leave blank or use ${ENV_VAR}';
+        document.getElementById('cfg-ai-apikey').placeholder = dict.ph_apikey;
+      }
+
+      updateModelListForProvider(provName, currentModel);
+    }
+
+    function updateModelListForProvider(provName, currentModel) {
+      const modelSelect = document.getElementById('cfg-ai-model-select');
+      const modelInput = document.getElementById('cfg-ai-model');
+      if (!modelSelect || !modelInput) return;
+      modelSelect.innerHTML = '';
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+
+      const models = PROVIDER_MODELS[provName] || [
+        { value: currentModel || 'default', label: currentModel || 'Padrão' }
+      ];
+
+      let matched = false;
+      models.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.value;
+        opt.textContent = m.label;
+        if (currentModel && m.value.toLowerCase() === currentModel.toLowerCase()) {
+          opt.selected = true;
+          matched = true;
+        }
+        modelSelect.appendChild(opt);
+      });
+
+      const customOpt = document.createElement('option');
+      customOpt.value = '__custom__';
+      customOpt.textContent = dict.custom_model_option;
+      if (!matched && currentModel) {
+        customOpt.selected = true;
+      }
+      modelSelect.appendChild(customOpt);
+
+      if (currentModel) {
+        modelInput.value = currentModel;
+      } else if (models.length > 0) {
+        modelInput.value = models[0].value;
       }
     }
 
+    function onModelSelectChanged() {
+      const modelSelect = document.getElementById('cfg-ai-model-select');
+      const modelInput = document.getElementById('cfg-ai-model');
+      if (!modelSelect || !modelInput) return;
+      if (modelSelect.value !== '__custom__') {
+        modelInput.value = modelSelect.value;
+      } else {
+        modelInput.value = '';
+        modelInput.focus();
+      }
+    }
+
+    function initModelInputSync() {
+      const modelInput = document.getElementById('cfg-ai-model');
+      if (!modelInput) return;
+      modelInput.addEventListener('input', function() {
+        const modelSelect = document.getElementById('cfg-ai-model-select');
+        if (!modelSelect) return;
+        const val = this.value.trim().toLowerCase();
+        let found = false;
+        for (let opt of modelSelect.options) {
+          if (opt.value !== '__custom__' && opt.value.toLowerCase() === val) {
+            modelSelect.value = opt.value;
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          modelSelect.value = '__custom__';
+        }
+      });
+    }
+
     async function saveSettings() {
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
       const dsn = document.getElementById('cfg-dsn').value.trim();
       const schemasStr = document.getElementById('cfg-schemas').value.trim();
       const schemas = schemasStr ? schemasStr.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
@@ -2007,16 +3772,486 @@ graph TD
         });
         const data = await res.json();
         if (data.success) {
-          showToast('✓ Configuration saved to leai.yml successfully!');
+          showToast(dict.toast_cfg_saved);
           closeSettingsModal();
           await checkStatus();
           await loadCatalog();
         } else {
-          showToast(`Failed to save: ${data.error}`, true);
+          showToast(`${dict.toast_save_error} ${data.error}`, true);
         }
       } catch (e) {
-        showToast('Failed to save configuration', true);
+        showToast(dict.toast_cfg_error, true);
       }
+    }
+
+    /* ==========================================================================
+       GLOSSARY & UNIVERSAL RULES STUDIO MODULE
+       ========================================================================== */
+
+    function switchAppMode(mode) {
+      currentAppMode = mode;
+      const btnCatalog = document.getElementById('btn-mode-catalog');
+      const btnGlossary = document.getElementById('btn-mode-glossary');
+      const emptyState = document.getElementById('empty-state-view');
+      const objWs = document.getElementById('object-workspace');
+      const glossWs = document.getElementById('glossary-workspace');
+
+      if (mode === 'glossary') {
+        if (btnCatalog) btnCatalog.classList.remove('active');
+        if (btnGlossary) btnGlossary.classList.add('active');
+        if (emptyState) emptyState.style.display = 'none';
+        if (objWs) objWs.style.display = 'none';
+        if (glossWs) glossWs.style.display = 'flex';
+        fetchGlossary(true);
+      } else {
+        if (btnCatalog) btnCatalog.classList.add('active');
+        if (btnGlossary) btnGlossary.classList.remove('active');
+        if (glossWs) glossWs.style.display = 'none';
+        if (currentObject && currentRawData) {
+          if (objWs) objWs.style.display = 'flex';
+          if (emptyState) emptyState.style.display = 'none';
+        } else {
+          if (objWs) objWs.style.display = 'none';
+          if (emptyState) emptyState.style.display = 'flex';
+        }
+      }
+    }
+
+    function switchGlossaryTab(tab) {
+      const btnRules = document.getElementById('glossary-tab-btn-rules');
+      const btnDoc = document.getElementById('glossary-tab-btn-doc');
+      const paneRules = document.getElementById('glossary-tab-pane-rules');
+      const paneDoc = document.getElementById('glossary-tab-pane-doc');
+
+      if (tab === 'rules') {
+        if (btnRules) btnRules.classList.add('active');
+        if (btnDoc) btnDoc.classList.remove('active');
+        if (paneRules) paneRules.classList.add('active');
+        if (paneDoc) paneDoc.classList.remove('active');
+      } else {
+        if (btnRules) btnRules.classList.remove('active');
+        if (btnDoc) btnDoc.classList.add('active');
+        if (paneRules) paneRules.classList.remove('active');
+        if (paneDoc) paneDoc.classList.add('active');
+        renderGlossaryMarkdownDoc();
+      }
+    }
+
+    async function fetchGlossary(render = true) {
+      try {
+        const res = await fetch('/api/glossary');
+        const data = await res.json();
+        if (data.success) {
+          currentGlossaryTerms = data.terms || [];
+          currentGlossaryCompiledMd = data.compiled_markdown || '';
+
+          // Update count badges
+          const total = currentGlossaryTerms.length;
+          const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+          const countUnit = total === 1 ? dict.glossary_count_singular : dict.glossary_count_plural;
+          const countBadge = document.getElementById('glossary-count-badge');
+          if (countBadge) countBadge.textContent = `${total} ${countUnit}`;
+
+          const navBadge = document.getElementById('nav-glossary-count');
+          if (navBadge) navBadge.textContent = total;
+
+          if (render) {
+            renderGlossaryTagChips();
+            renderGlossaryCards();
+            renderGlossaryMarkdownDoc();
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch glossary:', err);
+      }
+    }
+
+    function renderGlossaryTagChips() {
+      const container = document.getElementById('glossary-tag-filters');
+      if (!container) return;
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+
+      // Collect all tags
+      const tagSet = new Set();
+      currentGlossaryTerms.forEach(t => {
+        (t.tags || []).forEach(tag => {
+          if (tag && tag.trim()) tagSet.add(tag.trim().toUpperCase());
+        });
+      });
+
+      const tags = Array.from(tagSet).sort();
+      let html = `
+        <button type="button" class="glossary-tag-chip ${currentGlossaryTagFilter === 'all' ? 'active' : ''}" onclick="setGlossaryTagFilter('all')">
+          <span>${dict.tag_filter_all}</span>
+        </button>
+      `;
+
+      tags.forEach(tag => {
+        const isActive = currentGlossaryTagFilter === tag ? 'active' : '';
+        html += `
+          <button type="button" class="glossary-tag-chip ${isActive}" onclick="setGlossaryTagFilter('${escapeHtml(tag)}')">
+            <span>🏷️ ${escapeHtml(tag)}</span>
+          </button>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    function setGlossaryTagFilter(tag) {
+      currentGlossaryTagFilter = tag;
+      renderGlossaryTagChips();
+      const searchVal = document.getElementById('glossary-search')?.value || '';
+      renderGlossaryCards(searchVal);
+    }
+
+    function filterGlossaryTerms(text) {
+      renderGlossaryCards(text);
+    }
+
+    function renderGlossaryCards(searchQuery = '') {
+      const container = document.getElementById('glossary-cards-container');
+      if (!container) return;
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+
+      const q = (searchQuery || document.getElementById('glossary-search')?.value || '').toLowerCase().trim();
+
+      const filtered = currentGlossaryTerms.filter(t => {
+        // Tag filter check
+        if (currentGlossaryTagFilter !== 'all') {
+          const hasTag = (t.tags || []).some(tag => tag.toUpperCase() === currentGlossaryTagFilter);
+          if (!hasTag) return false;
+        }
+
+        // Search text check
+        if (!q) return true;
+        const normTerm = (t.term || '').toLowerCase();
+        const normDef = (t.definition || '').toLowerCase();
+        const normTbl = (t.primary_table || '').toLowerCase();
+        const normFilter = (t.canonical_filter || '').toLowerCase();
+        const normRel = (t.related_tables || []).join(' ').toLowerCase();
+        const normTags = (t.tags || []).join(' ').toLowerCase();
+        const normEx = (t.examples || []).join(' ').toLowerCase();
+
+        return (
+          normTerm.includes(q) ||
+          normDef.includes(q) ||
+          normTbl.includes(q) ||
+          normFilter.includes(q) ||
+          normRel.includes(q) ||
+          normTags.includes(q) ||
+          normEx.includes(q)
+        );
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div style="padding: 40px 20px; text-align: center; color: var(--text-muted);">
+            <div style="font-size: 40px; margin-bottom: 12px;">📖</div>
+            <h3 style="font-size: 15px; color: var(--text-primary); margin-bottom: 6px;">${dict.glossary_empty_title}</h3>
+            <p style="max-width: 460px; margin: 0 auto; font-size: 13px;">${dict.glossary_empty_desc}</p>
+            <button type="button" class="btn btn-primary" style="margin-top: 14px;" onclick="toggleGlossaryForm(true)">
+              <span>➕</span> <span>${dict.btn_new_rule}</span>
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(t => {
+        const termName = escapeHtml(t.term);
+        const def = escapeHtml(t.definition);
+        const primTbl = t.primary_table ? escapeHtml(t.primary_table.toUpperCase()) : null;
+        const filterSql = t.canonical_filter ? escapeHtml(t.canonical_filter) : null;
+        const rawFilterAttr = t.canonical_filter ? escapeHtml(t.canonical_filter).replace(/"/g, '&quot;') : '';
+        const tags = t.tags || [];
+        const related = t.related_tables || [];
+        const examples = t.examples || [];
+
+        return `
+          <div class="glossary-card" id="glossary-card-${escapeHtml(t.term)}">
+            <div class="glossary-card-header">
+              <div class="glossary-card-title-group">
+                <span class="glossary-card-title">📖 ${termName}</span>
+                ${primTbl ? `<span class="glossary-pill glossary-pill-table">📊 ${primTbl}</span>` : ''}
+                ${tags.map(tag => `<span class="glossary-pill glossary-pill-tag">🏷️ ${escapeHtml(tag)}</span>`).join('')}
+              </div>
+
+              <div class="glossary-card-actions">
+                <button type="button" class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="editGlossaryTerm('${escapeHtml(t.term)}')">
+                  <span>✏️</span> <span>${dict.btn_edit}</span>
+                </button>
+                <button type="button" class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px; color: var(--danger); border-color: rgba(248, 113, 113, 0.3);" onclick="deleteGlossaryTerm('${escapeHtml(t.term)}')">
+                  <span>🗑️</span> <span>${dict.btn_delete}</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="glossary-card-def">${def}</div>
+
+            ${filterSql ? `
+              <div class="glossary-filter-block">
+                <div class="glossary-filter-header">
+                  <span>${dict.canonical_filter_label}</span>
+                  <button type="button" class="btn btn-secondary" style="font-size: 10px; padding: 2px 7px;" data-sql="${rawFilterAttr}" onclick="copyTextToClipboard(this.getAttribute('data-sql'), '${dict.code_copied_btn}')">
+                    <span>${dict.copy_sql_btn}</span>
+                  </button>
+                </div>
+                <pre class="glossary-filter-code"><code class="language-sql">${filterSql}</code></pre>
+              </div>
+            ` : ''}
+
+            ${(related.length > 0 || examples.length > 0) ? `
+              <div class="glossary-meta-row">
+                ${related.length > 0 ? `
+                  <div class="glossary-meta-item">
+                    <strong>${dict.related_tables_label}</strong>
+                    <span>${related.map(r => `<code>${escapeHtml(r.toUpperCase())}</code>`).join(', ')}</span>
+                  </div>
+                ` : ''}
+
+                ${examples.length > 0 ? `
+                  <div class="glossary-meta-item" style="width: 100%; flex-direction: column; align-items: flex-start;">
+                    <strong>${dict.examples_label}</strong>
+                    <ul style="margin-left: 18px; margin-top: 4px; font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
+                      ${examples.map(ex => `<li>${escapeHtml(ex)}</li>`).join('')}
+                    </ul>
+                  </div>
+                ` : ''}
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+
+      // Highlight SQL blocks using highlight.js
+      if (window.hljs) {
+        container.querySelectorAll('pre.glossary-filter-code code').forEach(el => {
+          try { hljs.highlightElement(el); } catch (e) {}
+        });
+      }
+    }
+
+    function toggleGlossaryForm(show, termData = null) {
+      const formContainer = document.getElementById('glossary-form-container');
+      if (!formContainer) return;
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+
+      if (!show) {
+        formContainer.style.display = 'none';
+        return;
+      }
+
+      formContainer.style.display = 'block';
+      formContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+      const titleEl = document.getElementById('glossary-form-title-text');
+      const isEditingInput = document.getElementById('form-is-editing');
+      const originalTermInput = document.getElementById('form-original-term');
+      const termInput = document.getElementById('form-rule-term');
+      const tableInput = document.getElementById('form-rule-primary-table');
+      const defInput = document.getElementById('form-rule-definition');
+      const filterInput = document.getElementById('form-rule-filter');
+      const relatedInput = document.getElementById('form-rule-related');
+      const tagsInput = document.getElementById('form-rule-tags');
+      const examplesContainer = document.getElementById('form-examples-container');
+
+      examplesContainer.innerHTML = '';
+
+      if (termData) {
+        // Edit mode
+        titleEl.textContent = dict.glossary_form_title_edit;
+        isEditingInput.value = 'true';
+        originalTermInput.value = termData.term;
+        termInput.value = termData.term;
+        tableInput.value = termData.primary_table || '';
+        defInput.value = termData.definition || '';
+        filterInput.value = termData.canonical_filter || '';
+        relatedInput.value = (termData.related_tables || []).join(', ');
+        tagsInput.value = (termData.tags || []).join(', ');
+        (termData.examples || []).forEach(ex => {
+          addDynamicItem('form-examples-container', ex, 'ex: Contagem de ativos...');
+        });
+      } else {
+        // New rule mode
+        titleEl.textContent = dict.glossary_form_title_new;
+        isEditingInput.value = 'false';
+        originalTermInput.value = '';
+        termInput.value = '';
+        tableInput.value = '';
+        defInput.value = '';
+        filterInput.value = '';
+        relatedInput.value = '';
+        tagsInput.value = '';
+      }
+
+      termInput.focus();
+    }
+
+    function editGlossaryTerm(termName) {
+      const termObj = currentGlossaryTerms.find(t => t.term.toUpperCase() === termName.toUpperCase());
+      if (termObj) {
+        toggleGlossaryForm(true, termObj);
+      }
+    }
+
+    async function handleGlossaryFormSubmit(event) {
+      event.preventDefault();
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+
+      const termName = document.getElementById('form-rule-term').value.trim();
+      const definition = document.getElementById('form-rule-definition').value.trim();
+      const primaryTable = document.getElementById('form-rule-primary-table').value.trim() || null;
+      const canonicalFilter = document.getElementById('form-rule-filter').value.trim() || null;
+
+      const relatedStr = document.getElementById('form-rule-related').value.trim();
+      const relatedTables = relatedStr ? relatedStr.split(',').map(s => s.trim().toUpperCase()).filter(Boolean) : [];
+
+      const tagsStr = document.getElementById('form-rule-tags').value.trim();
+      const tags = tagsStr ? tagsStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+      const examples = [];
+      document.querySelectorAll('#form-examples-container input').forEach(inp => {
+        const val = inp.value.trim();
+        if (val) examples.push(val);
+      });
+
+      const isEditing = document.getElementById('form-is-editing').value === 'true';
+      const originalTerm = document.getElementById('form-original-term').value.trim();
+
+      // If renamed during edit, delete old term first
+      if (isEditing && originalTerm && originalTerm.toUpperCase() !== termName.toUpperCase()) {
+        try {
+          await fetch(`/api/glossary?term=${encodeURIComponent(originalTerm)}`, { method: 'DELETE' });
+        } catch (e) {
+          console.warn('Failed to clean up renamed term:', e);
+        }
+      }
+
+      const payload = {
+        term: termName,
+        definition: definition,
+        primary_table: primaryTable,
+        canonical_filter: canonicalFilter,
+        related_tables: relatedTables,
+        tags: tags,
+        examples: examples
+      };
+
+      try {
+        const res = await fetch('/api/glossary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(dict.toast_rule_saved);
+          toggleGlossaryForm(false);
+          await fetchGlossary(true);
+        } else {
+          showToast(`${dict.toast_rule_error} ${data.error}`, true);
+        }
+      } catch (err) {
+        showToast(`${dict.toast_rule_error} ${err.message}`, true);
+      }
+    }
+
+    async function deleteGlossaryTerm(termName) {
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+      const promptMsg = dict.confirm_delete_rule.replace('{term}', termName);
+      if (!confirm(promptMsg)) return;
+
+      try {
+        const res = await fetch(`/api/glossary?term=${encodeURIComponent(termName)}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(dict.toast_rule_deleted);
+          // If editing this term, close form
+          const origTerm = document.getElementById('form-original-term')?.value;
+          if (origTerm && origTerm.toUpperCase() === termName.toUpperCase()) {
+            toggleGlossaryForm(false);
+          }
+          await fetchGlossary(true);
+        } else {
+          showToast(`${dict.toast_rule_delete_error} ${data.error}`, true);
+        }
+      } catch (err) {
+        showToast(`${dict.toast_rule_delete_error} ${err.message}`, true);
+      }
+    }
+
+    function setGlossaryDocMode(mode) {
+      currentGlossaryDocMode = mode;
+      const btnRendered = document.getElementById('seg-btn-glossary-rendered');
+      const btnSource = document.getElementById('seg-btn-glossary-source');
+      const renderedContainer = document.getElementById('glossary-doc-rendered');
+      const sourceContainer = document.getElementById('glossary-doc-source');
+
+      if (mode === 'rendered') {
+        if (btnRendered) btnRendered.classList.add('active');
+        if (btnSource) btnSource.classList.remove('active');
+        if (renderedContainer) renderedContainer.style.display = 'block';
+        if (sourceContainer) sourceContainer.style.display = 'none';
+      } else {
+        if (btnRendered) btnRendered.classList.remove('active');
+        if (btnSource) btnSource.classList.add('active');
+        if (renderedContainer) renderedContainer.style.display = 'none';
+        if (sourceContainer) sourceContainer.style.display = 'block';
+      }
+    }
+
+    function renderGlossaryMarkdownDoc() {
+      const renderedContainer = document.getElementById('glossary-doc-rendered');
+      const sourceContainer = document.getElementById('glossary-doc-source');
+      if (!renderedContainer || !sourceContainer) return;
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+
+      let mdText = currentGlossaryCompiledMd;
+      if (!mdText || (currentGlossaryTerms && currentGlossaryTerms.length === 0)) {
+        mdText = `# Business Glossary & Canonical Domain Rules\n\n> [!NOTE]\n> *${dict.glossary_empty_desc}*`;
+      }
+      sourceContainer.textContent = mdText;
+
+      try {
+        if (window.marked) {
+          renderedContainer.innerHTML = marked.parse(mdText);
+          if (window.hljs) {
+            renderedContainer.querySelectorAll('pre code').forEach(block => {
+              hljs.highlightElement(block);
+            });
+          }
+        } else {
+          renderedContainer.innerHTML = `<pre>${escapeHtml(mdText)}</pre>`;
+        }
+      } catch (err) {
+        renderedContainer.innerHTML = `<pre>${escapeHtml(mdText)}</pre>`;
+      }
+    }
+
+    function copyGlossaryMarkdown() {
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+      if (!currentGlossaryCompiledMd) {
+        showToast(dict.toast_no_md_copy, true);
+        return;
+      }
+      navigator.clipboard.writeText(currentGlossaryCompiledMd).then(() => {
+        showToast(dict.toast_copied_md);
+      }).catch(() => {
+        showToast(dict.toast_save_error, true);
+      });
+    }
+
+    function copyTextToClipboard(text, successMsg) {
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => {
+        showToast(successMsg || '✓ Copiado!');
+      }).catch(err => {
+        console.error('Copy failed:', err);
+      });
     }
 
     function showToast(msg, isError = false) {

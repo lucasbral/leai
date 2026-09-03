@@ -1327,7 +1327,13 @@ def write_glossary_doc(annotations_path: Path, doc_path: Path) -> Path | None:
         from leai.glossary import load_glossary
 
         glossary = load_glossary(annotations_path)
+        out_file = doc_path / "GLOSSARY.md"
         if not glossary.terms:
+            if out_file.exists():
+                try:
+                    out_file.unlink()
+                except Exception:
+                    pass
             return None
 
         lines = [

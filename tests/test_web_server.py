@@ -4,6 +4,7 @@ import json
 import tempfile
 import time
 import unittest
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -116,6 +117,16 @@ class WebServerTests(unittest.TestCase):
                 self.assertEqual(req.status, 200)
                 html_body = req.read().decode("utf-8")
                 self.assertIn("LEAI Docs", html_body)
+                self.assertIn('id="langSelect"', html_body)
+                self.assertIn("INDEX_I18N", html_body)
+                self.assertIn('id="btn-mode-glossary"', html_body)
+                self.assertIn('id="glossary-workspace"', html_body)
+                self.assertIn('id="glossary-form-container"', html_body)
+
+                # 1b. Test GET /chat is disabled and returns 404
+                with self.assertRaises(urllib.error.HTTPError) as ctx:
+                    urllib.request.urlopen(f"{url}/chat")
+                self.assertEqual(ctx.exception.code, 404)
 
                 # 2. Test GET /api/status
                 req_status = urllib.request.urlopen(f"{url}/api/status")
@@ -139,12 +150,21 @@ class WebServerTests(unittest.TestCase):
                 self.assertEqual(cat_data["schemas"][0]["sequences"][0]["name"], "SEQ_EMP_ID")
 
                 # 4. Test GET /api/object (Table, Package, Trigger, Synonym, Sequence, MView)
-                req_obj = urllib.request.urlopen(f"{url}/api/object?schema=HR&type=TABLE&name=EMPLOYEES")
+                req_obj = urllib.request.urlopen(f"{url}/api/object?schema=HR&type=TABLE&name=EMPLOYEES&depth=1")
                 self.assertEqual(req_obj.status, 200)
                 obj_data = json.loads(req_obj.read().decode("utf-8"))
                 self.assertEqual(obj_data["object_name"], "EMPLOYEES")
                 self.assertEqual(len(obj_data["columns"]), 2)
                 self.assertEqual(obj_data["primary_keys"], ["EMP_ID"])
+                self.assertIn("lineage", obj_data)
+                self.assertEqual(obj_data["lineage"]["depth"], 1)
+                self.assertIn("links", obj_data["lineage"])
+
+                # 4b. Test GET /api/object with depth=2
+                req_obj_d2 = urllib.request.urlopen(f"{url}/api/object?schema=HR&type=TABLE&name=EMPLOYEES&depth=2")
+                self.assertEqual(req_obj_d2.status, 200)
+                obj_data_d2 = json.loads(req_obj_d2.read().decode("utf-8"))
+                self.assertEqual(obj_data_d2["lineage"]["depth"], 2)
 
                 req_code = urllib.request.urlopen(f"{url}/api/object?schema=HR&type=PACKAGE&name=PKG_PAYROLL")
                 self.assertEqual(req_code.status, 200)
@@ -314,6 +334,26 @@ class WebServerTests(unittest.TestCase):
                 g_list_data = json.loads(req_get_glossary.read().decode("utf-8"))
                 self.assertTrue(g_list_data["success"])
                 self.assertTrue(any(t["term"] == "ATIVO" for t in g_list_data["terms"]))
+                self.assertIn("compiled_markdown", g_list_data)
+                self.assertIn("ATIVO", g_list_data["compiled_markdown"])
+
+                # Test DELETE /api/glossary
+                req_delete_glossary = urllib.request.Request(
+                    f"{url}/api/glossary?term=ATIVO",
+                    headers={"Content-Type": "application/json"},
+                    method="DELETE",
+                )
+                res_del_g = urllib.request.urlopen(req_delete_glossary)
+                self.assertEqual(res_del_g.status, 200)
+                del_res = json.loads(res_del_g.read().decode("utf-8"))
+                self.assertTrue(del_res["success"])
+
+                # Verify it was removed
+                req_get_after = urllib.request.urlopen(f"{url}/api/glossary")
+                g_list_after = json.loads(req_get_after.read().decode("utf-8"))
+                self.assertEqual(len(g_list_after["terms"]), 0)
+                self.assertEqual(g_list_after["compiled_markdown"], "")
+                self.assertFalse((cfg.docPath / "GLOSSARY.md").exists())
 
             finally:
                 server.shutdown()

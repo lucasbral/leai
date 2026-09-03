@@ -24,12 +24,14 @@ class AIProviderConfig(BaseModel):
     api_key: str | None = None
     base_url: str | None = None
     model: str | None = None
+    timeout: float | None = None
 
 
 class AIConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
     default_provider: str = "openai"
     temperature: float = 0.2
+    timeout: float = 300.0
     providers: dict[str, AIProviderConfig] = Field(default_factory=dict)
 
 
@@ -82,6 +84,14 @@ def load_config(config_path: Path) -> LeaiConfig:
 
     if os.environ.get("LEAI_DSN"):
         raw["dsn"] = os.environ["LEAI_DSN"]
+
+    if os.environ.get("LEAI_AI_TIMEOUT"):
+        try:
+            if "ai" not in raw or not isinstance(raw["ai"], dict):
+                raw["ai"] = {}
+            raw["ai"]["timeout"] = float(os.environ["LEAI_AI_TIMEOUT"])
+        except ValueError:
+            pass
 
     raw_schemas = raw.get("schemas") or raw.get("schema")
     if not raw_schemas:

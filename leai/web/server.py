@@ -79,8 +79,19 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self) -> None:
         self.send_response(HTTPStatus.NO_CONTENT)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def do_DELETE(self) -> None:
+        parsed_url = urllib.parse.urlparse(self.path)
+        path = parsed_url.path
+
+        if path == "/api/glossary":
+            self._handle_api_delete_glossary(query=parsed_url.query)
+            return
+
+        self.send_response(HTTPStatus.NOT_FOUND)
         self.end_headers()
 
     def do_GET(self) -> None:
@@ -89,10 +100,6 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
 
         if path in ("", "/"):
             self._serve_index_html()
-            return
-
-        if path in ("/chat", "/chat/"):
-            self._serve_chat_html()
             return
 
         if path == "/api/status":
@@ -155,7 +162,10 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/glossary":
-            self._handle_api_save_glossary(payload)
+            if payload.get("action") == "delete":
+                self._handle_api_delete_glossary(payload=payload)
+            else:
+                self._handle_api_save_glossary(payload)
             return
 
         self.send_response(HTTPStatus.NOT_FOUND)
@@ -165,18 +175,6 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         static_file = Path(__file__).parent / "static" / "index.html"
         if not static_file.exists():
             self._send_error("Static index.html not found.", status=HTTPStatus.NOT_FOUND)
-            return
-        content = static_file.read_bytes()
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(content)))
-        self.end_headers()
-        self.wfile.write(content)
-
-    def _serve_chat_html(self) -> None:
-        static_file = Path(__file__).parent / "static" / "chat.html"
-        if not static_file.exists():
-            self._send_error("Static chat.html not found.", status=HTTPStatus.NOT_FOUND)
             return
         content = static_file.read_bytes()
         self.send_response(HTTPStatus.OK)
@@ -252,18 +250,34 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
-        self.send_header("Connection", "keep-alive")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Connection", "close")
         self.end_headers()
 
-        def _send_sse_event(event_type: str, data: dict) -> None:
-            try:
-                data["type"] = event_type
-                line = f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode("utf-8")
-                self.wfile.write(line)
-                self.wfile.flush()
-            except Exception:
-                pass
+        write_lock = threading.Lock()
+
+        def _safe_write(data_bytes: bytes) -> bool:
+            with write_lock:
+                try:
+                    self.wfile.write(data_bytes)
+                    self.wfile.flush()
+                    return True
+                except Exception:
+                    return False
+
+        stop_ping = threading.Event()
+
+        def _ping_worker() -> None:
+            while not stop_ping.wait(2.5):
+                if not _safe_write(b": ping\n\n"):
+                    break
+
+        ping_thread = threading.Thread(target=_ping_worker, daemon=True)
+        ping_thread.start()
+
+        def _send_sse_event(event_type: str, data: dict) -> bool:
+            data["type"] = event_type
+            line = f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode("utf-8")
+            return _safe_write(line)
 
         def _on_tool_start(t_name: str, t_args: dict, step_idx: int = 1) -> None:
             _send_sse_event("tool_start", {"name": t_name, "arguments": t_args, "step": step_idx})
@@ -274,6 +288,142 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         def _on_token(token: str) -> None:
             _send_sse_event("token", {"text": token})
 
+        # 1. Check for workflow command (e.g. /workflow impact VINCULOS)
+        if prompt.startswith("/workflow"):
+            from leai.workflows import get_workflow, list_workflows
+
+            parts = prompt.split()
+            if len(parts) < 2 or parts[1].lower() == "list":
+                wfs = list_workflows()
+                lines = ["### ⚙️ LEAI Autonomous Workflows\n\n| Workflow | Description |\n|---|---|"]
+                for w in wfs:
+                    lines.append(f"| `/workflow {w['name']}` | {w['description']} |")
+                lines.append("\n*Usage: `/workflow impact <OBJECT_NAME>`*")
+                _send_sse_event("done", {"reply": "\n".join(lines), "tokens": 0, "latency": 0.05, "detected": []})
+                _safe_write(b"data: [DONE]\n\n")
+                stop_ping.set()
+                self.close_connection = True
+                return
+
+            wf_name = parts[1].lower()
+            if wf_name in ("run", "exec") and len(parts) >= 4:
+                wf_name = parts[2].lower()
+                target_obj = parts[3].lstrip("@")
+            elif len(parts) >= 3:
+                target_obj = parts[2].lstrip("@")
+            else:
+                _send_sse_event("error", {"error": f"Usage: /workflow {wf_name} <target_object>"})
+                _safe_write(b"data: [DONE]\n\n")
+                stop_ping.set()
+                self.close_connection = True
+                return
+
+            wf = get_workflow(name=wf_name, schemas=self.server.schemas, config=self.server.config, client=client)
+            if not wf:
+                from leai.workflows import WORKFLOW_REGISTRY
+
+                available = ", ".join(sorted(set(WORKFLOW_REGISTRY.keys())))
+                _send_sse_event("error", {"error": f"Unknown workflow '{wf_name}'. Available: {available}"})
+                _safe_write(b"data: [DONE]\n\n")
+                stop_ping.set()
+                self.close_connection = True
+                return
+
+            def _on_wf_start(step: Any) -> None:
+                _send_sse_event(
+                    "tool_start",
+                    {
+                        "name": f"Workflow Step {step.step_number}: {step.name}",
+                        "arguments": {"target": target_obj},
+                        "step": step.step_number,
+                    },
+                )
+
+            def _on_wf_end(step: Any) -> None:
+                _send_sse_event(
+                    "tool_end",
+                    {
+                        "name": f"Step {step.step_number}: {step.name}",
+                        "summary": step.status.upper(),
+                        "duration": round(step.duration_seconds, 2),
+                    },
+                )
+
+            start_t = time.perf_counter()
+            try:
+                wf_res = wf.run(target_obj, on_step_start=_on_wf_start, on_step_end=_on_wf_end)
+                latency = time.perf_counter() - start_t
+                _send_sse_event(
+                    "done",
+                    {
+                        "reply": wf_res.report_markdown or wf_res.summary,
+                        "tokens": 0,
+                        "latency": round(latency, 2),
+                        "detected": [target_obj.upper()],
+                    },
+                )
+                _safe_write(b"data: [DONE]\n\n")
+            except Exception as exc:
+                _send_sse_event("error", {"error": f"Workflow execution failed: {exc}"})
+                _safe_write(b"data: [DONE]\n\n")
+            finally:
+                stop_ping.set()
+                self.close_connection = True
+            return
+
+        # 2. Check for specialist subagent (@catalog_researcher, /agent plsql_analyst ...)
+        from leai.ai.subagents import SUBAGENT_REGISTRY, execute_subagent
+
+        sub_role = None
+        sub_task = None
+        if prompt.startswith("/agent"):
+            parts = prompt.split()
+            if len(parts) >= 3:
+                cand = parts[1].lower().lstrip("@")
+                if cand in SUBAGENT_REGISTRY:
+                    sub_role = cand
+                    sub_task = " ".join(parts[2:])
+        else:
+            first_token = prompt.split()[0] if prompt.split() else ""
+            if first_token.startswith("@"):
+                cand = first_token[1:].lower()
+                if cand in SUBAGENT_REGISTRY:
+                    sub_role = cand
+                    sub_task = prompt[len(first_token) :].strip()
+
+        if sub_role and sub_task:
+            start_t = time.perf_counter()
+            try:
+                sub_reply = execute_subagent(
+                    role=sub_role,
+                    task=sub_task,
+                    schemas=self.server.schemas,
+                    config=self.server.config,
+                    client=client,
+                    on_token=_on_token,
+                    on_tool_start=_on_tool_start,
+                    on_tool_end=_on_tool_end,
+                )
+                latency = time.perf_counter() - start_t
+                _send_sse_event(
+                    "done",
+                    {
+                        "reply": sub_reply,
+                        "tokens": 0,
+                        "latency": round(latency, 2),
+                        "detected": [],
+                    },
+                )
+                _safe_write(b"data: [DONE]\n\n")
+            except Exception as exc:
+                _send_sse_event("error", {"error": f"Specialist '{sub_role}' failed: {exc}"})
+                _safe_write(b"data: [DONE]\n\n")
+            finally:
+                stop_ping.set()
+                self.close_connection = True
+            return
+
+        # 3. Standard autonomous multi-turn Agent / ChatSession
         start_t = time.perf_counter()
         try:
             reply, detected = session.send(
@@ -292,13 +442,12 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                     "detected": detected or [],
                 },
             )
-            self.wfile.write(b"data: [DONE]\n\n")
-            self.wfile.flush()
+            _safe_write(b"data: [DONE]\n\n")
         except Exception as exc:
             _send_sse_event("error", {"error": str(exc)})
-            self.wfile.write(b"data: [DONE]\n\n")
-            self.wfile.flush()
+            _safe_write(b"data: [DONE]\n\n")
         finally:
+            stop_ping.set()
             self.close_connection = True
 
     def _handle_api_status(self) -> None:
@@ -385,6 +534,11 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         params = urllib.parse.parse_qs(query_str)
         schema_name = _sanitize_name(params.get("schema", [""])[0].strip())
         obj_name = _sanitize_name(params.get("name", [""])[0].strip())
+        depth_raw = params.get("depth", ["1"])[0].strip()
+        try:
+            depth = max(1, min(2, int(depth_raw)))
+        except (ValueError, TypeError):
+            depth = 1
 
         if not obj_name:
             self._send_error("Parameter 'name' is required.")
@@ -500,12 +654,68 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
             except Exception:
                 pass
 
-        # Generate Mermaid Lineage code
+        # Generate Mermaid Lineage code & structured lineage
         mermaid_code = ""
+        lineage_data = {
+            "depth": depth,
+            "total": 0,
+            "upstream_count": 0,
+            "downstream_count": 0,
+            "links": [],
+            "mermaid_code": "",
+        }
         try:
-            trace_res = trace_raw_dependencies(self.server.schemas, obj_name, max_depth=1)
+            trace_res = trace_raw_dependencies(
+                self.server.schemas,
+                obj_name,
+                max_depth=depth,
+                schema_name=s_name,
+                expected_type=resolved_type,
+            )
             raw_graph = generate_mermaid_graph(obj_name, trace_res.dependencies)
             mermaid_code = raw_graph.replace("```mermaid", "").replace("```", "").strip()
+
+            target_upper = obj_name.strip().upper()
+            links_list = []
+            upstream_count = 0
+            downstream_count = 0
+
+            for dep in trace_res.dependencies:
+                is_upstream = dep.source_name.upper() == target_upper
+                if is_upstream:
+                    upstream_count += 1
+                    direction = "upstream"
+                    rel_obj = dep.target_name
+                    rel_type = dep.target_type
+                else:
+                    downstream_count += 1
+                    direction = "downstream"
+                    rel_obj = dep.source_name
+                    rel_type = dep.source_type
+
+                links_list.append(
+                    {
+                        "source_name": dep.source_name,
+                        "source_type": dep.source_type,
+                        "target_name": dep.target_name,
+                        "target_type": dep.target_type,
+                        "relation_type": dep.relation_type,
+                        "depth": getattr(dep, "depth", 1),
+                        "direction": direction,
+                        "related_object": rel_obj,
+                        "related_type": rel_type,
+                        "details": getattr(dep, "details", "") or "",
+                    }
+                )
+
+            lineage_data = {
+                "depth": depth,
+                "total": len(trace_res.dependencies),
+                "upstream_count": upstream_count,
+                "downstream_count": downstream_count,
+                "links": links_list,
+                "mermaid_code": mermaid_code,
+            }
         except Exception:
             mermaid_code = ""
 
@@ -570,6 +780,7 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                 "annotations": ann_data,
                 "markdown_doc": doc_content,
                 "lineage_mermaid": mermaid_code,
+                "lineage": lineage_data,
             }
         )
 
@@ -900,16 +1111,33 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_api_get_glossary(self) -> None:
-        """Retrieves global business glossary terms."""
+        """Retrieves global business glossary terms and compiled GLOSSARY.md."""
+        from leai.docs import write_glossary_doc
         from leai.glossary import load_glossary
 
         cfg = self.server.config
         try:
             glossary = load_glossary(cfg.annotationsPath)
+            compiled_md = ""
+            glossary_file = cfg.docPath / "GLOSSARY.md"
+            if not glossary.terms:
+                if glossary_file.exists():
+                    try:
+                        glossary_file.unlink()
+                    except Exception:
+                        pass
+                compiled_md = ""
+            else:
+                if not glossary_file.exists():
+                    write_glossary_doc(cfg.annotationsPath, cfg.docPath)
+                if glossary_file.exists():
+                    compiled_md = glossary_file.read_text(encoding="utf-8")
+
             self._send_json(
                 {
                     "success": True,
                     "terms": [term.model_dump() for term in glossary.terms],
+                    "compiled_markdown": compiled_md,
                 }
             )
         except Exception as exc:
@@ -917,6 +1145,7 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
 
     def _handle_api_save_glossary(self, payload: dict[str, Any]) -> None:
         """Adds or updates a global business glossary term and canonical SQL filter."""
+        from leai.docs import write_glossary_doc
         from leai.glossary import add_or_update_term
         from leai.models import GlossaryTerm
 
@@ -938,9 +1167,37 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                 examples=payload.get("examples", []),
             )
             add_or_update_term(cfg.annotationsPath, term_obj)
+            write_glossary_doc(cfg.annotationsPath, cfg.docPath)
             self._send_json({"success": True, "term": term_obj.model_dump()})
         except Exception as exc:
             self._send_error(f"Failed to save glossary term: {exc}")
+
+    def _handle_api_delete_glossary(self, query: str = "", payload: dict[str, Any] | None = None) -> None:
+        """Deletes a business glossary term by name and updates compiled GLOSSARY.md."""
+        from leai.docs import write_glossary_doc
+        from leai.glossary import delete_term
+
+        term_name = ""
+        if payload and "term" in payload:
+            term_name = str(payload["term"]).strip()
+        elif query:
+            qs = urllib.parse.parse_qs(query)
+            term_name = qs.get("term", [""])[0].strip()
+
+        if not term_name:
+            self._send_error("Query parameter or body field 'term' is required for deletion.")
+            return
+
+        cfg = self.server.config
+        try:
+            deleted = delete_term(cfg.annotationsPath, term_name)
+            if deleted:
+                write_glossary_doc(cfg.annotationsPath, cfg.docPath)
+                self._send_json({"success": True, "deleted": term_name})
+            else:
+                self._send_error(f"Term '{term_name}' not found.", status=HTTPStatus.NOT_FOUND)
+        except Exception as exc:
+            self._send_error(f"Failed to delete glossary term: {exc}")
 
 
 class LEAIStudioServer(ThreadingHTTPServer):

@@ -78,11 +78,12 @@ def get_llm_client(
     base_url = (p_cfg and p_cfg.base_url) or defaults.get("base_url")
     model = model_override or (p_cfg and p_cfg.model) or defaults.get("default_model") or "gpt-4o-mini"
     temp = config.ai.temperature
+    timeout = (p_cfg and p_cfg.timeout) or config.ai.timeout or 300.0
 
     if provider_name == "gemini":
-        return GeminiClient(api_key=api_key, model=model, base_url=base_url, temperature=temp)
+        return GeminiClient(api_key=api_key, model=model, base_url=base_url, temperature=temp, timeout=timeout)
     elif provider_name in ("anthropic", "claude"):
-        return AnthropicClient(api_key=api_key, model=model, base_url=base_url, temperature=temp)
+        return AnthropicClient(api_key=api_key, model=model, base_url=base_url, temperature=temp, timeout=timeout)
     else:
         # Default OpenAI-compatible client (handles OpenAI, DeepSeek, Qwen, Kimi, Ollama, etc.)
-        return OpenAICompatibleClient(api_key=api_key, model=model, base_url=base_url, temperature=temp)
+        return OpenAICompatibleClient(api_key=api_key, model=model, base_url=base_url, temperature=temp, timeout=timeout)

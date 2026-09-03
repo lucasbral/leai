@@ -86,12 +86,22 @@ def build_rag_context(
         for entity in detected_entities[:3]:  # Limit to 3 entities to avoid context overflow
             # If the entity is a subprogram, trace its parent package
             target_trace = subprogram_to_package_map[entity][0].name if entity in subprogram_to_package_map else entity
-            trace_res = trace_raw_dependencies(schemas, target_trace, max_depth=2)
+            trace_res = trace_raw_dependencies(schemas, target_trace, max_depth=1)
 
             if trace_res.focal_object or trace_res.focal_type != "UNKNOWN":
                 # Minify PL/SQL source code if it is a code object
                 if isinstance(trace_res.focal_object, CodeObjectMeta) and trace_res.focal_object.source:
-                    trace_res.focal_object.source = minify_plsql_source(trace_res.focal_object.source)[:6000]
+                    trace_res.focal_object.source = minify_plsql_source(trace_res.focal_object.source)[:3000]
+
+                # Cap relationships to avoid blowing through LLM token quotas on core enterprise tables
+                if len(trace_res.dependencies) > 20:
+                    trace_res.dependencies = trace_res.dependencies[:20]
+                if len(trace_res.related_tables) > 10:
+                    trace_res.related_tables = trace_res.related_tables[:10]
+                if len(trace_res.related_views) > 10:
+                    trace_res.related_views = trace_res.related_views[:10]
+                if len(trace_res.related_code_objects) > 10:
+                    trace_res.related_code_objects = trace_res.related_code_objects[:10]
 
                 # Try loading existing annotation
                 is_multi = len(schemas) > 1 or config.is_all_schemas
@@ -102,6 +112,10 @@ def build_rag_context(
 
                 # Render dossier in Markdown with Mermaid and Frontmatter
                 dossier_text = render_dossier_markdown(trace_res, annotation=ann)
+                if len(dossier_text) > 8000:
+                    dossier_text = (
+                        dossier_text[:8000] + "\n\n*(...dossier summary truncated for RAG context. Use tools to query further details.)*"
+                    )
                 context_parts.append(
                     f"\n--- START OF FOCAL DOSSIER: {target_trace} ---\n{dossier_text}\n--- END OF FOCAL DOSSIER: {target_trace} ---"
                 )
@@ -110,7 +124,7 @@ def build_rag_context(
     if include_catalog:
         context_parts.append("\n### [COMPACT SCHEMA CATALOG]")
         for s in schemas:
-            compact_text = compact_schema_notation(s, max_tables=50)
+            compact_text = compact_schema_notation(s, max_tables=25)
             context_parts.append(compact_text)
 
     full_context = "\n\n".join(context_parts)

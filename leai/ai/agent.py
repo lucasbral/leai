@@ -101,8 +101,8 @@ class AgentExecutionEngine:
         tools_ran = False
 
         for iteration in range(1, self.max_iterations + 1):
-            # Enforce tool execution on the first iteration to eliminate unverified head-answers
-            tool_mode = "required" if iteration == 1 else "auto"
+            # Allow model to autonomously decide if and when to invoke tools
+            tool_mode = "auto"
 
             # Call LLM with tool definitions
             content, tool_calls = self.client.generate_chat_with_tools(

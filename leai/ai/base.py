@@ -7,11 +7,19 @@ from typing import Any
 class BaseLLMClient(ABC):
     """Standardized abstract interface for LLM clients in LEAI."""
 
-    def __init__(self, api_key: str | None = None, model: str | None = None, base_url: str | None = None, temperature: float = 0.2):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+        base_url: str | None = None,
+        temperature: float = 0.2,
+        timeout: float = 300.0,
+    ):
         self.api_key = api_key
         self.model = model
         self.base_url = base_url
         self.temperature = temperature
+        self.timeout = timeout
         self.last_prompt_tokens: int = 0
         self.last_completion_tokens: int = 0
         self.last_total_tokens: int = 0

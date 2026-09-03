@@ -20,12 +20,14 @@ class OpenAICompatibleClient(BaseLLMClient):
         model: str | None = None,
         base_url: str | None = None,
         temperature: float = 0.2,
+        timeout: float = 300.0,
     ):
         super().__init__(
             api_key=api_key or "",
             model=model or "gpt-4o-mini",
             base_url=(base_url or "https://api.openai.com/v1").rstrip("/"),
             temperature=temperature,
+            timeout=timeout,
         )
 
     def _send_request(self, messages: list[dict[str, str]], response_format_json: bool = False) -> str:
@@ -51,7 +53,7 @@ class OpenAICompatibleClient(BaseLLMClient):
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
         try:
-            with urllib.request.urlopen(req, timeout=90) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 resp_data = json.loads(resp.read().decode("utf-8"))
                 usage = resp_data.get("usage", {})
                 self.record_usage(
@@ -140,7 +142,7 @@ class OpenAICompatibleClient(BaseLLMClient):
         usage_found = False
 
         try:
-            with urllib.request.urlopen(req, timeout=90) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 for raw_line in resp:
                     line = raw_line.decode("utf-8").strip()
                     if not line or not line.startswith("data:"):
@@ -220,7 +222,7 @@ class OpenAICompatibleClient(BaseLLMClient):
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
 
         try:
-            with urllib.request.urlopen(req, timeout=90) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 resp_data = json.loads(resp.read().decode("utf-8"))
                 usage = resp_data.get("usage", {})
                 self.record_usage(

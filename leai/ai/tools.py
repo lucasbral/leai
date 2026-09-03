@@ -424,10 +424,15 @@ def search_business_documentation(
                 obj_type = cat_folder.rstrip("s").upper()
                 if obj_type in ("PACKAGE_BODY", "PACKAGE_BODYS"):
                     obj_type = "PACKAGE"
-                elif obj_type in ("TYPE_BODY", "TYPE_BODYS"):
-                    obj_type = "TYPE"
-
                 if target_types and obj_type not in target_types and f"{obj_type}S" not in target_types:
+                    continue
+
+                norm_name = _normalize_text(obj_name)
+                name_matched = any(t in norm_name for t in tokens)
+
+                raw_text = yml_file.read_text(encoding="utf-8", errors="ignore")
+                norm_raw = _normalize_text(raw_text)
+                if not name_matched and not any(t in norm_raw for t in tokens):
                     continue
 
                 ann = load_annotation(yml_file)
@@ -436,8 +441,7 @@ def search_business_documentation(
                 snippets = []
 
                 # Name check
-                norm_name = _normalize_text(obj_name)
-                if any(t in norm_name for t in tokens):
+                if name_matched:
                     score += 50
                     matched_fields.append("name")
 
