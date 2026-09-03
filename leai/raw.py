@@ -8,6 +8,7 @@ from typing import Any
 
 from leai.models import (
     CodeObjectMeta,
+    ColumnMeta,
     DependencyLink,
     ForeignKeyMeta,
     IndexMeta,
@@ -21,6 +22,161 @@ from leai.models import (
     TriggerMeta,
     ViewMeta,
 )
+
+
+def _construct_column(data: dict[str, Any]) -> ColumnMeta:
+    return ColumnMeta.model_construct(
+        name=data.get("name", ""),
+        data_type=data.get("data_type", ""),
+        nullable=bool(data.get("nullable", False)),
+        default=data.get("default"),
+        comment=data.get("comment"),
+    )
+
+
+def _construct_foreign_key(data: dict[str, Any]) -> ForeignKeyMeta:
+    return ForeignKeyMeta.model_construct(
+        name=data.get("name", ""),
+        column=data.get("column", ""),
+        referenced_table=data.get("referenced_table", ""),
+        referenced_column=data.get("referenced_column", ""),
+    )
+
+
+def _construct_table(data: dict[str, Any]) -> TableMeta:
+    columns = [_construct_column(c) if isinstance(c, dict) else c for c in data.get("columns", [])]
+    foreign_keys = [_construct_foreign_key(fk) if isinstance(fk, dict) else fk for fk in data.get("foreign_keys", [])]
+    return TableMeta.model_construct(
+        name=data.get("name", ""),
+        comment=data.get("comment"),
+        columns=columns,
+        primary_keys=list(data.get("primary_keys", [])),
+        foreign_keys=foreign_keys,
+        created_at=data.get("created_at"),
+        last_ddl_time=data.get("last_ddl_time"),
+        last_modified_by=data.get("last_modified_by"),
+    )
+
+
+def _construct_view(data: dict[str, Any]) -> ViewMeta:
+    columns = [_construct_column(c) if isinstance(c, dict) else c for c in data.get("columns", [])]
+    return ViewMeta.model_construct(
+        name=data.get("name", ""),
+        text=data.get("text"),
+        comment=data.get("comment"),
+        columns=columns,
+        created_at=data.get("created_at"),
+        last_ddl_time=data.get("last_ddl_time"),
+        last_modified_by=data.get("last_modified_by"),
+    )
+
+
+def _construct_mview(data: dict[str, Any]) -> MaterializedViewMeta:
+    columns = [_construct_column(c) if isinstance(c, dict) else c for c in data.get("columns", [])]
+    return MaterializedViewMeta.model_construct(
+        name=data.get("name", ""),
+        query=data.get("query"),
+        refresh_mode=data.get("refresh_mode"),
+        refresh_type=data.get("refresh_type"),
+        updatable=bool(data.get("updatable", False)),
+        comment=data.get("comment"),
+        columns=columns,
+        created_at=data.get("created_at"),
+        last_ddl_time=data.get("last_ddl_time"),
+        last_modified_by=data.get("last_modified_by"),
+    )
+
+
+def _construct_subprogram(data: dict[str, Any]) -> SubprogramMeta:
+    return SubprogramMeta.model_construct(
+        package_name=data.get("package_name", ""),
+        name=data.get("name", ""),
+        subprogram_type=data.get("subprogram_type", ""),
+        source=data.get("source"),
+        comment=data.get("comment"),
+        created_at=data.get("created_at"),
+        last_ddl_time=data.get("last_ddl_time"),
+        last_modified_by=data.get("last_modified_by"),
+    )
+
+
+def _construct_code_object(data: dict[str, Any]) -> CodeObjectMeta:
+    subprograms = [_construct_subprogram(sp) if isinstance(sp, dict) else sp for sp in data.get("subprograms", [])]
+    return CodeObjectMeta.model_construct(
+        name=data.get("name", ""),
+        object_type=data.get("object_type", ""),
+        source=data.get("source"),
+        comment=data.get("comment"),
+        subprograms=subprograms,
+        created_at=data.get("created_at"),
+        last_ddl_time=data.get("last_ddl_time"),
+        last_modified_by=data.get("last_modified_by"),
+    )
+
+
+def _construct_trigger(data: dict[str, Any]) -> TriggerMeta:
+    return TriggerMeta.model_construct(
+        name=data.get("name", ""),
+        table_name=data.get("table_name"),
+        trigger_type=data.get("trigger_type"),
+        triggering_event=data.get("triggering_event"),
+        status=data.get("status"),
+        trigger_body=data.get("trigger_body"),
+        created_at=data.get("created_at"),
+        last_ddl_time=data.get("last_ddl_time"),
+        last_modified_by=data.get("last_modified_by"),
+    )
+
+
+def _construct_sequence(data: dict[str, Any]) -> SequenceMeta:
+    return SequenceMeta.model_construct(
+        name=data.get("name", ""),
+        min_value=data.get("min_value"),
+        max_value=data.get("max_value"),
+        increment_by=data.get("increment_by"),
+        last_number=data.get("last_number"),
+        created_at=data.get("created_at"),
+        last_ddl_time=data.get("last_ddl_time"),
+        last_modified_by=data.get("last_modified_by"),
+    )
+
+
+def _construct_index(data: dict[str, Any]) -> IndexMeta:
+    return IndexMeta.model_construct(
+        name=data.get("name", ""),
+        table_name=data.get("table_name", ""),
+        uniqueness=data.get("uniqueness", "NONUNIQUE"),
+        columns=list(data.get("columns", [])),
+        created_at=data.get("created_at"),
+        last_ddl_time=data.get("last_ddl_time"),
+        last_modified_by=data.get("last_modified_by"),
+    )
+
+
+def _construct_synonym(data: dict[str, Any]) -> SynonymMeta:
+    return SynonymMeta.model_construct(
+        name=data.get("name", ""),
+        table_owner=data.get("table_owner"),
+        table_name=data.get("table_name"),
+        db_link=data.get("db_link"),
+        created_at=data.get("created_at"),
+        last_ddl_time=data.get("last_ddl_time"),
+        last_modified_by=data.get("last_modified_by"),
+    )
+
+
+def _construct_schema_metadata(data: dict[str, Any], schema_name: str = "") -> SchemaMetadata:
+    return SchemaMetadata.model_construct(
+        schema_name=schema_name,
+        tables=[_construct_table(t) if isinstance(t, dict) else t for t in data.get("tables", [])],
+        views=[_construct_view(v) if isinstance(v, dict) else v for v in data.get("views", [])],
+        mviews=[_construct_mview(mv) if isinstance(mv, dict) else mv for mv in data.get("mviews", [])],
+        code_objects=[_construct_code_object(co) if isinstance(co, dict) else co for co in data.get("code_objects", [])],
+        triggers=[_construct_trigger(trg) if isinstance(trg, dict) else trg for trg in data.get("triggers", [])],
+        sequences=[_construct_sequence(s) if isinstance(s, dict) else s for s in data.get("sequences", [])],
+        indexes=[_construct_index(idx) if isinstance(idx, dict) else idx for idx in data.get("indexes", [])],
+        synonyms=[_construct_synonym(syn) if isinstance(syn, dict) else syn for syn in data.get("synonyms", [])],
+    )
 
 
 def save_raw_schema(schema: SchemaMetadata, raw_path: Path, multi_schema: bool = False) -> list[Path]:
@@ -74,70 +230,161 @@ def save_raw_schema(schema: SchemaMetadata, raw_path: Path, multi_schema: bool =
         p = target_path / "synonyms" / f"{synonym.name}.json"
         saved_files.append(_write_json(p, synonym.model_dump()))
 
+    # 9. Consolidated Schema Snapshot (written for fast TUI/CLI startup cache)
+    snapshot_path = target_path / "_schema.json"
+    _write_json(snapshot_path, schema.model_dump())
+
     return saved_files
 
 
+def _is_snapshot_fresh(snapshot_file: Path, raw_path: Path) -> bool:
+    """Checks if _schema.json exists and its mtime is newer than or equal to all granular subdirectories and files."""
+    if not snapshot_file.exists():
+        return False
+    try:
+        snapshot_mtime = snapshot_file.stat().st_mtime
+        subfolders = [
+            "tables",
+            "views",
+            "mviews",
+            "procedures",
+            "functions",
+            "packages",
+            "package_bodys",
+            "types",
+            "type_bodys",
+            "triggers",
+            "sequences",
+            "indexes",
+            "synonyms",
+        ]
+        for sub in subfolders:
+            sub_dir = raw_path / sub
+            if sub_dir.exists():
+                if sub_dir.stat().st_mtime > snapshot_mtime:
+                    return False
+                for entry in sub_dir.iterdir():
+                    if entry.is_file() and entry.suffix == ".json" and entry.stat().st_mtime > snapshot_mtime:
+                        return False
+        return True
+    except Exception:
+        return False
+
+
 def load_raw_schema(raw_path: Path, schema_name: str = "") -> SchemaMetadata:
-    schema = SchemaMetadata(schema_name=schema_name)
     if not raw_path.exists():
-        return schema
+        return SchemaMetadata(schema_name=schema_name)
+
+    snapshot_file = raw_path / "_schema.json"
+    if _is_snapshot_fresh(snapshot_file, raw_path):
+        try:
+            raw_data = json.loads(snapshot_file.read_text(encoding="utf-8"))
+            return _construct_schema_metadata(raw_data, schema_name=schema_name)
+        except Exception:
+            pass
+
+    schema = SchemaMetadata(schema_name=schema_name)
 
     # 1. Tables
     tables_dir = raw_path / "tables"
     if tables_dir.exists():
         for p in sorted(tables_dir.glob("*.json")):
-            raw_data = json.loads(p.read_text(encoding="utf-8"))
-            schema.tables.append(TableMeta.model_validate(raw_data))
+            try:
+                raw_data = json.loads(p.read_text(encoding="utf-8"))
+                schema.tables.append(_construct_table(raw_data))
+            except Exception:
+                pass
 
     # 2. Views
     views_dir = raw_path / "views"
     if views_dir.exists():
         for p in sorted(views_dir.glob("*.json")):
-            raw_data = json.loads(p.read_text(encoding="utf-8"))
-            schema.views.append(ViewMeta.model_validate(raw_data))
+            try:
+                raw_data = json.loads(p.read_text(encoding="utf-8"))
+                schema.views.append(_construct_view(raw_data))
+            except Exception:
+                pass
 
     # 3. Materialized Views
     mviews_dir = raw_path / "mviews"
     if mviews_dir.exists():
         for p in sorted(mviews_dir.glob("*.json")):
-            raw_data = json.loads(p.read_text(encoding="utf-8"))
-            schema.mviews.append(MaterializedViewMeta.model_validate(raw_data))
+            try:
+                raw_data = json.loads(p.read_text(encoding="utf-8"))
+                schema.mviews.append(_construct_mview(raw_data))
+            except Exception:
+                pass
 
     # 4. Code Objects
     for folder_name in ["procedures", "functions", "packages", "package_bodys", "types", "type_bodys"]:
         code_dir = raw_path / folder_name
         if code_dir.exists():
             for p in sorted(code_dir.glob("*.json")):
-                raw_data = json.loads(p.read_text(encoding="utf-8"))
-                schema.code_objects.append(CodeObjectMeta.model_validate(raw_data))
+                try:
+                    raw_data = json.loads(p.read_text(encoding="utf-8"))
+                    schema.code_objects.append(_construct_code_object(raw_data))
+                except Exception:
+                    pass
 
     # 5. Triggers
     trig_dir = raw_path / "triggers"
     if trig_dir.exists():
         for p in sorted(trig_dir.glob("*.json")):
-            raw_data = json.loads(p.read_text(encoding="utf-8"))
-            schema.triggers.append(TriggerMeta.model_validate(raw_data))
+            try:
+                raw_data = json.loads(p.read_text(encoding="utf-8"))
+                schema.triggers.append(_construct_trigger(raw_data))
+            except Exception:
+                pass
 
     # 6. Sequences
     seq_dir = raw_path / "sequences"
     if seq_dir.exists():
         for p in sorted(seq_dir.glob("*.json")):
-            raw_data = json.loads(p.read_text(encoding="utf-8"))
-            schema.sequences.append(SequenceMeta.model_validate(raw_data))
+            try:
+                raw_data = json.loads(p.read_text(encoding="utf-8"))
+                schema.sequences.append(_construct_sequence(raw_data))
+            except Exception:
+                pass
 
     # 7. Indexes
     idx_dir = raw_path / "indexes"
     if idx_dir.exists():
         for p in sorted(idx_dir.glob("*.json")):
-            raw_data = json.loads(p.read_text(encoding="utf-8"))
-            schema.indexes.append(IndexMeta.model_validate(raw_data))
+            try:
+                raw_data = json.loads(p.read_text(encoding="utf-8"))
+                schema.indexes.append(_construct_index(raw_data))
+            except Exception:
+                pass
 
     # 8. Synonyms
     syn_dir = raw_path / "synonyms"
     if syn_dir.exists():
         for p in sorted(syn_dir.glob("*.json")):
-            raw_data = json.loads(p.read_text(encoding="utf-8"))
-            schema.synonyms.append(SynonymMeta.model_validate(raw_data))
+            try:
+                raw_data = json.loads(p.read_text(encoding="utf-8"))
+                schema.synonyms.append(_construct_synonym(raw_data))
+            except Exception:
+                pass
+
+    # Automatically persist / refresh snapshot cache if any object was loaded
+    has_objects = bool(
+        schema.tables
+        or schema.views
+        or schema.mviews
+        or schema.code_objects
+        or schema.triggers
+        or schema.sequences
+        or schema.indexes
+        or schema.synonyms
+    )
+    if has_objects:
+        try:
+            snapshot_file.write_text(
+                json.dumps(schema.model_dump(), indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
 
     return schema
 

@@ -9,6 +9,7 @@ from leai.models import SchemaMetadata
 
 SLASH_COMMANDS: list[tuple[str, str]] = [
     ("/doc", "Open in-terminal YAML annotation & documentation editor"),
+    ("/rule", "Manage global business glossary and canonical domain rules"),
     ("/extract", "Extract fresh metadata snapshot from Oracle database"),
     ("/compile", "Compile Markdown documentation in docs/"),
     ("/annotate", "Synchronize YAML annotation stubs in annotations/"),

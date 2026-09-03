@@ -98,13 +98,30 @@ def _fetch_in_table_chunks(cursor: oracledb.Cursor, sql_template: str, owner: st
     return results
 
 
+_CATALOG_PREFIX_CACHE: dict[int, str] = {}
+
+
 def _detect_catalog_prefix(cursor: oracledb.Cursor) -> str:
+    conn_id = None
+    try:
+        if hasattr(cursor, "connection") and cursor.connection:
+            conn_id = id(cursor.connection)
+            if conn_id in _CATALOG_PREFIX_CACHE:
+                return _CATALOG_PREFIX_CACHE[conn_id]
+    except Exception:
+        pass
+
+    prefix = "all"
     try:
         cursor.execute("SELECT 1 FROM dba_tables WHERE ROWNUM = 1")
         cursor.fetchone()
-        return "dba"
+        prefix = "dba"
     except Exception:
-        return "all"
+        prefix = "all"
+
+    if conn_id is not None:
+        _CATALOG_PREFIX_CACHE[conn_id] = prefix
+    return prefix
 
 
 def _fetch_tables(cursor: oracledb.Cursor, config: LeaiConfig, prefix: str = "all") -> list[TableMeta]:
@@ -128,28 +145,54 @@ def _fetch_tables(cursor: oracledb.Cursor, config: LeaiConfig, prefix: str = "al
         return []
 
     table_names = tuple(tables.keys())
+    is_unfiltered = not config.include and not config.exclude
 
-    columns_sql = f"""
-        SELECT c.table_name,
-               c.column_name,
-               c.data_type,
-               c.data_length,
-               c.data_precision,
-               c.data_scale,
-               c.nullable,
-               c.data_default,
-               cc.comments,
-               c.char_length
-        FROM {prefix}_tab_columns c
-        LEFT JOIN {prefix}_col_comments cc
-          ON cc.owner = c.owner
-         AND cc.table_name = c.table_name
-         AND cc.column_name = c.column_name
-        WHERE c.owner = :owner
-          AND c.table_name IN ({{table_placeholders}})
-        ORDER BY c.table_name, c.column_id
-    """
-    for row in _fetch_in_table_chunks(cursor, columns_sql, config.schema_name, table_names):
+    if is_unfiltered:
+        columns_sql = f"""
+            SELECT c.table_name,
+                   c.column_name,
+                   c.data_type,
+                   c.data_length,
+                   c.data_precision,
+                   c.data_scale,
+                   c.nullable,
+                   c.data_default,
+                   cc.comments,
+                   c.char_length
+            FROM {prefix}_tab_columns c
+            LEFT JOIN {prefix}_col_comments cc
+              ON cc.owner = c.owner
+             AND cc.table_name = c.table_name
+             AND cc.column_name = c.column_name
+            WHERE c.owner = :owner
+            ORDER BY c.table_name, c.column_id
+        """
+        cursor.execute(columns_sql, owner=config.schema_name)
+        col_rows = cursor.fetchall()
+    else:
+        columns_sql = f"""
+            SELECT c.table_name,
+                   c.column_name,
+                   c.data_type,
+                   c.data_length,
+                   c.data_precision,
+                   c.data_scale,
+                   c.nullable,
+                   c.data_default,
+                   cc.comments,
+                   c.char_length
+            FROM {prefix}_tab_columns c
+            LEFT JOIN {prefix}_col_comments cc
+              ON cc.owner = c.owner
+             AND cc.table_name = c.table_name
+             AND cc.column_name = c.column_name
+            WHERE c.owner = :owner
+              AND c.table_name IN ({{table_placeholders}})
+            ORDER BY c.table_name, c.column_id
+        """
+        col_rows = _fetch_in_table_chunks(cursor, columns_sql, config.schema_name, table_names)
+
+    for row in col_rows:
         table_name = row[0]
         if table_name not in tables:
             continue
@@ -162,47 +205,88 @@ def _fetch_tables(cursor: oracledb.Cursor, config: LeaiConfig, prefix: str = "al
         )
         tables[table_name].columns.append(column)
 
-    pks_sql = f"""
-        SELECT acc.table_name, acc.column_name
-        FROM {prefix}_constraints ac
-        JOIN {prefix}_cons_columns acc
-          ON acc.owner = ac.owner
-         AND acc.constraint_name = ac.constraint_name
-        WHERE ac.owner = :owner
-          AND ac.constraint_type = 'P'
-          AND acc.table_name IN ({{table_placeholders}})
-        ORDER BY acc.table_name, acc.position
-    """
-    for table_name, column_name in _fetch_in_table_chunks(cursor, pks_sql, config.schema_name, table_names):
+    if is_unfiltered:
+        pks_sql = f"""
+            SELECT acc.table_name, acc.column_name
+            FROM {prefix}_constraints ac
+            JOIN {prefix}_cons_columns acc
+              ON acc.owner = ac.owner
+             AND acc.constraint_name = ac.constraint_name
+            WHERE ac.owner = :owner
+              AND ac.constraint_type = 'P'
+            ORDER BY acc.table_name, acc.position
+        """
+        cursor.execute(pks_sql, owner=config.schema_name)
+        pk_rows = cursor.fetchall()
+    else:
+        pks_sql = f"""
+            SELECT acc.table_name, acc.column_name
+            FROM {prefix}_constraints ac
+            JOIN {prefix}_cons_columns acc
+              ON acc.owner = ac.owner
+             AND acc.constraint_name = ac.constraint_name
+            WHERE ac.owner = :owner
+              AND ac.constraint_type = 'P'
+              AND acc.table_name IN ({{table_placeholders}})
+            ORDER BY acc.table_name, acc.position
+        """
+        pk_rows = _fetch_in_table_chunks(cursor, pks_sql, config.schema_name, table_names)
+
+    for table_name, column_name in pk_rows:
         if table_name in tables:
             tables[table_name].primary_keys.append(column_name)
 
-    fks_sql = f"""
-        SELECT ac.constraint_name,
-               src.table_name,
-               src.column_name,
-               tgt.table_name,
-               tgt.column_name
-        FROM {prefix}_constraints ac
-        JOIN {prefix}_cons_columns src
-          ON src.owner = ac.owner
-         AND src.constraint_name = ac.constraint_name
-        JOIN {prefix}_constraints ref
-          ON ref.owner = ac.r_owner
-         AND ref.constraint_name = ac.r_constraint_name
-        JOIN {prefix}_cons_columns tgt
-          ON tgt.owner = ref.owner
-         AND tgt.constraint_name = ref.constraint_name
-         AND tgt.position = src.position
-        WHERE ac.owner = :owner
-          AND ac.constraint_type = 'R'
-          AND src.table_name IN ({{table_placeholders}})
-        ORDER BY src.table_name, ac.constraint_name, src.position
-    """
+    if is_unfiltered:
+        fks_sql = f"""
+            SELECT ac.constraint_name,
+                   src.table_name,
+                   src.column_name,
+                   tgt.table_name,
+                   tgt.column_name
+            FROM {prefix}_constraints ac
+            JOIN {prefix}_cons_columns src
+              ON src.owner = ac.owner
+             AND src.constraint_name = ac.constraint_name
+            JOIN {prefix}_constraints ref
+              ON ref.owner = ac.r_owner
+             AND ref.constraint_name = ac.r_constraint_name
+            JOIN {prefix}_cons_columns tgt
+              ON tgt.owner = ref.owner
+             AND tgt.constraint_name = ref.constraint_name
+             AND tgt.position = src.position
+            WHERE ac.owner = :owner
+              AND ac.constraint_type = 'R'
+            ORDER BY src.table_name, ac.constraint_name, src.position
+        """
+        cursor.execute(fks_sql, owner=config.schema_name)
+        fk_rows = cursor.fetchall()
+    else:
+        fks_sql = f"""
+            SELECT ac.constraint_name,
+                   src.table_name,
+                   src.column_name,
+                   tgt.table_name,
+                   tgt.column_name
+            FROM {prefix}_constraints ac
+            JOIN {prefix}_cons_columns src
+              ON src.owner = ac.owner
+             AND src.constraint_name = ac.constraint_name
+            JOIN {prefix}_constraints ref
+              ON ref.owner = ac.r_owner
+             AND ref.constraint_name = ac.r_constraint_name
+            JOIN {prefix}_cons_columns tgt
+              ON tgt.owner = ref.owner
+             AND tgt.constraint_name = ref.constraint_name
+             AND tgt.position = src.position
+            WHERE ac.owner = :owner
+              AND ac.constraint_type = 'R'
+              AND src.table_name IN ({{table_placeholders}})
+            ORDER BY src.table_name, ac.constraint_name, src.position
+        """
+        fk_rows = _fetch_in_table_chunks(cursor, fks_sql, config.schema_name, table_names)
+
     grouped_fks: dict[tuple[str, str], list[ForeignKeyMeta]] = defaultdict(list)
-    for constraint_name, table_name, column_name, ref_table, ref_col in _fetch_in_table_chunks(
-        cursor, fks_sql, config.schema_name, table_names
-    ):
+    for constraint_name, table_name, column_name, ref_table, ref_col in fk_rows:
         if table_name not in tables:
             continue
         grouped_fks[(table_name, constraint_name)].append(
@@ -240,27 +324,54 @@ def _fetch_views(cursor: oracledb.Cursor, config: LeaiConfig, prefix: str = "all
         return []
 
     view_names = tuple(views.keys())
-    columns_sql = f"""
-        SELECT c.table_name,
-               c.column_name,
-               c.data_type,
-               c.data_length,
-               c.data_precision,
-               c.data_scale,
-               c.nullable,
-               c.data_default,
-               cc.comments,
-               c.char_length
-        FROM {prefix}_tab_columns c
-        LEFT JOIN {prefix}_col_comments cc
-          ON cc.owner = c.owner
-         AND cc.table_name = c.table_name
-         AND cc.column_name = c.column_name
-        WHERE c.owner = :owner
-          AND c.table_name IN ({{table_placeholders}})
-        ORDER BY c.table_name, c.column_id
-    """
-    for row in _fetch_in_table_chunks(cursor, columns_sql, config.schema_name, view_names):
+    is_unfiltered = not config.include and not config.exclude
+
+    if is_unfiltered:
+        columns_sql = f"""
+            SELECT c.table_name,
+                   c.column_name,
+                   c.data_type,
+                   c.data_length,
+                   c.data_precision,
+                   c.data_scale,
+                   c.nullable,
+                   c.data_default,
+                   cc.comments,
+                   c.char_length
+            FROM {prefix}_tab_columns c
+            LEFT JOIN {prefix}_col_comments cc
+              ON cc.owner = c.owner
+             AND cc.table_name = c.table_name
+             AND cc.column_name = c.column_name
+            WHERE c.owner = :owner
+            ORDER BY c.table_name, c.column_id
+        """
+        cursor.execute(columns_sql, owner=config.schema_name)
+        col_rows = cursor.fetchall()
+    else:
+        columns_sql = f"""
+            SELECT c.table_name,
+                   c.column_name,
+                   c.data_type,
+                   c.data_length,
+                   c.data_precision,
+                   c.data_scale,
+                   c.nullable,
+                   c.data_default,
+                   cc.comments,
+                   c.char_length
+            FROM {prefix}_tab_columns c
+            LEFT JOIN {prefix}_col_comments cc
+              ON cc.owner = c.owner
+             AND cc.table_name = c.table_name
+             AND cc.column_name = c.column_name
+            WHERE c.owner = :owner
+              AND c.table_name IN ({{table_placeholders}})
+            ORDER BY c.table_name, c.column_id
+        """
+        col_rows = _fetch_in_table_chunks(cursor, columns_sql, config.schema_name, view_names)
+
+    for row in col_rows:
         view_name = row[0]
         if view_name not in views:
             continue
@@ -304,27 +415,54 @@ def _fetch_mviews(cursor: oracledb.Cursor, config: LeaiConfig, prefix: str = "al
         return []
 
     mv_names = tuple(mviews.keys())
-    columns_sql = f"""
-        SELECT c.table_name,
-               c.column_name,
-               c.data_type,
-               c.data_length,
-               c.data_precision,
-               c.data_scale,
-               c.nullable,
-               c.data_default,
-               cc.comments,
-               c.char_length
-        FROM {prefix}_tab_columns c
-        LEFT JOIN {prefix}_col_comments cc
-          ON cc.owner = c.owner
-         AND cc.table_name = c.table_name
-         AND cc.column_name = c.column_name
-        WHERE c.owner = :owner
-          AND c.table_name IN ({{table_placeholders}})
-        ORDER BY c.table_name, c.column_id
-    """
-    for row in _fetch_in_table_chunks(cursor, columns_sql, config.schema_name, mv_names):
+    is_unfiltered = not config.include and not config.exclude
+
+    if is_unfiltered:
+        columns_sql = f"""
+            SELECT c.table_name,
+                   c.column_name,
+                   c.data_type,
+                   c.data_length,
+                   c.data_precision,
+                   c.data_scale,
+                   c.nullable,
+                   c.data_default,
+                   cc.comments,
+                   c.char_length
+            FROM {prefix}_tab_columns c
+            LEFT JOIN {prefix}_col_comments cc
+              ON cc.owner = c.owner
+             AND cc.table_name = c.table_name
+             AND cc.column_name = c.column_name
+            WHERE c.owner = :owner
+            ORDER BY c.table_name, c.column_id
+        """
+        cursor.execute(columns_sql, owner=config.schema_name)
+        col_rows = cursor.fetchall()
+    else:
+        columns_sql = f"""
+            SELECT c.table_name,
+                   c.column_name,
+                   c.data_type,
+                   c.data_length,
+                   c.data_precision,
+                   c.data_scale,
+                   c.nullable,
+                   c.data_default,
+                   cc.comments,
+                   c.char_length
+            FROM {prefix}_tab_columns c
+            LEFT JOIN {prefix}_col_comments cc
+              ON cc.owner = c.owner
+             AND cc.table_name = c.table_name
+             AND cc.column_name = c.column_name
+            WHERE c.owner = :owner
+              AND c.table_name IN ({{table_placeholders}})
+            ORDER BY c.table_name, c.column_id
+        """
+        col_rows = _fetch_in_table_chunks(cursor, columns_sql, config.schema_name, mv_names)
+
+    for row in col_rows:
         mv_name = row[0]
         if mv_name not in mviews:
             continue
@@ -386,7 +524,7 @@ def _fetch_code_objects(cursor: oracledb.Cursor, config: LeaiConfig, target_type
     pkg_bodies = {name for name, otype in raw_objs if otype == "PACKAGE BODY"}
     type_bodies = {name for name, otype in raw_objs if otype == "TYPE BODY"}
 
-    code_objs: list[CodeObjectMeta] = []
+    target_objs: list[tuple[str, str]] = []
     seen = set()
     for obj_name, obj_type in raw_objs:
         if obj_type not in target_types:
@@ -401,27 +539,62 @@ def _fetch_code_objects(cursor: oracledb.Cursor, config: LeaiConfig, target_type
         if not _should_include(obj_name, config):
             continue
         seen.add((obj_name, obj_type))
+        target_objs.append((obj_name, obj_type))
 
-        cursor.execute(
-            f"""
-            SELECT text
+    if not target_objs:
+        return []
+
+    # Batch fetch source code lines in a single query (or chunked by names if filtered)
+    sources: dict[tuple[str, str], list[str]] = defaultdict(list)
+    needed_types = sorted({otype for _, otype in target_objs})
+    is_unfiltered = not config.include and not config.exclude
+
+    if is_unfiltered:
+        type_placeholders = ", ".join(f":tp{j}" for j in range(len(needed_types)))
+        src_sql = f"""
+            SELECT name, type, text
             FROM {prefix}_source
             WHERE owner = :owner
-              AND name = :name
-              AND type = :type
-            ORDER BY line
-            """,
-            owner=config.schema_name,
-            name=obj_name,
-            type=obj_type,
-        )
-        source_lines = [row[0] for row in cursor.fetchall()]
-        source = "".join(source_lines) if source_lines else None
+              AND type IN ({type_placeholders})
+            ORDER BY name, type, line
+        """
+        params = {"owner": config.schema_name}
+        for j, tp in enumerate(needed_types):
+            params[f"tp{j}"] = tp
+        cursor.execute(src_sql, params)
+        for name, otype, text in cursor.fetchall():
+            sources[(name, otype)].append(text)
+    else:
+        needed_names = tuple(sorted({name for name, _ in target_objs}))
+        chunk_size = 100
+        for i in range(0, len(needed_names), chunk_size):
+            chunk = needed_names[i : i + chunk_size]
+            name_placeholders = ", ".join(f":nm{j}" for j in range(len(chunk)))
+            type_placeholders = ", ".join(f":tp{j}" for j in range(len(needed_types)))
+            src_sql = f"""
+                SELECT name, type, text
+                FROM {prefix}_source
+                WHERE owner = :owner
+                  AND name IN ({name_placeholders})
+                  AND type IN ({type_placeholders})
+                ORDER BY name, type, line
+            """
+            params = {"owner": config.schema_name}
+            for j, nm in enumerate(chunk):
+                params[f"nm{j}"] = nm
+            for j, tp in enumerate(needed_types):
+                params[f"tp{j}"] = tp
+            cursor.execute(src_sql, params)
+            for name, otype, text in cursor.fetchall():
+                sources[(name, otype)].append(text)
 
+    code_objs: list[CodeObjectMeta] = []
+    for obj_name, obj_type in target_objs:
+        source_lines = sources.get((obj_name, obj_type))
+        source = "".join(source_lines) if source_lines else None
         code_obj = CodeObjectMeta(name=obj_name, object_type=obj_type, source=source)
         if obj_type in {"PACKAGE", "PACKAGE BODY"} and source:
             code_obj.subprograms = _split_package_source(obj_name, source)
-
         code_objs.append(code_obj)
 
     return code_objs
@@ -604,7 +777,9 @@ def fetch_available_schemas(connection: oracledb.Connection, config: LeaiConfig)
     return config.schemas
 
 
-def _fetch_object_timestamps(cursor: oracledb.Cursor, owner: str, prefix: str = "all") -> dict[tuple[str, str], tuple[str, str, str]]:
+def _fetch_object_timestamps(
+    cursor: oracledb.Cursor, owner: str, prefix: str = "all"
+) -> tuple[dict[tuple[str, str], tuple[str, str, str]], dict[str, tuple[str, str, str]]]:
     cursor.execute(
         f"""
         SELECT object_name,
@@ -618,13 +793,19 @@ def _fetch_object_timestamps(cursor: oracledb.Cursor, owner: str, prefix: str = 
         owner=owner,
     )
     timestamps: dict[tuple[str, str], tuple[str, str, str]] = {}
+    timestamps_by_name: dict[str, tuple[str, str, str]] = {}
     for obj_name, obj_type, created_at, last_ddl, owner_name in cursor.fetchall():
-        timestamps[(str(obj_name).upper(), str(obj_type).upper())] = (
+        name_str = str(obj_name).upper()
+        type_str = str(obj_type).upper()
+        data = (
             str(created_at) if created_at else "",
             str(last_ddl) if last_ddl else "",
             str(owner_name) if owner_name else "",
         )
-    return timestamps
+        timestamps[(name_str, type_str)] = data
+        if name_str not in timestamps_by_name:
+            timestamps_by_name[name_str] = data
+    return timestamps, timestamps_by_name
 
 
 def _fetch_modified_object_names(cursor: oracledb.Cursor, owner: str, days: int, prefix: str = "all") -> set[str]:
@@ -650,11 +831,17 @@ def fetch_schema_metadata(
     schema_name: str | None = None,
     callback: Callable[[str, int, int, int], None] | None = None,
     days: int | None = None,
+    connection: oracledb.Connection | None = None,
 ) -> SchemaMetadata:
     target_schema = (schema_name or config.schema_name).upper()
-    connection = oracledb.connect(**_build_connect_kwargs(config.dsn))
+    should_close = False
+    if connection is None:
+        connection = oracledb.connect(**_build_connect_kwargs(config.dsn))
+        should_close = True
     try:
         cursor = connection.cursor()
+        cursor.arraysize = 1000
+        cursor.prefetchrows = 1000
         prefix = _detect_catalog_prefix(cursor)
         schema_meta = SchemaMetadata(schema_name=target_schema)
         types = set(config.object_types)
@@ -771,7 +958,7 @@ def fetch_schema_metadata(
 
         # Enrich objects with audit metadata (CREATED, LAST_DDL_TIME, OWNER)
         try:
-            timestamps = _fetch_object_timestamps(cursor, target_schema, prefix=prefix)
+            timestamps, timestamps_by_name = _fetch_object_timestamps(cursor, target_schema, prefix=prefix)
             category_mapping = [
                 (schema_meta.tables, "TABLE"),
                 (schema_meta.views, "VIEW"),
@@ -788,19 +975,15 @@ def fetch_schema_metadata(
                     key = (item.name.upper(), otype)
                     if key in timestamps:
                         item.created_at, item.last_ddl_time, item.last_modified_by = timestamps[key]
-                    else:
-                        for (o_name, t_type), (c_at, l_ddl, l_by) in timestamps.items():
-                            if o_name == item.name.upper() and (t_type == otype or not default_type):
-                                item.created_at = c_at
-                                item.last_ddl_time = l_ddl
-                                item.last_modified_by = l_by
-                                break
+                    elif item.name.upper() in timestamps_by_name:
+                        item.created_at, item.last_ddl_time, item.last_modified_by = timestamps_by_name[item.name.upper()]
         except Exception:
             pass
 
         return schema_meta
     finally:
-        connection.close()
+        if should_close:
+            connection.close()
 
 
 def fetch_focal_trace(
@@ -808,6 +991,7 @@ def fetch_focal_trace(
     object_name: str,
     schema_name: str | None = None,
     max_depth: int = 1,
+    connection: oracledb.Connection | None = None,
 ) -> ObjectTraceResult:
     try:
         max_depth = int(getattr(max_depth, "default", max_depth))
@@ -815,9 +999,14 @@ def fetch_focal_trace(
         max_depth = 1
     target_schema = (schema_name or config.schema_name).upper()
     target_upper = object_name.strip().upper()
-    connection = oracledb.connect(**_build_connect_kwargs(config.dsn))
+    should_close = False
+    if connection is None:
+        connection = oracledb.connect(**_build_connect_kwargs(config.dsn))
+        should_close = True
     try:
         cursor = connection.cursor()
+        cursor.arraysize = 1000
+        cursor.prefetchrows = 1000
         prefix = _detect_catalog_prefix(cursor)
 
         # 1. Discover focal object type
@@ -837,11 +1026,11 @@ def fetch_focal_trace(
         if "PACKAGE BODY" in types_found or "PACKAGE" in types_found:
             focal_type = "PACKAGE"
 
-        # Load focal object metadata
+        # Load focal object metadata reusing connection
         focal_cfg = config.model_copy()
         focal_cfg.schemas = [target_schema]
         focal_cfg.include = [target_upper]
-        focal_meta_schema = fetch_schema_metadata(focal_cfg, schema_name=target_schema)
+        focal_meta_schema = fetch_schema_metadata(focal_cfg, schema_name=target_schema, connection=connection)
 
         focal_obj = None
         if focal_type == "TABLE" and focal_meta_schema.tables:
@@ -870,35 +1059,45 @@ def fetch_focal_trace(
             if not current_layer:
                 break
             next_layer = set()
+            layer_items = list(current_layer)
+            chunk_size = 50
 
-            for curr_name in current_layer:
-                # A) ALL_DEPENDENCIES
+            for i in range(0, len(layer_items), chunk_size):
+                chunk = layer_items[i : i + chunk_size]
+                chunk_params = {"owner": target_schema}
+                placeholders = []
+                for j, name in enumerate(chunk):
+                    p_name = f"obj{j}"
+                    chunk_params[p_name] = name
+                    placeholders.append(f":{p_name}")
+                p_str = ", ".join(placeholders)
+
+                # A) ALL_DEPENDENCIES in batch for the layer chunk
                 cursor.execute(
                     f"""
                     SELECT name, type, referenced_name, referenced_type
                     FROM {prefix}_dependencies
-                    WHERE (referenced_owner = :owner AND referenced_name = :target)
-                       OR (owner = :owner AND name = :target)
+                    WHERE (referenced_owner = :owner AND referenced_name IN ({p_str}))
+                       OR (owner = :owner AND name IN ({p_str}))
                     ORDER BY type, name
                     """,
-                    owner=target_schema,
-                    target=curr_name,
+                    chunk_params,
                 )
                 for s_name, s_type, r_name, r_type in cursor.fetchall():
                     s_upper = s_name.upper()
                     r_upper = r_name.upper()
-                    if s_upper == curr_name:
-                        link_key = (curr_name, r_upper, "DEPENDS_ON")
+                    if s_upper in current_layer:
+                        link_key = (s_upper, r_upper, "DEPENDS_ON")
                         if link_key not in seen_links:
                             seen_links.add(link_key)
                             result.dependencies.append(
                                 DependencyLink(
-                                    source_name=curr_name,
+                                    source_name=s_upper,
                                     source_type=s_type,
                                     target_name=r_upper,
                                     target_type=r_type,
                                     relation_type="DEPENDS_ON",
-                                    details=f"{curr_name} referencia {r_type} {r_upper}",
+                                    details=f"{s_upper} referencia {r_type} {r_upper}",
                                     depth=current_depth,
                                 )
                             )
@@ -906,18 +1105,18 @@ def fetch_focal_trace(
                             visited_nodes.add(r_upper)
                             next_layer.add(r_upper)
                             all_related_names.add(r_upper)
-                    else:
-                        link_key = (s_upper, curr_name, "REFERENCED_BY")
+                    if r_upper in current_layer:
+                        link_key = (s_upper, r_upper, "REFERENCED_BY")
                         if link_key not in seen_links:
                             seen_links.add(link_key)
                             result.dependencies.append(
                                 DependencyLink(
                                     source_name=s_upper,
                                     source_type=s_type,
-                                    target_name=curr_name,
+                                    target_name=r_upper,
                                     target_type=r_type,
                                     relation_type="REFERENCED_BY",
-                                    details=f"{s_type} {s_upper} depende de {curr_name}",
+                                    details=f"{s_type} {s_upper} depende de {r_upper}",
                                     depth=current_depth,
                                 )
                             )
@@ -926,24 +1125,24 @@ def fetch_focal_trace(
                             next_layer.add(s_upper)
                             all_related_names.add(s_upper)
 
-                # B) Foreign Keys and Triggers (if table)
+                # B) Foreign Keys in batch for the layer chunk
                 cursor.execute(
                     f"""
-                    SELECT c.table_name, cc.column_name, c.constraint_name, rcc.column_name AS ref_column
+                    SELECT c.table_name, cc.column_name, c.constraint_name, rcc.column_name AS ref_column, rc.table_name AS parent_table
                     FROM {prefix}_constraints c
                     JOIN {prefix}_cons_columns cc ON cc.owner = c.owner AND cc.constraint_name = c.constraint_name
                     JOIN {prefix}_constraints rc ON rc.owner = c.r_owner AND rc.constraint_name = c.r_constraint_name
                     JOIN {prefix}_cons_columns rcc ON rcc.owner = rc.owner AND rcc.constraint_name = rc.constraint_name AND rcc.position = cc.position
                     WHERE c.constraint_type = 'R'
                       AND rc.owner = :owner
-                      AND rc.table_name = :target
+                      AND rc.table_name IN ({p_str})
                     ORDER BY c.table_name, c.constraint_name
                     """,
-                    owner=target_schema,
-                    target=curr_name,
+                    chunk_params,
                 )
-                for child_table, child_col, c_name, parent_col in cursor.fetchall():
+                for child_table, child_col, c_name, parent_col, p_tbl in cursor.fetchall():
                     child_upper = child_table.upper()
+                    curr_name = (p_tbl or "").upper()
                     link_key = ("FK", child_upper, curr_name, (child_col or "").upper())
                     if link_key not in seen_links:
                         seen_links.add(link_key)
@@ -963,25 +1162,26 @@ def fetch_focal_trace(
                         next_layer.add(child_upper)
                         all_related_names.add(child_upper)
 
+                # C) Triggers in batch for the layer chunk
                 cursor.execute(
                     f"""
-                    SELECT trigger_name, trigger_type, triggering_event
+                    SELECT trigger_name, trigger_type, triggering_event, table_name
                     FROM {prefix}_triggers
-                    WHERE owner = :owner AND table_name = :target
+                    WHERE owner = :owner AND table_name IN ({p_str})
                     """,
-                    owner=target_schema,
-                    target=curr_name,
+                    chunk_params,
                 )
-                for trg_name, trg_type, trg_ev in cursor.fetchall():
+                for trg_name, trg_type, trg_ev, t_name in cursor.fetchall():
                     trg_upper = trg_name.upper()
-                    link_key = ("TRIGGER", trg_upper, curr_name)
+                    tbl_upper = (t_name or "").upper()
+                    link_key = ("TRIGGER", trg_upper, tbl_upper)
                     if link_key not in seen_links:
                         seen_links.add(link_key)
                         result.dependencies.append(
                             DependencyLink(
                                 source_name=trg_upper,
                                 source_type="TRIGGER",
-                                target_name=curr_name,
+                                target_name=tbl_upper,
                                 target_type="TABLE",
                                 relation_type="TRIGGER_ON",
                                 details=f"{trg_type} {trg_ev}",
@@ -995,12 +1195,12 @@ def fetch_focal_trace(
 
             current_layer = next_layer
 
-        # Extract metadata of related objects found
+        # Extract metadata of related objects found reusing connection
         if all_related_names:
             rel_cfg = config.model_copy()
             rel_cfg.schemas = [target_schema]
             rel_cfg.include = list(all_related_names)
-            rel_meta_schema = fetch_schema_metadata(rel_cfg, schema_name=target_schema)
+            rel_meta_schema = fetch_schema_metadata(rel_cfg, schema_name=target_schema, connection=connection)
             result.related_tables = rel_meta_schema.tables
             result.related_views = rel_meta_schema.views
             result.related_code_objects = rel_meta_schema.code_objects
@@ -1008,4 +1208,5 @@ def fetch_focal_trace(
 
         return result
     finally:
-        connection.close()
+        if should_close:
+            connection.close()
