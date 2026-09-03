@@ -339,6 +339,40 @@ class InteractiveTUISession:
         status_table.add_row("\n".join(db_lines), "\n".join(ai_lines))
         console.print(status_table)
 
+        # Git / GitLab Repository Observability Notice
+        if getattr(self.config, "git", None) and self.config.git.enabled:
+            try:
+                from leai.git_ops import get_git_status, git_pull
+
+                if self.config.git.auto_pull_on_start:
+                    pulled_ok, pull_msg = git_pull()
+                    if pulled_ok and "Already up to date" not in pull_msg:
+                        console.print(f"[bold green]✓ Sincronizado com GitLab ({pull_msg})[/bold green]")
+                        target_schemas_filter = self.config.schemas if not self.config.is_all_schemas else None
+                        self.schemas = load_raw_schemas(self.config.rawPath, target_schemas=target_schemas_filter)
+                        self.completer.update_schemas(self.schemas)
+                        self.session.update_schemas(self.schemas)
+
+                git_info = get_git_status(fetch=False)
+                if git_info.is_repo:
+                    plat = git_info.platform_name
+                    branch = git_info.branch or "main"
+                    if git_info.behind > 0:
+                        console.print(
+                            f"[bold yellow]⤓ Atenção: Existem {git_info.behind} novo(s) commit(s) no {plat}! "
+                            f"Digite [bold cyan]/git pull[/bold cyan] para sincronizar.[/bold yellow]\n"
+                        )
+                    elif git_info.has_uncommitted:
+                        total_mod = len(git_info.modified_files) + len(git_info.untracked_files)
+                        console.print(
+                            f"[dim]◈ {plat}: branch [bold]{branch}[/bold] • {total_mod} arquivo(s) modificado(s) localmente "
+                            f"(use [bold cyan]/git sync[/bold cyan] para sincronizar)[/dim]\n"
+                        )
+                    else:
+                        console.print(f"[dim]◈ {plat}: branch [bold]{branch}[/bold] (repositório sincronizado)[/dim]\n")
+            except Exception:
+                pass
+
         # 3. Essential Actions & Shortcuts Cheat-sheet
         actions_grid = Table.grid(expand=True, padding=(0, 2))
         actions_grid.add_column(ratio=1)
@@ -350,11 +384,11 @@ class InteractiveTUISession:
         )
         actions_grid.add_row(
             "  [bold #74c7ec]/extract[/bold #74c7ec]    [dim]Pull Oracle metadata[/dim]",
-            "  [bold #74c7ec]/serve[/bold #74c7ec]      [dim]Open Web Studio editor[/dim]",
+            "  [bold #74c7ec]/rule add[/bold #74c7ec]   [dim]Add business rule[/dim]",
         )
         actions_grid.add_row(
             "  [bold #74c7ec]/compile[/bold #74c7ec]    [dim]Generate RAG & MD docs[/dim]",
-            "  [bold #74c7ec]/models[/bold #74c7ec]     [dim]Switch AI providers[/dim]",
+            "  [bold #74c7ec]/git status[/bold #74c7ec] [dim]GitLab sync & status[/dim]",
         )
         actions_grid.add_row(
             "  [bold #74c7ec]/trace @OBJ[/bold #74c7ec] [dim]Lineage impact graph[/dim]",
@@ -663,6 +697,10 @@ class InteractiveTUISession:
             self._run_rule(parts[1:])
             return True
 
+        if cmd in ("/git", "/sync"):
+            self._run_git(parts[1:])
+            return True
+
         console.print(f"[yellow]Unknown command '{cmd}'. Type [bold cyan]/help[/bold cyan] for available commands.[/yellow]")
         return True
 
@@ -834,6 +872,91 @@ class InteractiveTUISession:
 
         console.print(
             "[yellow]Uso: [bold cyan]/rule list[/bold cyan] | [bold cyan]/rule add [termo][/bold cyan] | [bold cyan]/rule find <termo>[/bold cyan][/yellow]\n"
+        )
+
+    def _run_git(self, args: list[str]) -> None:
+        """Manages Git and GitLab repository synchronization for database metadata."""
+        from leai.git_ops import get_git_status, git_pull, git_sync
+
+        subcmd = args[0].lower() if args else "status"
+
+        if subcmd in ("status", "st", "info"):
+            with console.status("[cyan]Verificando status do repositório Git/GitLab...[/cyan]", spinner="dots"):
+                info = get_git_status(fetch=True)
+
+            if not info.is_repo:
+                console.print("\n[yellow]! O diretório atual não é um repositório Git.[/yellow]")
+                console.print("[dim]Para inicializar: git init && git remote add origin <URL_DO_GITLAB>[/dim]\n")
+                return
+
+            tbl = Table(title=f"[bold cyan]🌿 Status do Repositório ({info.platform_name})[/bold cyan]", box=box.ROUNDED)
+            tbl.add_column("Propriedade", style="bold yellow", width=22)
+            tbl.add_column("Valor", style="white")
+
+            tbl.add_row("Plataforma", f"[bold green]{info.platform_name}[/bold green]")
+            tbl.add_row("Branch Atual", f"[bold cyan]{info.branch}[/bold cyan]")
+            tbl.add_row("Remoto (origin)", info.remote_url or "[dim]Nenhum remoto configurado[/dim]")
+
+            sync_status = []
+            if info.behind > 0:
+                sync_status.append(f"[bold yellow]⤓ {info.behind} commit(s) atrás do remoto (use /git pull)[/bold yellow]")
+            if info.ahead > 0:
+                sync_status.append(f"[bold green]⤒ {info.ahead} commit(s) à frente do remoto[/bold green]")
+            if not sync_status:
+                sync_status.append("[bold green]● Sincronizado com remoto[/bold green]")
+            tbl.add_row("Sincronização", ", ".join(sync_status))
+
+            mod_count = len(info.modified_files)
+            untr_count = len(info.untracked_files)
+            changes_desc = []
+            if mod_count > 0:
+                changes_desc.append(f"{mod_count} arquivo(s) modificado(s)")
+            if untr_count > 0:
+                changes_desc.append(f"{untr_count} arquivo(s) não rastreado(s)")
+            if not changes_desc:
+                changes_desc.append("[green]Nenhuma alteração pendente (working tree clean)[/green]")
+            tbl.add_row("Alterações Locais", ", ".join(changes_desc))
+
+            console.print()
+            console.print(tbl)
+
+            if info.modified_files or info.untracked_files:
+                console.print("[dim]Arquivos alterados no catálogo/documentação:[/dim]")
+                for f in (info.modified_files + info.untracked_files)[:8]:
+                    console.print(f"  [dim yellow]• {f}[/dim yellow]")
+                if len(info.modified_files + info.untracked_files) > 8:
+                    console.print(f"  [dim]... e mais {len(info.modified_files + info.untracked_files) - 8} arquivo(s)[/dim]")
+                console.print("\n[dim]Para commitar e enviar ao GitLab: [bold cyan]/git sync[/bold cyan][/dim]\n")
+            else:
+                console.print()
+            return
+
+        if subcmd in ("pull", "update", "fetch"):
+            console.print("[cyan]⤓ Puxando atualizações do GitLab/remoto...[/cyan]")
+            ok, msg = git_pull()
+            if ok:
+                console.print(f"[green]✓ {msg}[/green]")
+                target_schemas_filter = self.config.schemas if not self.config.is_all_schemas else None
+                self.schemas = load_raw_schemas(self.config.rawPath, target_schemas=target_schemas_filter)
+                self.completer.update_schemas(self.schemas)
+                self.session.update_schemas(self.schemas)
+                console.print("[green]✓ Metadados e glossário recarregados em memória com sucesso![/green]\n")
+            else:
+                console.print(f"[red]✕ Erro ao atualizar do remoto:[/red] {msg}\n")
+            return
+
+        if subcmd in ("sync", "push", "commit"):
+            commit_msg = " ".join(args[1:]).strip() if len(args) > 1 else None
+            console.print("[cyan]⤒ Sincronizando metadados com GitLab/remoto (add + commit + push)...[/cyan]")
+            ok, msg = git_sync(message=commit_msg)
+            if ok:
+                console.print(f"[green]✓ {msg}[/green]\n")
+            else:
+                console.print(f"[red]✕ Falha na sincronização:[/red] {msg}\n")
+            return
+
+        console.print(
+            "[yellow]Uso: [bold cyan]/git status[/bold cyan] | [bold cyan]/git pull[/bold cyan] | [bold cyan]/git sync [mensagem][/bold cyan][/yellow]\n"
         )
 
     def _run_doc(self, object_name: str | None = None) -> None:
@@ -1219,6 +1342,10 @@ class InteractiveTUISession:
         if sub == "stop":
             if self.web_server:
                 self.web_server.shutdown()
+                try:
+                    self.web_server.server_close()
+                except Exception:
+                    pass
                 self.web_server = None
                 self.web_url = None
                 console.print("[yellow]✓ LEAI Web Studio stopped.[/yellow]\n")
@@ -1314,8 +1441,24 @@ class InteractiveTUISession:
         doc_count = len(list(self.config.docPath.glob("**/*.md"))) if self.config.docPath.exists() else 0
         ann_count = len(list(self.config.annotationsPath.glob("**/*.yml"))) if self.config.annotationsPath.exists() else 0
         console.print(
-            f"[green]✓ Documentation Store:[/green] [cyan]{ann_count}[/cyan] annotations in [bold]{self.config.annotationsPath}[/bold] • [cyan]{doc_count}[/cyan] docs in [bold]{self.config.docPath}[/bold]\n"
+            f"[green]✓ Documentation Store:[/green] [cyan]{ann_count}[/cyan] annotations in [bold]{self.config.annotationsPath}[/bold] • [cyan]{doc_count}[/cyan] docs in [bold]{self.config.docPath}[/bold]"
         )
+
+        # 5. Check Git / GitLab Status
+        try:
+            from leai.git_ops import get_git_status
+
+            git_info = get_git_status(fetch=False)
+            if git_info.is_repo:
+                plat = git_info.platform_name
+                sync_desc = f"{git_info.behind} behind" if git_info.behind > 0 else "up to date"
+                console.print(
+                    f"[green]✓ Git Repository ({plat}):[/green] branch [bold]{git_info.branch}[/bold] • {sync_desc} • {len(git_info.modified_files)} modified\n"
+                )
+            else:
+                console.print("[dim]! Git Repository: not inside a git working tree[/dim]\n")
+        except Exception:
+            console.print()
 
     def _run_init(self) -> None:
         """Informs or initializes leai.yml."""
@@ -1345,6 +1488,7 @@ class InteractiveTUISession:
         table.add_row("/annotate", "Pipeline", "Synchronize YAML annotation stubs into annotations/")
         table.add_row("/extract [s] [d]", "Pipeline", "Extract Oracle snapshot (supports schema and days filter e.g. /extract 30)")
         table.add_row("/serve [port|stop]", "Web Studio", "Launch Web Studio with browser editor and live sync")
+        table.add_row("/git [status|pull|sync]", "GitLab/Git", "Check sync status, pull updates, or commit & push metadata")
 
         # Exploration & Lineage
         table.add_row("/trace <obj>", "Lineage", "Run dependency tracing and X-ray architecture graph")

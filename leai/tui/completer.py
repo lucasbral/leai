@@ -27,6 +27,7 @@ SLASH_COMMANDS: list[tuple[str, str]] = [
     ("/save", "Save conversation transcript to Markdown file"),
     ("/audit", "Inspect AI reasoning, tool execution trace and session logs"),
     ("/tools", "Quick viewer for last turn's tool execution inputs/outputs"),
+    ("/git", "Check Git status, pull updates, or sync metadata with remote"),
     ("/check", "Run environment diagnostics on DB, config and AI provider"),
     ("/init", "Create or check leai.yml configuration file"),
     ("/clear", "Clear conversation memory and terminal screen"),

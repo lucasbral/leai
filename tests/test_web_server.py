@@ -8,7 +8,17 @@ import urllib.request
 from pathlib import Path
 
 from leai.config import LeaiConfig
-from leai.models import CodeObjectMeta, ColumnMeta, ForeignKeyMeta, SchemaMetadata, TableMeta
+from leai.models import (
+    CodeObjectMeta,
+    ColumnMeta,
+    ForeignKeyMeta,
+    MaterializedViewMeta,
+    SchemaMetadata,
+    SequenceMeta,
+    SynonymMeta,
+    TableMeta,
+    TriggerMeta,
+)
 from leai.web.server import start_server
 
 
@@ -37,14 +47,42 @@ class WebServerTests(unittest.TestCase):
             comment="Pacote de folha",
             source="CREATE OR REPLACE PACKAGE PKG_PAYROLL AS END;",
         )
+        self.trigger = TriggerMeta(
+            name="TRG_EMP_AUDIT",
+            table_name="EMPLOYEES",
+            trigger_type="AFTER INSERT OR UPDATE",
+            triggering_event="INSERT OR UPDATE",
+            status="ENABLED",
+        )
+        self.synonym = SynonymMeta(
+            name="SYN_EMPLOYEES",
+            table_owner="HR",
+            table_name="EMPLOYEES",
+        )
+        self.sequence = SequenceMeta(
+            name="SEQ_EMP_ID",
+            min_value=1,
+            max_value=999999,
+            increment_by=1,
+            last_number=100,
+        )
+        self.mview = MaterializedViewMeta(
+            name="MV_EMP_SUMMARY",
+            comment="Sumário de colaboradores",
+            columns=[
+                ColumnMeta(name="DEP_ID", data_type="NUMBER", nullable=False),
+                ColumnMeta(name="TOTAL", data_type="NUMBER", nullable=False),
+            ],
+        )
         self.schema = SchemaMetadata(
             schema_name="HR",
             tables=[self.table],
             views=[],
+            mviews=[self.mview],
             code_objects=[self.code_obj],
-            triggers=[],
-            synonyms=[],
-            sequences=[],
+            triggers=[self.trigger],
+            synonyms=[self.synonym],
+            sequences=[self.sequence],
         )
 
     def test_web_server_endpoints(self):
@@ -95,8 +133,12 @@ class WebServerTests(unittest.TestCase):
                 self.assertEqual(cat_data["schemas"][0]["tables"][0]["name"], "EMPLOYEES")
                 self.assertEqual(cat_data["schemas"][0]["code_objects"][0]["name"], "PKG_PAYROLL")
                 self.assertEqual(cat_data["schemas"][0]["code_objects"][0]["type"], "PACKAGE")
+                self.assertEqual(cat_data["schemas"][0]["mviews"][0]["name"], "MV_EMP_SUMMARY")
+                self.assertEqual(cat_data["schemas"][0]["triggers"][0]["name"], "TRG_EMP_AUDIT")
+                self.assertEqual(cat_data["schemas"][0]["synonyms"][0]["name"], "SYN_EMPLOYEES")
+                self.assertEqual(cat_data["schemas"][0]["sequences"][0]["name"], "SEQ_EMP_ID")
 
-                # 4. Test GET /api/object (Table and Package)
+                # 4. Test GET /api/object (Table, Package, Trigger, Synonym, Sequence, MView)
                 req_obj = urllib.request.urlopen(f"{url}/api/object?schema=HR&type=TABLE&name=EMPLOYEES")
                 self.assertEqual(req_obj.status, 200)
                 obj_data = json.loads(req_obj.read().decode("utf-8"))
@@ -109,6 +151,33 @@ class WebServerTests(unittest.TestCase):
                 code_data = json.loads(req_code.read().decode("utf-8"))
                 self.assertEqual(code_data["object_name"], "PKG_PAYROLL")
                 self.assertEqual(code_data["object_type"], "PACKAGE")
+
+                req_trg = urllib.request.urlopen(f"{url}/api/object?schema=HR&type=TRIGGER&name=TRG_EMP_AUDIT")
+                self.assertEqual(req_trg.status, 200)
+                trg_data = json.loads(req_trg.read().decode("utf-8"))
+                self.assertEqual(trg_data["object_name"], "TRG_EMP_AUDIT")
+                self.assertEqual(trg_data["object_type"], "TRIGGER")
+                self.assertEqual(trg_data["type_metadata"]["table_name"], "EMPLOYEES")
+
+                req_syn = urllib.request.urlopen(f"{url}/api/object?schema=HR&type=SYNONYM&name=SYN_EMPLOYEES")
+                self.assertEqual(req_syn.status, 200)
+                syn_data = json.loads(req_syn.read().decode("utf-8"))
+                self.assertEqual(syn_data["object_name"], "SYN_EMPLOYEES")
+                self.assertEqual(syn_data["object_type"], "SYNONYM")
+                self.assertEqual(syn_data["type_metadata"]["table_owner"], "HR")
+
+                req_seq = urllib.request.urlopen(f"{url}/api/object?schema=HR&type=SEQUENCE&name=SEQ_EMP_ID")
+                self.assertEqual(req_seq.status, 200)
+                seq_data = json.loads(req_seq.read().decode("utf-8"))
+                self.assertEqual(seq_data["object_name"], "SEQ_EMP_ID")
+                self.assertEqual(seq_data["object_type"], "SEQUENCE")
+                self.assertEqual(seq_data["type_metadata"]["min_value"], 1)
+
+                req_mv = urllib.request.urlopen(f"{url}/api/object?schema=HR&type=MVIEW&name=MV_EMP_SUMMARY")
+                self.assertEqual(req_mv.status, 200)
+                mv_data = json.loads(req_mv.read().decode("utf-8"))
+                self.assertEqual(mv_data["object_name"], "MV_EMP_SUMMARY")
+                self.assertEqual(mv_data["object_type"], "MVIEW")
 
                 # 5. Test POST /api/annotations (Save & Recompile All 7 Fields)
                 payload = {
@@ -221,8 +290,34 @@ class WebServerTests(unittest.TestCase):
                 self.assertEqual(server.config.ai.default_provider, "gemini")
                 self.assertEqual(server.config.schemas, ["HR", "FINANCE"])
 
+                # 9. Test POST & GET /api/glossary
+                req_post_glossary = urllib.request.Request(
+                    f"{url}/api/glossary",
+                    data=json.dumps(
+                        {
+                            "term": "ATIVO",
+                            "definition": "Servidor público ativo.",
+                            "primary_table": "EMPLOYEES",
+                            "canonical_filter": "STATUS = 'A'",
+                        }
+                    ).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                res_post_g = urllib.request.urlopen(req_post_glossary)
+                self.assertEqual(res_post_g.status, 200)
+                g_save_data = json.loads(res_post_g.read().decode("utf-8"))
+                self.assertTrue(g_save_data["success"])
+
+                req_get_glossary = urllib.request.urlopen(f"{url}/api/glossary")
+                self.assertEqual(req_get_glossary.status, 200)
+                g_list_data = json.loads(req_get_glossary.read().decode("utf-8"))
+                self.assertTrue(g_list_data["success"])
+                self.assertTrue(any(t["term"] == "ATIVO" for t in g_list_data["terms"]))
+
             finally:
                 server.shutdown()
+                server.server_close()
 
 
 if __name__ == "__main__":

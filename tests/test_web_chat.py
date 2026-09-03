@@ -113,6 +113,30 @@ class WebChatTests(unittest.TestCase):
             self.assertIn("[DONE]", body)
             self.assertIn("Hello from Web Copilot!", body)
 
+    @patch("leai.web.server.get_llm_client")
+    def test_api_chat_stream_sse_with_history(self, mock_get_client):
+        mock_get_client.return_value = self.mock_client
+
+        payload = {
+            "prompt": "And what about departments?",
+            "history": [
+                {"role": "user", "content": "Tell me about employees."},
+                {"role": "assistant", "content": "Employees table has EMP_ID and NAME."},
+            ],
+        }
+        req = urllib.request.Request(
+            f"{self.url}/api/chat/stream",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            self.assertEqual(resp.status, 200)
+            self.assertIn("text/event-stream", resp.headers.get("Content-Type", ""))
+            body = resp.read().decode("utf-8")
+            self.assertIn("Hello from Web Copilot!", body)
+            self.assertIn("[DONE]", body)
+
 
 if __name__ == "__main__":
     unittest.main()

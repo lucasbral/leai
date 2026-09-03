@@ -1,0 +1,79 @@
+# ==============================================================================
+# LEAI - GitLab CI/CD Pipeline Template
+# Database Observability, Schema Drift Detection & Live Documentation Portal
+# ==============================================================================
+
+stages:
+  - drift-check
+  - pages
+
+variables:
+  PYTHON_VERSION: "3.11"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  paths:
+    - .cache/pip/
+
+# ------------------------------------------------------------------------------
+# 1. Oracle Schema Drift Detection (Scheduled Job)
+# Runs automatically on a schedule (e.g. daily at 03:00 AM) to detect DDL drifts.
+# ------------------------------------------------------------------------------
+detect-schema-drift:
+  stage: drift-check
+  image: python:3.11-slim
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends git libaio1 curl && rm -rf /var/lib/apt/lists/*
+    - pip install --upgrade pip
+    - pip install leai
+  script:
+    # 1. Extract fresh metadata from Oracle using LEAI_DSN secret
+    - leai extract
+    - leai annotate
+    - leai compile
+    # 2. Check if git status detected any schema or documentation changes
+    - |
+      if [ -n "$(git status --porcelain annotations/ docs/ raw/)" ]; then
+        echo "⚠️ Schema drift detected in Oracle database!"
+        git config user.name "LEAI Observability Bot"
+        git config user.email "leai-bot@empresa.gov.br"
+        DRIFT_BRANCH="leai-schema-drift-$(date +%Y%m%d-%H%M)"
+        git checkout -b "$DRIFT_BRANCH"
+        git add annotations/ docs/ raw/
+        git commit -m "chore(db): sync schema drift and docs from Oracle [skip ci]"
+        # Push with GitLab push options to automatically create a Merge Request
+        git push origin "$DRIFT_BRANCH" \
+          -o merge_request.create \
+          -o merge_request.title="🤖 [Schema Drift] Atualizações detectadas no banco Oracle" \
+          -o merge_request.description="Alterações DDL detectadas pelo LEAI Drift Monitor. Revise os diffs em raw/, annotations/ e docs/." \
+          -o merge_request.remove_source_branch
+      else
+        echo "✓ No schema drift detected. Database metadata and documentation are in sync."
+      fi
+
+# ------------------------------------------------------------------------------
+# 2. GitLab Pages Documentation Portal
+# Publishes docs/ as an internal web portal on every merge to main.
+# ------------------------------------------------------------------------------
+pages:
+  stage: pages
+  image: python:3.11-slim
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - pip install mkdocs-material
+  script:
+    # Build static site using mkdocs if mkdocs.yml exists, otherwise expose docs folder directly
+    - |
+      if [ -f "mkdocs.yml" ]; then
+        mkdocs build -d public
+      else
+        mkdir -p public
+        cp -r docs/* public/ 2>/dev/null || true
+      fi
+  artifacts:
+    paths:
+      - public

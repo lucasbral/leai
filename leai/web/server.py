@@ -20,6 +20,41 @@ from leai.models import ObjectAnnotation, SchemaMetadata, TableMeta
 from leai.raw import load_raw_schemas, trace_raw_dependencies
 
 
+def _sanitize_name(val: str) -> str:
+    """Sanitizes names to prevent path traversal and invalid filesystem characters."""
+    if not val:
+        return ""
+    return val.replace("/", "_").replace("\\", "_").replace("..", "").strip()
+
+
+def _get_object_folder(obj_type: str) -> str:
+    """Returns official annotations/docs folder name for a given database object type."""
+    norm = obj_type.strip().upper()
+    if norm == "TABLE":
+        return "tables"
+    if norm == "VIEW":
+        return "views"
+    if norm in ("MVIEW", "MATERIALIZED VIEW", "MATERIALIZED_VIEW"):
+        return "mviews"
+    if norm == "PACKAGE":
+        return "packages"
+    if norm == "PROCEDURE":
+        return "procedures"
+    if norm == "FUNCTION":
+        return "functions"
+    if norm == "TRIGGER":
+        return "triggers"
+    if norm == "SYNONYM":
+        return "synonyms"
+    if norm == "SEQUENCE":
+        return "sequences"
+    if norm in ("TYPE", "TYPE BODY"):
+        return "types"
+    if norm == "INDEX":
+        return "indexes"
+    return norm.lower().replace(" ", "_") + "s"
+
+
 class LEAIStudioHandler(BaseHTTPRequestHandler):
     """Zero-dependency HTTP Handler for LEAI Web Studio REST APIs and Static Assets."""
 
@@ -80,6 +115,10 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
             self._handle_api_chat_models()
             return
 
+        if path == "/api/glossary":
+            self._handle_api_get_glossary()
+            return
+
         self.send_response(HTTPStatus.NOT_FOUND)
         self.end_headers()
 
@@ -113,6 +152,10 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
 
         if path == "/api/config":
             self._handle_api_save_config(payload)
+            return
+
+        if path == "/api/glossary":
+            self._handle_api_save_glossary(payload)
             return
 
         self.send_response(HTTPStatus.NOT_FOUND)
@@ -204,7 +247,7 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                 role = h.get("role", "user")
                 content = h.get("content", "")
                 if content:
-                    session.messages.append({"role": role, "parts": [content]})
+                    session.messages.append({"role": role, "content": content})
 
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
@@ -261,6 +304,23 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
     def _handle_api_status(self) -> None:
         cfg = self.server.config
         client = self.server.client
+        git_data = {"is_repo": False}
+        try:
+            from leai.git_ops import get_git_status
+
+            g_info = get_git_status(fetch=False)
+            if g_info.is_repo:
+                git_data = {
+                    "is_repo": True,
+                    "platform": g_info.platform_name,
+                    "branch": g_info.branch,
+                    "behind": g_info.behind,
+                    "ahead": g_info.ahead,
+                    "has_uncommitted": g_info.has_uncommitted,
+                }
+        except Exception:
+            pass
+
         self._send_json(
             {
                 "status": "online",
@@ -269,6 +329,7 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                 "model": client.model if client else "offline",
                 "annotations_path": str(cfg.annotationsPath),
                 "docs_path": str(cfg.docPath),
+                "git": git_data,
             }
         )
 
@@ -288,12 +349,16 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
 
             tables = [{"name": t.name, "comment": t.comment or "", "is_annotated": _check_ann("tables", t.name)} for t in s.tables]
             views = [{"name": v.name, "comment": v.comment or "", "is_annotated": _check_ann("views", v.name)} for v in s.views]
+            mviews = [
+                {"name": mv.name, "comment": mv.comment or "", "is_annotated": _check_ann("mviews", mv.name)}
+                for mv in getattr(s, "mviews", [])
+            ]
             code_objects = [
                 {
                     "name": co.name,
                     "type": co.object_type,
                     "comment": co.comment or "",
-                    "is_annotated": _check_ann("packages" if co.object_type == "PACKAGE" else "procedures", co.name),
+                    "is_annotated": _check_ann(_get_object_folder(co.object_type), co.name),
                 }
                 for co in s.code_objects
             ]
@@ -306,6 +371,7 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                     "schema_name": s_name,
                     "tables": tables,
                     "views": views,
+                    "mviews": mviews,
                     "code_objects": code_objects,
                     "triggers": triggers,
                     "synonyms": synonyms,
@@ -317,9 +383,8 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
 
     def _handle_api_get_object(self, query_str: str) -> None:
         params = urllib.parse.parse_qs(query_str)
-        schema_name = params.get("schema", [""])[0].strip()
-        obj_type = params.get("type", [""])[0].strip().upper()
-        obj_name = params.get("name", [""])[0].strip()
+        schema_name = _sanitize_name(params.get("schema", [""])[0].strip())
+        obj_name = _sanitize_name(params.get("name", [""])[0].strip())
 
         if not obj_name:
             self._send_error("Parameter 'name' is required.")
@@ -328,47 +393,90 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         cfg = self.server.config
         matched_obj = None
         matched_schema = None
+        resolved_type = "TABLE"
 
         for s in self.server.schemas:
             if schema_name and s.schema_name.upper() != schema_name.upper():
                 continue
+
+            # 1. Tables
             for t in s.tables:
                 if t.name.upper() == obj_name.upper():
                     matched_obj = t
                     matched_schema = s
-                    obj_type = "TABLE"
+                    resolved_type = "TABLE"
                     break
             if matched_obj:
                 break
+
+            # 2. Views
             for v in s.views:
                 if v.name.upper() == obj_name.upper():
                     matched_obj = v
                     matched_schema = s
-                    obj_type = "VIEW"
+                    resolved_type = "VIEW"
                     break
             if matched_obj:
                 break
+
+            # 3. Materialized Views
+            for mv in getattr(s, "mviews", []):
+                if mv.name.upper() == obj_name.upper():
+                    matched_obj = mv
+                    matched_schema = s
+                    resolved_type = "MVIEW"
+                    break
+            if matched_obj:
+                break
+
+            # 4. Code Objects (Procedures, Functions, Packages, Types)
             for co in s.code_objects:
                 if co.name.upper() == obj_name.upper():
                     matched_obj = co
                     matched_schema = s
-                    obj_type = co.object_type
+                    resolved_type = co.object_type
                     break
             if matched_obj:
                 break
 
-        if not matched_obj:
+            # 5. Triggers
+            for trg in getattr(s, "triggers", []):
+                if trg.name.upper() == obj_name.upper():
+                    matched_obj = trg
+                    matched_schema = s
+                    resolved_type = "TRIGGER"
+                    break
+            if matched_obj:
+                break
+
+            # 6. Synonyms
+            for syn in getattr(s, "synonyms", []):
+                if syn.name.upper() == obj_name.upper():
+                    matched_obj = syn
+                    matched_schema = s
+                    resolved_type = "SYNONYM"
+                    break
+            if matched_obj:
+                break
+
+            # 7. Sequences
+            for seq in getattr(s, "sequences", []):
+                if seq.name.upper() == obj_name.upper():
+                    matched_obj = seq
+                    matched_schema = s
+                    resolved_type = "SEQUENCE"
+                    break
+            if matched_obj:
+                break
+
+        if not matched_obj or not matched_schema:
             self._send_error(f"Object '{obj_name}' not found in catalog.")
             return
 
         s_name = matched_schema.schema_name or "DEFAULT"
+        ann_folder = _get_object_folder(resolved_type)
 
         # Load YAML annotations if existing
-        ann_folder = (
-            "tables"
-            if obj_type == "TABLE"
-            else ("views" if obj_type == "VIEW" else ("packages" if obj_type == "PACKAGE" else "procedures"))
-        )
         ann_path = cfg.annotationsPath / s_name / ann_folder / f"{obj_name}.yml"
         if not ann_path.exists():
             ann_path = cfg.annotationsPath / ann_folder / f"{obj_name}.yml"
@@ -381,10 +489,9 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                 pass
 
         # Load compiled markdown doc if existing
-        doc_folder = ann_folder
-        doc_path = cfg.docPath / s_name / doc_folder / f"{obj_name}.md"
+        doc_path = cfg.docPath / s_name / ann_folder / f"{obj_name}.md"
         if not doc_path.exists():
-            doc_path = cfg.docPath / doc_folder / f"{obj_name}.md"
+            doc_path = cfg.docPath / ann_folder / f"{obj_name}.md"
 
         doc_content = ""
         if doc_path.exists():
@@ -394,13 +501,17 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                 pass
 
         # Generate Mermaid Lineage code
-        trace_res = trace_raw_dependencies(self.server.schemas, obj_name, max_depth=1)
-        raw_graph = generate_mermaid_graph(obj_name, trace_res.dependencies)
-        mermaid_code = raw_graph.replace("```mermaid", "").replace("```", "").strip()
+        mermaid_code = ""
+        try:
+            trace_res = trace_raw_dependencies(self.server.schemas, obj_name, max_depth=1)
+            raw_graph = generate_mermaid_graph(obj_name, trace_res.dependencies)
+            mermaid_code = raw_graph.replace("```mermaid", "").replace("```", "").strip()
+        except Exception:
+            mermaid_code = ""
 
         # Build response object
         cols_data = []
-        if hasattr(matched_obj, "columns"):
+        if hasattr(matched_obj, "columns") and matched_obj.columns:
             for col in matched_obj.columns:
                 cols_data.append(
                     {
@@ -413,7 +524,7 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
 
         pks = getattr(matched_obj, "primary_keys", []) or []
         fks = []
-        if hasattr(matched_obj, "foreign_keys"):
+        if hasattr(matched_obj, "foreign_keys") and matched_obj.foreign_keys:
             for fk in matched_obj.foreign_keys:
                 fks.append(
                     {
@@ -424,15 +535,38 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                     }
                 )
 
+        type_meta = {}
+        if resolved_type == "TRIGGER":
+            type_meta = {
+                "table_name": getattr(matched_obj, "table_name", None),
+                "trigger_type": getattr(matched_obj, "trigger_type", None),
+                "triggering_event": getattr(matched_obj, "triggering_event", None),
+                "status": getattr(matched_obj, "status", None),
+            }
+        elif resolved_type == "SYNONYM":
+            type_meta = {
+                "table_owner": getattr(matched_obj, "table_owner", None),
+                "table_name": getattr(matched_obj, "table_name", None),
+                "db_link": getattr(matched_obj, "db_link", None),
+            }
+        elif resolved_type == "SEQUENCE":
+            type_meta = {
+                "min_value": getattr(matched_obj, "min_value", None),
+                "max_value": getattr(matched_obj, "max_value", None),
+                "increment_by": getattr(matched_obj, "increment_by", None),
+                "last_number": getattr(matched_obj, "last_number", None),
+            }
+
         self._send_json(
             {
                 "schema": s_name,
                 "object_name": obj_name,
-                "object_type": obj_type,
+                "object_type": resolved_type,
                 "comment": getattr(matched_obj, "comment", "") or "",
                 "columns": cols_data,
                 "primary_keys": pks,
                 "foreign_keys": fks,
+                "type_metadata": type_meta,
                 "annotations": ann_data,
                 "markdown_doc": doc_content,
                 "lineage_mermaid": mermaid_code,
@@ -440,20 +574,16 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_api_save_annotations(self, payload: dict[str, Any]) -> None:
-        schema_name = payload.get("schema", "").strip()
+        schema_name = _sanitize_name(payload.get("schema", "").strip())
         obj_type = payload.get("object_type", "TABLE").strip().upper()
-        obj_name = payload.get("object_name", "").strip().upper()
+        obj_name = _sanitize_name(payload.get("object_name", "").strip().upper())
 
         if not obj_name:
             self._send_error("Parameter 'object_name' is required.")
             return
 
         cfg = self.server.config
-        ann_folder = (
-            "tables"
-            if obj_type == "TABLE"
-            else ("views" if obj_type == "VIEW" else ("packages" if obj_type == "PACKAGE" else "procedures"))
-        )
+        ann_folder = _get_object_folder(obj_type)
         multi_schema = len(self.server.schemas) > 1
         if multi_schema and schema_name:
             target_dir = cfg.annotationsPath / schema_name / ann_folder
@@ -493,6 +623,7 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                     schema=s,
                     doc_path=cfg.docPath,
                     annotations_path=cfg.annotationsPath,
+                    object_types=cfg.object_types,
                     multi_schema=multi_schema,
                     all_schemas=self.server.schemas,
                     target_object=obj_name,
@@ -768,9 +899,55 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
             }
         )
 
+    def _handle_api_get_glossary(self) -> None:
+        """Retrieves global business glossary terms."""
+        from leai.glossary import load_glossary
+
+        cfg = self.server.config
+        try:
+            glossary = load_glossary(cfg.annotationsPath)
+            self._send_json(
+                {
+                    "success": True,
+                    "terms": [term.model_dump() for term in glossary.terms],
+                }
+            )
+        except Exception as exc:
+            self._send_error(f"Failed to load glossary: {exc}")
+
+    def _handle_api_save_glossary(self, payload: dict[str, Any]) -> None:
+        """Adds or updates a global business glossary term and canonical SQL filter."""
+        from leai.glossary import add_or_update_term
+        from leai.models import GlossaryTerm
+
+        term_name = payload.get("term", "").strip()
+        definition = payload.get("definition", "").strip()
+        if not term_name or not definition:
+            self._send_error("Fields 'term' and 'definition' are required.")
+            return
+
+        cfg = self.server.config
+        try:
+            term_obj = GlossaryTerm(
+                term=term_name,
+                definition=definition,
+                primary_table=payload.get("primary_table"),
+                canonical_filter=payload.get("canonical_filter"),
+                related_tables=payload.get("related_tables", []),
+                tags=payload.get("tags", []),
+                examples=payload.get("examples", []),
+            )
+            add_or_update_term(cfg.annotationsPath, term_obj)
+            self._send_json({"success": True, "term": term_obj.model_dump()})
+        except Exception as exc:
+            self._send_error(f"Failed to save glossary term: {exc}")
+
 
 class LEAIStudioServer(ThreadingHTTPServer):
     """Threaded HTTP Server for LEAI Web Documentation & Annotation Studio."""
+
+    allow_reuse_address = True
+    daemon_threads = True
 
     def __init__(
         self,
