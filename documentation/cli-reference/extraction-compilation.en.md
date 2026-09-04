@@ -54,7 +54,42 @@ leai extract --days 30
 
 ---
 
-## 3. `leai annotate`
+## 3. `leai update`
+
+Performs surgical incremental updates: connects to Oracle, extracts only objects modified recently (in the last N hours or days), merges them into the consolidated catalog, synchronizes annotation stubs, and pushes the delta to SeaweedFS in seconds.
+
+```bash
+# Update objects modified in the last 4 hours and push delta to SeaweedFS:
+leai update --hours 4 -W
+
+# Update objects modified in the last day and recompile Markdown docs:
+leai update -d 1 -W -C
+```
+
+> [!IMPORTANT]
+> **Preservation of Comments & Glossary:** `leai update` merges metadata with existing annotations (local and remote in SeaweedFS). All previously documented descriptions, business rules, and column comments are 100% preserved; only stubs for newly discovered columns are added. Furthermore, when SeaweedFS is active (`-W`), the global business glossary (`annotations/glossary.yml`) is automatically merged and synced to the central bucket.
+
+### Parameters and Flags:
+
+| Parameter / Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `-c`, `--config PATH` | Option | `leai.yml` | Path to `leai.yml`. |
+| `-H`, `--hours FLOAT` | Option | `None` | Time window in hours (e.g. `-H 4`, `-H 12`). |
+| `-d`, `--days FLOAT` | Option | `1.0` | Time window in days (Default: 1 day if `--hours` is omitted). |
+| `-s`, `--schemas TEXT` | Option | From config | Target schemas to update. |
+| `-t`, `--object-types TEXT` | Option | From config | Filter object types (e.g. `-t tables -t packages`). |
+| `-C`, `--compile` | Flag | `False` | Recompiles Markdown docs and Mermaid diagrams for updated objects. |
+| `--with-traces / --no-traces` | Flag | `True` | Includes dependency lineage in compiled docs. |
+| `-W`, `--seaweed` | Flag | `False` | Syncs RAW delta, annotations, and glossary with SeaweedFS S3 storage. |
+| `--no-cache` | Flag | `False` | Operates in pure remote mode without saving local files. |
+| `-F`, `--force-upload` | Flag | `False` | Force upload bypassing SHA-256 manifest check. |
+
+> [!TIP]
+> In the interactive copilot session (`leai chat`), use `/update [hours|days] [-W] [-C]` (e.g. `/update 4h -W`) to refresh in-memory catalog data in real time!
+
+---
+
+## 4. `leai annotate`
 
 Generates or synchronizes business annotation YAML files under `./annotations/<SCHEMA>.yml`.
 
@@ -63,7 +98,7 @@ leai annotate
 ```
 
 > [!NOTE]
-> This command is strictly non-destructive. It combines newly discovered technical schemas with existing annotations, guaranteeing that previously written human descriptions are never overwritten.
+> This command is strictly non-destructive. It combines newly discovered technical schemas with existing annotations, guaranteeing that previously written human descriptions are never overwritten. When executed with `--seaweed`, it also synchronizes and merges the global glossary `annotations/glossary.yml` with central storage.
 
 ### Parameters and Flags:
 
@@ -72,7 +107,7 @@ leai annotate
 | `-c`, `--config PATH` | Option | `leai.yml` | Path to `leai.yml`. |
 | `-s`, `--schemas TEXT` | Option | From config | Synchronizes target schemas. |
 | `-t`, `--object-types TEXT` | Option | From config | Filters object types to synchronize. |
-| `--seaweed` | Flag | `False` | Reads and syncs annotations directly against remote S3. |
+| `--seaweed` | Flag | `False` | Reads and syncs annotations and glossary directly against remote S3. |
 | `--no-cache` | Flag | `False` | Operates in pure remote mode without local files. |
 
 > [!TIP]
@@ -80,7 +115,7 @@ leai annotate
 
 ---
 
-## 4. `leai doc <OBJECT>`
+## 5. `leai doc <OBJECT>`
 
 Opens the interactive documentation editor right in your terminal for a specific object (table, view, package, etc.).
 
@@ -93,7 +128,7 @@ Allows developers and DBAs to update business descriptions and column notes with
 
 ---
 
-## 5. `leai enrich`
+## 6. `leai enrich`
 
 Invokes the configured LLM to inspect DDLs and PL/SQL code, drafting automated business descriptions for undocumented entities.
 
@@ -118,7 +153,7 @@ leai enrich -o CUSTOMERS_TB --overwrite -p gemini
 
 ---
 
-## 6. `leai compile`
+## 7. `leai compile`
 
 Merges `./raw/` snapshots with `./annotations/` notes to generate clean Markdown documents under `docPath`.
 
@@ -142,7 +177,7 @@ leai compile --depth 2 --rag-json
 
 ---
 
-## 7. `leai trace <OBJECT>`
+## 8. `leai trace <OBJECT>`
 
 Executes multi-level lineage tracing and automated risk evaluation on any database entity.
 

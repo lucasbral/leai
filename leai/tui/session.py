@@ -6,6 +6,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
@@ -498,6 +499,11 @@ class InteractiveTUISession:
             self._run_extract(schemas_arg)
             return True
 
+        if cmd == "/update":
+            update_args = parts[1:] if len(parts) > 1 else None
+            self._run_update(update_args)
+            return True
+
         if cmd == "/seaweed":
             sub_arg = parts[1].lower() if len(parts) > 1 else "status"
             self._run_seaweed(sub_arg)
@@ -831,17 +837,44 @@ class InteractiveTUISession:
         else:
             console.print(f"[red]✕ {msg}[/red]\n")
 
+    def _get_storage(self) -> Any:
+        """Resolves SeaweedFSStorage if configured and enabled or endpoint provided."""
+        cfg = self.config.storage.seaweedfs
+        if cfg.enabled or cfg.endpoint_url:
+            from leai.storage import SeaweedFSStorage
+
+            try:
+                return SeaweedFSStorage(cfg)
+            except Exception:
+                return None
+        return None
+
     def _run_rule(self, args: list[str]) -> None:
         """Manages the global business glossary and domain rules."""
         from rich.prompt import Prompt
 
-        from leai.glossary import add_or_update_term, load_glossary, search_glossary
+        from leai.glossary import add_or_update_term, delete_term, load_glossary, search_glossary
         from leai.models import GlossaryTerm
 
         subcmd = args[0].lower() if args else "list"
 
         if subcmd in ("list", "ls"):
-            glossary = load_glossary(self.config.annotationsPath)
+            storage = self._get_storage()
+            glossary = None
+            if storage:
+                try:
+                    remote_glossary = storage.load_glossary()
+                    if remote_glossary.terms:
+                        local_glossary = load_glossary(self.config.annotationsPath)
+                        from leai.glossary import merge_glossaries
+
+                        glossary = merge_glossaries(remote_glossary, local_glossary)
+                except Exception:
+                    pass
+
+            if glossary is None:
+                glossary = load_glossary(self.config.annotationsPath)
+
             if not glossary.terms:
                 console.print("\n[dim]Nenhuma regra de negócio cadastrada ainda em annotations/glossary.yml.[/dim]")
                 console.print("[dim]Use [bold cyan]/rule add[/bold cyan] para cadastrar uma nova regra.[/dim]\n")
@@ -862,7 +895,10 @@ class InteractiveTUISession:
                 )
             console.print()
             console.print(tbl)
-            console.print(f"[dim]Total: {len(glossary.terms)} termos definidos em {self.config.annotationsPath}/glossary.yml[/dim]\n")
+            s3_tag = f" (sincronizado com SeaweedFS '[bold cyan]{self.config.storage.seaweedfs.bucket}[/bold cyan]')" if storage else ""
+            console.print(
+                f"[dim]Total: {len(glossary.terms)} termos definidos em {self.config.annotationsPath}/glossary.yml{s3_tag}[/dim]\n"
+            )
             return
 
         if subcmd in ("find", "search"):
@@ -914,15 +950,33 @@ class InteractiveTUISession:
                 tags=tags,
             )
 
-            add_or_update_term(self.config.annotationsPath, new_term)
+            storage = self._get_storage()
+            add_or_update_term(self.config.annotationsPath, new_term, storage=storage)
+            s3_msg = f" e sincronizada com SeaweedFS bucket '[bold]{self.config.storage.seaweedfs.bucket}[/bold]'" if storage else ""
             console.print(
-                f"\n[green]✓ Regra '[bold]{new_term.term}[/bold]' salva com sucesso em [bold cyan]{self.config.annotationsPath}/glossary.yml[/bold cyan]![/green]"
+                f"\n[green]✓ Regra '[bold]{new_term.term}[/bold]' salva com sucesso em [bold cyan]{self.config.annotationsPath}/glossary.yml[/bold cyan]{s3_msg}![/green]"
             )
             console.print("[dim]A IA agora consultará essa regra automaticamente no chat e em comandos de SQL.[/dim]\n")
             return
 
+        if subcmd in ("del", "delete", "rm"):
+            if len(args) < 2:
+                console.print("[yellow]Uso: /rule del <nome do termo>[/yellow]\n")
+                return
+            term_to_del = " ".join(args[1:]).strip()
+            storage = self._get_storage()
+            removed = delete_term(self.config.annotationsPath, term_to_del, storage=storage)
+            if removed:
+                s3_msg = f" e do bucket SeaweedFS '{self.config.storage.seaweedfs.bucket}'" if storage else ""
+                console.print(
+                    f"\n[green]✓ Regra '[bold]{term_to_del}[/bold]' removida com sucesso de [bold cyan]{self.config.annotationsPath}/glossary.yml[/bold cyan]{s3_msg}![/green]\n"
+                )
+            else:
+                console.print(f"[yellow]Termo '{term_to_del}' não encontrado no glossário.[/yellow]\n")
+            return
+
         console.print(
-            "[yellow]Uso: [bold cyan]/rule list[/bold cyan] | [bold cyan]/rule add [termo][/bold cyan] | [bold cyan]/rule find <termo>[/bold cyan][/yellow]\n"
+            "[yellow]Uso: [bold cyan]/rule list[/bold cyan] | [bold cyan]/rule add [termo][/bold cyan] | [bold cyan]/rule del <termo>[/bold cyan] | [bold cyan]/rule find <termo>[/bold cyan][/yellow]\n"
         )
 
     def _run_git(self, args: list[str]) -> None:
@@ -1211,6 +1265,218 @@ class InteractiveTUISession:
             )
         except Exception as exc:
             console.print(f"[red]Error during extraction:[/red] {exc}\n")
+
+    def _run_update(self, args: list[str] | None = None) -> None:
+        """Fast incremental update of modified objects from Oracle, merges schemas, syncs annotations, and pushes delta to SeaweedFS."""
+        import oracledb
+
+        from leai.docs import count_schema_objects, sync_schema_annotations, write_schema_docs
+        from leai.oracle import _build_connect_kwargs, fetch_available_schemas, fetch_schema_metadata
+        from leai.raw import merge_schema_metadata, save_raw_schema
+        from leai.storage import SeaweedFSStorage
+
+        if not self.config.dsn:
+            console.print("[red]✕ DSN is not configured in leai.yml or LEAI_DSN env var.[/red]\n")
+            return
+
+        update_cfg = self.config.model_copy()
+        target_schemas_input = []
+        seaweed_flag = False
+        no_cache_flag = False
+        force_upload_flag = False
+        compile_flag = False
+        hours_val: float | None = None
+        days_val: float | None = None
+
+        if args:
+            for a in args:
+                s_clean = a.strip()
+                s_lower = s_clean.lower()
+                if s_lower in ("--seaweed", "-w"):
+                    seaweed_flag = True
+                elif s_lower in ("--compile", "-c"):
+                    compile_flag = True
+                elif s_lower == "--no-cache":
+                    no_cache_flag = True
+                elif s_lower in ("--force-upload", "-f", "--force"):
+                    force_upload_flag = True
+                elif s_lower.endswith("h"):
+                    try:
+                        hours_val = float(s_lower[:-1])
+                    except Exception:
+                        pass
+                elif s_lower.endswith("d"):
+                    try:
+                        days_val = float(s_lower[:-1])
+                    except Exception:
+                        pass
+                elif s_clean.startswith(("--hours=", "-h=")):
+                    try:
+                        hours_val = float(s_clean.split("=")[1])
+                    except Exception:
+                        pass
+                elif s_clean.startswith(("--days=", "-d=")):
+                    try:
+                        days_val = float(s_clean.split("=")[1])
+                    except Exception:
+                        pass
+                elif s_clean.isdigit():
+                    days_val = float(s_clean)
+                elif s_clean not in ("--hours", "-h", "--days", "-d"):
+                    target_schemas_input.append(s_clean.upper())
+
+        if target_schemas_input:
+            update_cfg.schemas = target_schemas_input
+
+        if hours_val is None and days_val is None:
+            days_val = 1.0
+
+        time_desc = f"last {hours_val:g} hours" if hours_val else f"last {days_val:g} days"
+
+        use_seaweed = seaweed_flag or update_cfg.storage.seaweedfs.enabled
+        is_no_cache = no_cache_flag or update_cfg.storage.seaweedfs.no_cache
+
+        storage: SeaweedFSStorage | None = None
+        if use_seaweed:
+            try:
+                storage = SeaweedFSStorage(update_cfg.storage.seaweedfs)
+                storage.ensure_bucket_exists()
+                mode_tags = []
+                if is_no_cache:
+                    mode_tags.append("Remote-only")
+                if update_cfg.storage.seaweedfs.incremental and not force_upload_flag:
+                    mode_tags.append("SHA-256 Incremental")
+                elif force_upload_flag:
+                    mode_tags.append("Force Upload")
+                tag_str = f" [dim]({', '.join(mode_tags)})[/dim]" if mode_tags else ""
+                console.print(
+                    f"[cyan]SeaweedFS Storage:[/cyan] [bold green]Active[/bold green] (Endpoint: {update_cfg.storage.seaweedfs.endpoint_url}, Bucket: {update_cfg.storage.seaweedfs.bucket}){tag_str}\n"
+                )
+            except Exception as exc:
+                console.print(f"[red]SeaweedFS error:[/red] {exc}\n")
+                if is_no_cache:
+                    return
+                console.print("[yellow]Falling back to local-only update.[/yellow]\n")
+                storage = None
+        elif is_no_cache:
+            console.print("[red]Error:[/red] --no-cache requires SeaweedFS to be enabled (use --seaweed or enable it in leai.yml).\n")
+            return
+
+        total_s3_uploaded = 0
+        total_s3_skipped = 0
+        total_ann = 0
+        total_md = 0
+        total_modified = 0
+
+        start_time = time.perf_counter()
+        try:
+            with console.status(
+                f"[cyan]Querying Oracle for objects modified in [bold yellow]{time_desc}[/bold yellow]...[/cyan]",
+                spinner="dots",
+            ):
+                connection = oracledb.connect(**_build_connect_kwargs(update_cfg.dsn))
+                try:
+                    target_schemas = fetch_available_schemas(connection, update_cfg)
+
+                    for schema_name in target_schemas:
+                        schema_meta = fetch_schema_metadata(
+                            update_cfg,
+                            schema_name=schema_name,
+                            days=days_val,
+                            hours=hours_val,
+                            connection=connection,
+                        )
+                        num_objs = count_schema_objects(schema_meta, update_cfg.object_types)
+                        if num_objs == 0:
+                            console.print(f"  [dim]• Schema [bold]{schema_name}[/bold]: no modifications in {time_desc}.[/dim]")
+                            continue
+
+                        total_modified += num_objs
+                        console.print(
+                            f"  [green]✓[/green] Schema [bold yellow]{schema_name}[/bold yellow]: [bold green]{num_objs} modified object(s)[/bold green] found."
+                        )
+
+                        # 1. Save delta RAW and merge with existing snapshot
+                        save_raw_schema(
+                            schema_meta,
+                            update_cfg.rawPath,
+                            multi_schema=True,
+                            storage=storage,
+                            local_cache=not is_no_cache,
+                            force_upload=force_upload_flag,
+                            is_delta=True,
+                        )
+                        if storage and hasattr(storage, "last_save_result"):
+                            total_s3_uploaded += getattr(storage.last_save_result, "uploaded", 0)
+                            total_s3_skipped += getattr(storage.last_save_result, "skipped", 0)
+
+                        # 2. Sync annotations ONLY for modified objects (preserves existing comments)
+                        gen_ann = sync_schema_annotations(
+                            schema_meta,
+                            annotations_path=update_cfg.annotationsPath,
+                            multi_schema=True,
+                            object_types=update_cfg.object_types,
+                            storage=storage,
+                        )
+                        total_ann += len(gen_ann)
+
+                        # 3. Optional compilation for modified objects
+                        if compile_flag:
+                            gen_md, _ = write_schema_docs(
+                                schema_meta,
+                                doc_path=update_cfg.docPath,
+                                annotations_path=update_cfg.annotationsPath,
+                                docs_overrides=update_cfg.docs,
+                                multi_schema=True,
+                                object_types=update_cfg.object_types,
+                            )
+                            total_md += len(gen_md)
+
+                        # 4. Update in-memory schema metadata in TUI session
+                        found_idx = -1
+                        for idx, existing_s in enumerate(self.schemas):
+                            if existing_s.schema_name.upper() == schema_name.upper():
+                                found_idx = idx
+                                break
+                        if found_idx >= 0:
+                            self.schemas[found_idx] = merge_schema_metadata(self.schemas[found_idx], schema_meta)
+                        else:
+                            self.schemas.append(schema_meta)
+                finally:
+                    connection.close()
+
+            if storage:
+                try:
+                    storage.sync_glossary(update_cfg.annotationsPath, no_cache=is_no_cache)
+                except Exception as exc:
+                    console.print(f"[yellow]Warning: Could not synchronize glossary with SeaweedFS: {exc}[/yellow]")
+
+            # Refresh completer cache with any newly discovered objects
+            if hasattr(self, "completer") and self.completer:
+                self.completer.update_schemas(self.schemas)
+
+            elapsed = time.perf_counter() - start_time
+            panel_lines = [
+                f"[green]✓ Incremental Update Completed ({time_desc})[/green]",
+                f"[bold]Modified Objects:[/bold] {total_modified} • [bold]Annotations Synced:[/bold] {total_ann} stubs",
+            ]
+            if compile_flag:
+                panel_lines.append(f"[bold]Docs Compiled:[/bold] {total_md} Markdown files")
+            if storage:
+                panel_lines.append(
+                    f"[bold cyan]SeaweedFS S3:[/bold cyan] [bold green]{total_s3_uploaded}[/bold green] versioned • [dim]{total_s3_skipped} skipped[/dim] • Bucket: [bold]{update_cfg.storage.seaweedfs.bucket}[/bold]"
+                )
+            panel_lines.append(f"[bold]Elapsed:[/bold] {elapsed:.2f}s • [dim]In-memory AI catalog refreshed.[/dim]")
+
+            console.print(
+                Panel(
+                    "\n".join(panel_lines),
+                    title="[bold green]✦ Incremental Update Succeeded[/bold green]",
+                    border_style="green",
+                )
+            )
+        except Exception as exc:
+            console.print(f"[red]Error during incremental update:[/red] {exc}\n")
 
     def _run_seaweed(self, sub_arg: str = "status") -> None:
         """Manages SeaweedFS S3 storage connection, push, and pull."""
@@ -1514,6 +1780,12 @@ class InteractiveTUISession:
                             description=f"[bold cyan]Overall Synchronization[/bold cyan] ({s_idx}/{len(self.schemas)} schemas)",
                         )
 
+            if storage:
+                try:
+                    storage.sync_glossary(self.config.annotationsPath, no_cache=is_no_cache)
+                except Exception as exc:
+                    console.print(f"[yellow]Warning: Could not synchronize glossary with SeaweedFS: {exc}[/yellow]")
+
             elapsed = time.perf_counter() - start_time
             storage_info = (
                 f"\n[bold]SeaweedFS:[/bold] [bold cyan]{self.config.storage.seaweedfs.bucket}/{self.config.storage.seaweedfs.annotations_prefix}[/bold cyan]"
@@ -1789,6 +2061,7 @@ class InteractiveTUISession:
         table.add_row(
             "/extract [s] [d] [-W]", "Pipeline", "Extract Oracle snapshot (supports schema, days, --seaweed, --no-cache, --force-upload)"
         )
+        table.add_row("/update [h|d] [-W] [-C]", "Pipeline", "Fast incremental update of recently modified objects, stubs & S3")
         table.add_row("/seaweed [status|push|pull|sync]", "SeaweedFS", "Check SeaweedFS S3 status, push, pull, or bi-directional sync")
         table.add_row("/serve [port|stop]", "Web Studio", "Launch Web Studio with browser editor and live sync")
         table.add_row("/git [status|pull|sync]", "GitLab/Git", "Check sync status, pull updates, or commit & push metadata")

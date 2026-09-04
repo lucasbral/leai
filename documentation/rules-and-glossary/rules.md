@@ -40,12 +40,44 @@ leai rule add "CLIENTE_ATIVO" \
 
 ---
 
-### 3. `leai rule show <TERM>`
+### 3. `leai rule del <TERM>` (ou `delete`)
+Remove um termo ou regra do glossário local e do bucket SeaweedFS.
+
+```bash
+leai rule del CLIENTE_ATIVO
+```
+
+---
+
+### 4. `leai rule show <TERM>`
 Exibe a ficha completa de uma regra de negócio cadastrada, incluindo tabela associada, filtro SQL canônico e metadados.
 
 ```bash
 leai rule show CLIENTE_ATIVO
 ```
+
+---
+
+## ☁️ Sincronização Contínua com SeaweedFS (S3)
+
+Se o SeaweedFS estiver configurado no `leai.yml` (ou com a flag `-W` / `--seaweed`), o glossário corporativo é automaticamente gerenciado na nuvem:
+
+- **Persistência Imediata**: Toda inclusão (`leai rule add`) ou exclusão (`leai rule del`) salva no arquivo local e envia para a chave `annotations/glossary.yml` no bucket S3.
+- **Pipelines Automáticos (`annotate` e `update`)**: Os comandos `leai annotate` e `leai update` realizam a **mesclagem não destrutiva** entre o glossário local e o remoto. Se houver divergências de definição para um mesmo termo, a definição do SeaweedFS é priorizada para proteger o conhecimento institucional, unificando tags e exemplos.
+- **Modo Desconectado / `--no-cache`**: A IA no terminal e os subagentes carregam o glossário diretamente do SeaweedFS se o arquivo local não existir.
+
+---
+
+## 💻 Comandos no Terminal Interativo (TUI Copilot)
+
+Durante a sessão interativa (`leai chat`), você pode gerenciar o glossário sem sair do console:
+
+| Comando | Descrição |
+| :--- | :--- |
+| `/rule list` | Exibe tabela visual formatada com todos os termos e regras cadastrados. |
+| `/rule add [termo]` | Formulário guiado com prompts interativos para cadastrar termo, definição, tabela e filtro SQL. |
+| `/rule del <termo>` | Remove o termo especificado do glossário local e do bucket SeaweedFS. |
+| `/rule find <termo>` | Busca termos no glossário por relevância e similaridade semântica. |
 
 ---
 

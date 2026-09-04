@@ -4,6 +4,18 @@ Todas as alterações notáveis no projeto **LEAI** são documentadas nesta pág
 
 ---
 
+## [0.2.19] — 2026
+
+### 🌟 Adicionado
+* **Comando `leai update` na CLI e `/update` no TUI:** Extração incremental cirúrgica de objetos modificados no Oracle em janelas de horas (`--hours`) ou dias (`--days`), mesclando metadados técnicos com a foto consolidada de schema e enviando deltas ao SeaweedFS.
+* **Preservação e Mesclagem de Anotações do SeaweedFS:** Sincronização inteligente onde descrições, tags, regras de negócio e comentários de colunas existentes no SeaweedFS nunca são perdidos nem sobrescritos.
+* **Sincronização Contínua do `GLOSSARY.yml` no SeaweedFS:** Sincronização automática e persistência em nuvem do glossário de negócio corporativo em `annotations/glossary.yml`.
+* **Comandos `leai rule del` (CLI) e `/rule del` (TUI):** Exclusão de termos de negócio com remoção sincronizada no bucket SeaweedFS.
+* **Mesclagem Não Destrutiva de Regras (`merge_glossaries`):** Priorização de definições centrais do SeaweedFS em divergências e união de tags e filtros canônicos.
+* **Autocompletar no TUI:** Autocomplete aprimorado para `/update` e `/rule [list|add|del|find]`.
+
+---
+
 ## [0.2.18] — 2026
 
 ### 🌟 Adicionado

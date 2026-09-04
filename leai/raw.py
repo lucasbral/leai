@@ -179,6 +179,40 @@ def _construct_schema_metadata(data: dict[str, Any], schema_name: str = "") -> S
     )
 
 
+def merge_schema_metadata(base: SchemaMetadata, delta: SchemaMetadata) -> SchemaMetadata:
+    """Merges modified or newly added objects from delta into base SchemaMetadata."""
+    merged = base.model_copy(deep=True)
+    if not merged.schema_name and delta.schema_name:
+        merged.schema_name = delta.schema_name
+
+    def _merge_list(base_list: list, delta_list: list, key_fn=lambda x: x.name.upper()) -> list:
+        by_key = {key_fn(item): idx for idx, item in enumerate(base_list)}
+        res = list(base_list)
+        for item in delta_list:
+            k = key_fn(item)
+            if k in by_key:
+                res[by_key[k]] = item
+            else:
+                res.append(item)
+                by_key[k] = len(res) - 1
+        return res
+
+    merged.tables = _merge_list(merged.tables, delta.tables)
+    merged.views = _merge_list(merged.views, delta.views)
+    merged.mviews = _merge_list(merged.mviews, delta.mviews)
+    merged.code_objects = _merge_list(
+        merged.code_objects,
+        delta.code_objects,
+        key_fn=lambda x: f"{x.object_type.upper()}:{x.name.upper()}",
+    )
+    merged.triggers = _merge_list(merged.triggers, delta.triggers)
+    merged.sequences = _merge_list(merged.sequences, delta.sequences)
+    merged.indexes = _merge_list(merged.indexes, delta.indexes)
+    merged.synonyms = _merge_list(merged.synonyms, delta.synonyms)
+
+    return merged
+
+
 def save_raw_schema(
     schema: SchemaMetadata,
     raw_path: Path,
@@ -186,6 +220,7 @@ def save_raw_schema(
     storage: Any = None,
     local_cache: bool = True,
     force_upload: bool = False,
+    is_delta: bool = False,
 ) -> list[Path]:
     saved_files: list[Path] = []
 
@@ -241,11 +276,23 @@ def save_raw_schema(
 
         # 9. Consolidated Schema Snapshot (written for fast TUI/CLI startup cache)
         snapshot_path = target_path / "_schema.json"
-        _write_json(snapshot_path, schema.model_dump())
+        if is_delta and snapshot_path.exists():
+            try:
+                raw_data = json.loads(snapshot_path.read_text(encoding="utf-8"))
+                base_meta = _construct_schema_metadata(raw_data, schema_name=schema.schema_name)
+                full_schema = merge_schema_metadata(base_meta, schema)
+                _write_json(snapshot_path, full_schema.model_dump())
+            except Exception:
+                _write_json(snapshot_path, schema.model_dump())
+        else:
+            _write_json(snapshot_path, schema.model_dump())
 
     if storage is not None:
         try:
-            storage.save_raw_schema(schema, multi_schema=multi_schema, force=force_upload)
+            if is_delta:
+                storage.save_raw_schema(schema, multi_schema=multi_schema, force=force_upload, is_delta=True)
+            else:
+                storage.save_raw_schema(schema, multi_schema=multi_schema, force=force_upload)
         except Exception as exc:
             import sys
 

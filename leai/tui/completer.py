@@ -11,6 +11,7 @@ SLASH_COMMANDS: list[tuple[str, str]] = [
     ("/doc", "Open in-terminal YAML annotation & documentation editor"),
     ("/rule", "Manage global business glossary and canonical domain rules"),
     ("/extract", "Extract fresh metadata snapshot from Oracle database"),
+    ("/update", "Fast incremental update of recently modified objects, stubs & S3"),
     ("/compile", "Compile Markdown documentation in docs/"),
     ("/annotate", "Synchronize YAML annotation stubs in annotations/"),
     ("/enrich", "Auto-enrich business descriptions using AI / LLM"),
@@ -200,6 +201,72 @@ class LeaiCompleter(Completer):
                             display=flag_name,
                             display_meta=flag_desc,
                         )
+                return
+
+            # Sub-argument completion for /update (Flags and Schemas)
+            if cmd_name == "/update":
+                upd_flags = [
+                    ("--hours", "Extract objects modified in the last N hours"),
+                    ("-H", "Short for --hours"),
+                    ("--days", "Extract objects modified in the last N days"),
+                    ("-d", "Short for --days"),
+                    ("--compile", "Also recompile Markdown documentation for updated objects"),
+                    ("-C", "Short for --compile"),
+                    ("--seaweed", "Save RAW delta and annotations to SeaweedFS S3 storage"),
+                    ("-W", "Short for --seaweed"),
+                    ("--no-cache", "Operate directly with SeaweedFS without local files"),
+                    ("--force-upload", "Force upload all objects (bypasses SHA-256 manifest)"),
+                    ("-F", "Short for --force-upload"),
+                ]
+                if word_before_cursor.startswith("-"):
+                    for flag_name, flag_desc in upd_flags:
+                        if flag_name.startswith(word_before_cursor):
+                            yield Completion(
+                                text=flag_name,
+                                start_position=-len(word_before_cursor),
+                                display=flag_name,
+                                display_meta=flag_desc,
+                            )
+                    return
+
+                schema_query = word_before_cursor.upper()
+                for s_name in self._schemas_list:
+                    if s_name != "ALL" and s_name.startswith(schema_query):
+                        yield Completion(
+                            text=s_name,
+                            start_position=-len(word_before_cursor),
+                            display=s_name,
+                            display_meta="Configured Schema (leai.yml)",
+                        )
+
+                for flag_name, flag_desc in upd_flags:
+                    if flag_name.startswith(word_before_cursor):
+                        yield Completion(
+                            text=flag_name,
+                            start_position=-len(word_before_cursor),
+                            display=flag_name,
+                            display_meta=flag_desc,
+                        )
+                return
+
+            # Sub-argument completion for /rule (list, add, del, find)
+            if cmd_name in ("/rule", "/rules"):
+                if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
+                    rule_query = parts[1].lower() if len(parts) > 1 else ""
+                    rule_options = [
+                        ("list", "List all defined business glossary terms and rules"),
+                        ("add", "Register or update a business glossary term in annotations & SeaweedFS"),
+                        ("del", "Delete a business glossary term from annotations & SeaweedFS"),
+                        ("find", "Search glossary terms by keyword or concept"),
+                    ]
+                    for r_cmd, r_desc in rule_options:
+                        if r_cmd.startswith(rule_query):
+                            yield Completion(
+                                text=r_cmd,
+                                start_position=-len(word_before_cursor),
+                                display=r_cmd,
+                                display_meta=r_desc,
+                            )
                 return
 
             # Sub-argument completion for /annotate (SeaweedFS flags)

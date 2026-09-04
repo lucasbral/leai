@@ -54,11 +54,12 @@ leai chat --web
 | :--- | :--- | :--- |
 | `/copy [all\|code\|N]` | Clipboard | Copy last AI response or specific code block directly to OS clipboard. |
 | `/doc [obj]` | Documentation | Open interactive in-terminal YAML annotation & documentation editor. |
-| `/rule [list\|add\|find]` | Glossary | Manage global business rules and canonical domain filters. |
+| `/rule [list\|add\|del\|find]` | Glossary | Manage global business rules, canonical domain filters & SeaweedFS sync. |
 | `/enrich [obj]` | AI Studio | Auto-enrich business descriptions & rules with LLM. |
 | `/compile [obj]` | Pipeline | Compile final Markdown docs in `docs/` (supports single object). |
 | `/annotate [-W]` | Pipeline | Synchronize YAML annotation stubs in `annotations/` and/or SeaweedFS. |
 | `/extract [s\|d\|-W]` | Pipeline | Connect to Oracle and extract fresh raw metadata snapshot. |
+| `/update [h\|d\|-W]` | Pipeline | Fast incremental delta update for modified objects, annotations & S3. |
 | `/seaweed [status\|push\|pull\|sync]` | SeaweedFS | Check SeaweedFS S3 status, push, pull, or bi-directional sync. |
 | `/serve [port\|stop]` | Web Studio | Launch interactive Web Studio with in-browser editor & real-time sync. |
 | `/git [status\|pull\|sync]` | GitOps | Check Git commit status, pull updates, or sync metadata with remote. |

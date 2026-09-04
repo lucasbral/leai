@@ -14,23 +14,64 @@ def load_annotation(
     obj_folder: str = "",
     obj_name: str = "",
 ) -> ObjectAnnotation:
+    remote_ann: ObjectAnnotation | None = None
     if storage is not None and schema_name and obj_folder and obj_name:
         try:
-            remote_ann = storage.load_annotation(schema_name, obj_folder, obj_name)
-            if remote_ann.description or remote_ann.columns or remote_ann.business_rules:
-                save_annotation(file_path, remote_ann)
-                return remote_ann
+            r = storage.load_annotation(schema_name, obj_folder, obj_name)
+            if isinstance(r, ObjectAnnotation) and (r.description or r.columns or r.business_rules):
+                remote_ann = r
         except Exception:
             pass
 
-    if not file_path.exists():
-        return ObjectAnnotation()
-    try:
-        raw = yaml.safe_load(file_path.read_text(encoding="utf-8"))
-        if isinstance(raw, dict):
-            return ObjectAnnotation.model_validate(raw)
-    except Exception as exc:
-        print(f"Warning: Error loading annotation file '{file_path}': {exc}", file=sys.stderr)
+    local_ann: ObjectAnnotation | None = None
+    if file_path.exists():
+        try:
+            raw = yaml.safe_load(file_path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                local_ann = ObjectAnnotation.model_validate(raw)
+        except Exception as exc:
+            print(f"Warning: Error loading annotation file '{file_path}': {exc}", file=sys.stderr)
+
+    if remote_ann is not None and local_ann is not None:
+        # Merge remote and local annotations, preserving human descriptions and comments from both!
+        merged_desc = remote_ann.description or local_ann.description or ""
+
+        # Merge column comments: prefer non-empty comments from either
+        merged_cols = dict(local_ann.columns)
+        for col, desc in remote_ann.columns.items():
+            if desc:
+                merged_cols[col] = desc
+            elif col not in merged_cols:
+                merged_cols[col] = ""
+
+        def _merge_lists(a: list[str], b: list[str]) -> list[str]:
+            seen = set()
+            res = []
+            for item in a + b:
+                if item and item not in seen:
+                    seen.add(item)
+                    res.append(item)
+            return res
+
+        merged_ann = ObjectAnnotation(
+            description=merged_desc,
+            tags=_merge_lists(remote_ann.tags, local_ann.tags),
+            business_rules=_merge_lists(remote_ann.business_rules, local_ann.business_rules),
+            use_cases=_merge_lists(remote_ann.use_cases, local_ann.use_cases),
+            related_objects=_merge_lists(remote_ann.related_objects, local_ann.related_objects),
+            warnings=_merge_lists(remote_ann.warnings, local_ann.warnings),
+            columns=merged_cols,
+        )
+        save_annotation(file_path, merged_ann)
+        return merged_ann
+
+    if remote_ann is not None:
+        save_annotation(file_path, remote_ann)
+        return remote_ann
+
+    if local_ann is not None:
+        return local_ann
+
     return ObjectAnnotation()
 
 
@@ -72,30 +113,32 @@ def ensure_annotation_stub(
     obj_name: str = "",
 ) -> ObjectAnnotation:
     column_names = column_names or []
-    if file_path.exists() or (storage and schema_name and obj_folder and obj_name):
-        existing = load_annotation(
-            file_path,
-            storage=storage,
-            schema_name=schema_name,
-            obj_folder=obj_folder,
-            obj_name=obj_name,
-        )
-        if existing.description or existing.columns or existing.business_rules or file_path.exists():
-            updated = False
-            for col in column_names:
-                if col not in existing.columns:
-                    existing.columns[col] = ""
-                    updated = True
-            if updated:
-                save_annotation(
-                    file_path,
-                    existing,
-                    storage=storage,
-                    schema_name=schema_name,
-                    obj_folder=obj_folder,
-                    obj_name=obj_name,
-                )
-            return existing
+    existing = load_annotation(
+        file_path,
+        storage=storage,
+        schema_name=schema_name,
+        obj_folder=obj_folder,
+        obj_name=obj_name,
+    )
+    if existing.description or existing.columns or existing.business_rules or file_path.exists():
+        updated = False
+        if not existing.description and db_comment:
+            existing.description = db_comment
+            updated = True
+        for col in column_names:
+            if col not in existing.columns:
+                existing.columns[col] = ""
+                updated = True
+        if updated:
+            save_annotation(
+                file_path,
+                existing,
+                storage=storage,
+                schema_name=schema_name,
+                obj_folder=obj_folder,
+                obj_name=obj_name,
+            )
+        return existing
 
     cols_dict = {col: "" for col in column_names}
     annotation = ObjectAnnotation(

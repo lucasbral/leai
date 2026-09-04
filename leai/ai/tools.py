@@ -374,6 +374,17 @@ def search_business_documentation(
         from leai.glossary import load_glossary, search_glossary
 
         glossary = load_glossary(config.annotationsPath)
+        if not glossary.terms and (config.storage.seaweedfs.enabled or config.storage.seaweedfs.endpoint_url):
+            try:
+                from leai.storage import SeaweedFSStorage
+
+                storage = SeaweedFSStorage(config.storage.seaweedfs)
+                remote_glossary = storage.load_glossary()
+                if remote_glossary.terms:
+                    glossary = remote_glossary
+            except Exception:
+                pass
+
         gloss_matches = search_glossary(glossary, q_raw)
         for g_term, g_score in gloss_matches[:5]:
             item_key = f"GLOBAL.{g_term.term.upper()}"
