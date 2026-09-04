@@ -792,7 +792,7 @@ def search_column_comments(
 
     tokens = _extract_search_tokens(query)
     target_types = _parse_target_types(object_type)
-    target_table = table_name.strip().upper() if table_name else None
+    target_table = table_name.strip().lstrip("@").upper() if table_name else None
 
     matches: list[dict[str, Any]] = []
 
@@ -928,7 +928,7 @@ def get_table_schema(
     config: LeaiConfig,
     table_name: str,
 ) -> dict[str, Any]:
-    raw_name = table_name.strip().upper()
+    raw_name = table_name.strip().lstrip("@").upper()
     target_schema: str | None = None
     target_name = raw_name
     if "." in raw_name:
@@ -1345,6 +1345,10 @@ def execute_tool_call(
 ) -> str:
     """Dispatches and executes the requested database tool call and returns a JSON string response."""
     try:
+        # Sanitize any @ prefixes passed by LLM due to user @mentions in chat/terminal
+        for k in ("table_name", "object_name", "package_name", "subprogram_name"):
+            if k in arguments and isinstance(arguments[k], str):
+                arguments[k] = arguments[k].lstrip("@").strip()
         if tool_name == "delegate_to_specialist":
             from leai.ai.subagents import execute_subagent
 

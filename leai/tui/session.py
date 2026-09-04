@@ -9,6 +9,7 @@ from pathlib import Path
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+from prompt_toolkit.filters import has_completions
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.history import FileHistory, InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings
@@ -130,6 +131,47 @@ class InteractiveTUISession:
             """Inserts newline on Alt+Enter or Escape+Enter."""
             event.current_buffer.insert_text("\n")
 
+        @kb.add("enter", filter=has_completions)
+        def _(event):
+            """Applies selected completion and adds trailing space without submitting the prompt."""
+            b = event.current_buffer
+            if b.complete_state:
+                if b.complete_state.current_completion:
+                    b.apply_completion(b.complete_state.current_completion)
+                elif b.complete_state.completions:
+                    b.apply_completion(b.complete_state.completions[0])
+                b.cancel_completion()
+                b.insert_text(" ")
+            else:
+                b.validate_and_handle()
+
+        @kb.add("tab", filter=has_completions)
+        def _(event):
+            """Fills highlighted completion and appends a trailing space without jumping lines."""
+            b = event.current_buffer
+            if b.complete_state:
+                if b.complete_state.current_completion:
+                    b.apply_completion(b.complete_state.current_completion)
+                elif b.complete_state.completions:
+                    b.apply_completion(b.complete_state.completions[0])
+                b.cancel_completion()
+                b.insert_text(" ")
+
+        @kb.add("down", filter=has_completions)
+        def _(event):
+            """Navigates to the next completion in the dropdown list."""
+            event.current_buffer.complete_next()
+
+        @kb.add("up", filter=has_completions)
+        def _(event):
+            """Navigates to the previous completion in the dropdown list."""
+            event.current_buffer.complete_previous()
+
+        @kb.add("escape", filter=has_completions)
+        def _(event):
+            """Dismisses completion dropdown without selecting."""
+            event.current_buffer.cancel_completion()
+
         if is_tty:
             try:
                 self.prompt_session = PromptSession(
@@ -150,6 +192,7 @@ class InteractiveTUISession:
                     style=PT_STYLE,
                     auto_suggest=AutoSuggestFromHistory(),
                     complete_while_typing=True,
+                    key_bindings=kb,
                     input=DummyInput(),
                     output=DummyOutput(),
                 )
@@ -163,6 +206,7 @@ class InteractiveTUISession:
                 style=PT_STYLE,
                 auto_suggest=AutoSuggestFromHistory(),
                 complete_while_typing=True,
+                key_bindings=kb,
                 input=DummyInput(),
                 output=DummyOutput(),
             )
@@ -684,7 +728,8 @@ class InteractiveTUISession:
             return True
 
         if cmd == "/init":
-            self._run_init()
+            force = len(parts) > 1 and parts[1].strip().lower() in ("--force", "-f", "force")
+            self._run_init(force=force)
             return True
 
         if cmd in ("/audit", "/log", "/tools"):
@@ -1460,19 +1505,27 @@ class InteractiveTUISession:
         except Exception:
             console.print()
 
-    def _run_init(self) -> None:
-        """Informs or initializes leai.yml."""
+    def _run_init(self, force: bool = False) -> None:
+        """Informs or initializes leai.yml with interactive overwrite confirmation."""
+        from rich.prompt import Confirm
+
+        from leai.template import write_default_config
+
         out_file = Path("leai.yml")
-        if out_file.exists():
-            console.print(f"[green]✓ Configuration file already exists at:[/green] [bold cyan]{out_file.resolve()}[/bold cyan]\n")
-        else:
-            example_path = Path(__file__).resolve().parent.parent.parent / "leai.example.yml"
-            if example_path.exists():
-                content = example_path.read_text(encoding="utf-8")
-            else:
-                content = "# LEAI Configuration\n"
-            out_file.write_text(content, encoding="utf-8")
-            console.print(f"[green]✓ Configuration file created at:[/green] [bold cyan]{out_file.resolve()}[/bold cyan]\n")
+        if out_file.exists() and not force:
+            console.print(f"[yellow]O arquivo de configuração já existe em:[/yellow] [bold cyan]{out_file.resolve()}[/bold cyan]")
+            try:
+                overwrite = Confirm.ask("[bold yellow]Deseja sobrescrever com o template padrão atualizado?[/bold yellow]", default=False)
+            except (EOFError, KeyboardInterrupt, OSError):
+                console.print("\n[dim]Operação cancelada.[/dim]\n")
+                return
+            if not overwrite:
+                console.print("[dim]Operação cancelada. O arquivo atual foi mantido.[/dim]\n")
+                return
+
+        write_default_config(out_file, overwrite=True)
+        console.print(f"[green]✓ Arquivo de configuração criado/atualizado em:[/green] [bold cyan]{out_file.resolve()}[/bold cyan]")
+        console.print("[dim]Layout atualizado com suporte a Ollama, SeaweedFS, Git e Oracle DSN.[/dim]\n")
 
     def _render_help(self) -> None:
         table = Table(show_header=True, header_style="bold #74c7ec", box=box.ROUNDED)
@@ -1806,6 +1859,9 @@ class InteractiveTUISession:
         turn_audit = self.audit_logger.record_turn(
             user_prompt=user_input,
             ai_response=reply,
+            system_prompt=getattr(self.session, "last_system_prompt", ""),
+            rag_context=getattr(self.session, "last_rag_context", ""),
+            messages=getattr(self.session, "last_working_messages", []),
             provider=self.provider_name,
             model=self.client.model if self.client else "",
             latency_seconds=self.last_latency,

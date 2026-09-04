@@ -100,6 +100,14 @@ def write_rag_json_file(*args, **kwargs):
     return fn(*args, **kwargs)
 
 
+def _resolve_storage(cfg: LeaiConfig, seaweed_flag: bool = False):
+    if seaweed_flag or cfg.storage.seaweedfs.enabled:
+        from leai.storage import SeaweedFSStorage
+
+        return SeaweedFSStorage(cfg.storage.seaweedfs)
+    return None
+
+
 def _calculate_risk_level(*args, **kwargs):
     from leai.docs import _calculate_risk_level as fn
 
@@ -237,37 +245,9 @@ def init(
         console.print(f"[yellow]The file [bold]{output}[/bold] already exists. Use [bold]--force[/bold] to overwrite.[/yellow]")
         raise typer.Exit(code=1)
 
-    example_path = Path(__file__).resolve().parent.parent / "leai.example.yml"
-    if example_path.exists():
-        content = example_path.read_text(encoding="utf-8")
-    else:
-        content = """# LEAI Configuration
-dsn: "oracle://${DB_USER}:${DB_PASS}@${DB_HOST}:1521/${DB_SERVICE}"
-schemas:
-  - HR
-rawPath: "./raw"
-annotationsPath: "./annotations"
-docPath: "./docs"
-object_types:
-  - tables
-  - views
-  - mviews
-  - procedures
-  - functions
-  - packages
-  - triggers
-  - sequences
-  - indexes
-  - synonyms
-ai:
-  default_provider: "openai"
-  temperature: 0.2
-  providers:
-    openai:
-      api_key: "${OPENAI_API_KEY}"
-      model: "gpt-4o-mini"
-"""
-    output.write_text(content, encoding="utf-8")
+    from leai.template import write_default_config
+
+    write_default_config(output, overwrite=True)
     console.print(f"[green]✓ Configuration file created successfully at:[/green] [bold cyan]{output}[/bold cyan]")
     console.print("[dim]Edit the file with your Oracle credentials and AI keys before running 'leai extract'.[/dim]")
 
@@ -318,6 +298,7 @@ def extract(
     schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to extract (overrides leai.yml)"),
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to extract (e.g. tables, views, procedures)"),
     days: int = typer.Option(None, "--days", "-d", help="Extract only objects modified in the last N days (incremental extraction)"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Save RAW snapshots directly to SeaweedFS S3 storage"),
 ) -> None:
     """Extracts raw technical snapshot from Oracle database into rawPath."""
     start_time = time.perf_counter()
@@ -330,6 +311,17 @@ def extract(
     except ConfigError as exc:
         console.print(f"[red]Config error:[/red] {exc}")
         raise typer.Exit(code=1)
+
+    storage = _resolve_storage(cfg, seaweed)
+    if storage:
+        try:
+            storage.ensure_bucket_exists()
+            console.print(
+                f"[cyan]SeaweedFS Storage:[/cyan] [bold green]Active[/bold green] (Endpoint: {cfg.storage.seaweedfs.endpoint_url}, Bucket: {cfg.storage.seaweedfs.bucket})\n"
+            )
+        except Exception as exc:
+            console.print(f"[red]SeaweedFS error:[/red] {exc}")
+            raise typer.Exit(code=1)
 
     try:
         connection = oracledb.connect(**_build_connect_kwargs(cfg.dsn))
@@ -396,7 +388,7 @@ def extract(
                     totals["indexes"] += len(schema_meta.indexes)
                     totals["synonyms"] += len(schema_meta.synonyms)
 
-                    save_raw_schema(schema_meta, cfg.rawPath, multi_schema=True)
+                    save_raw_schema(schema_meta, cfg.rawPath, multi_schema=True, storage=storage)
 
                     if overall_task is not None:
                         progress.advance(overall_task, 1)
@@ -408,12 +400,16 @@ def extract(
             connection.close()
 
         elapsed = time.perf_counter() - start_time
+        output_paths = {"RAW Snapshot": cfg.rawPath}
+        if storage:
+            output_paths["SeaweedFS Bucket"] = f"{cfg.storage.seaweedfs.bucket}/{cfg.storage.seaweedfs.raw_prefix}"
+
         _print_final_summary_panel(
             title="RAW Extraction Completed",
             total_schemas=len(target_schemas),
             totals=totals,
             elapsed_seconds=elapsed,
-            output_paths={"RAW Snapshot": cfg.rawPath},
+            output_paths=output_paths,
         )
     except Exception as exc:
         console.print(f"[red]Error during RAW extraction:[/red] {exc}")
@@ -425,6 +421,7 @@ def annotate(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
     schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to sync (overrides leai.yml)"),
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to sync (e.g. tables, views, procedures)"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Sync annotations with SeaweedFS S3 storage"),
 ) -> None:
     """Generates/synchronizes YAML annotation stubs in annotationsPath from rawPath (Offline)."""
     start_time = time.perf_counter()
@@ -438,10 +435,21 @@ def annotate(
         console.print(f"[red]Config error:[/red] {exc}")
         raise typer.Exit(code=1)
 
+    storage = _resolve_storage(cfg, seaweed)
+    if storage:
+        try:
+            storage.ensure_bucket_exists()
+            console.print(
+                f"[cyan]SeaweedFS Storage:[/cyan] [bold green]Active[/bold green] (Endpoint: {cfg.storage.seaweedfs.endpoint_url}, Bucket: {cfg.storage.seaweedfs.bucket})\n"
+            )
+        except Exception as exc:
+            console.print(f"[red]SeaweedFS error:[/red] {exc}")
+            raise typer.Exit(code=1)
+
     try:
         console.print(f"[cyan]Loading snapshots from[/cyan] [bold]{cfg.rawPath}[/bold]...\n")
         target_schemas = cfg.schemas if not cfg.is_all_schemas else None
-        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas)
+        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage)
         is_multi = len(schemas_meta) > 1
 
         totals = {
@@ -504,6 +512,7 @@ def annotate(
                     multi_schema=True,
                     object_types=cfg.object_types,
                     progress_callback=_on_ann_progress,
+                    storage=storage,
                 )
                 total_ann += len(generated_ann)
 
@@ -514,14 +523,18 @@ def annotate(
                     )
 
         elapsed = time.perf_counter() - start_time
+        out_paths = {
+            "Synchronized YAML Annotations": cfg.annotationsPath,
+        }
+        if storage:
+            out_paths["SeaweedFS Annotations"] = f"{cfg.storage.seaweedfs.bucket}/{cfg.storage.seaweedfs.annotations_prefix}"
+
         _print_final_summary_panel(
             title="Annotation Synchronization Completed",
             total_schemas=len(schemas_meta),
             totals=totals,
             elapsed_seconds=elapsed,
-            output_paths={
-                "Synchronized YAML Annotations": cfg.annotationsPath,
-            },
+            output_paths=out_paths,
         )
     except Exception as exc:
         console.print(f"[red]Error during annotation synchronization:[/red] {exc}")
@@ -536,6 +549,7 @@ def ask(
     ),
     model: str = typer.Option(None, "--model", "-m", help="AI model name"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load database knowledge from SeaweedFS S3 storage"),
 ) -> None:
     """Interactive AI assistant to answer technical and business questions about the database."""
     from rich.markdown import Markdown
@@ -547,7 +561,8 @@ def ask(
         console.print(f"[red]Config error:[/red] {exc}")
         raise typer.Exit(code=1)
 
-    schemas = load_raw_schemas(cfg.rawPath)
+    storage = _resolve_storage(cfg, seaweed)
+    schemas = load_raw_schemas(cfg.rawPath, storage=storage)
     if not schemas:
         console.print(f"[red]No snapshot found in '{cfg.rawPath}'. Run 'leai extract' first.[/red]")
         raise typer.Exit(code=1)
@@ -597,6 +612,7 @@ def chat(
     ),
     model: str = typer.Option(None, "--model", "-m", help="AI model name"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load schema knowledge from SeaweedFS S3 storage"),
 ) -> None:
     """Starts an interactive OpenCode-style TUI copilot with RAG, tools and @ mentions."""
     try:
@@ -605,7 +621,8 @@ def chat(
         console.print(f"[red]Config error:[/red] {exc}")
         raise typer.Exit(code=1)
 
-    schemas = load_raw_schemas(cfg.rawPath)
+    storage = _resolve_storage(cfg, seaweed)
+    schemas = load_raw_schemas(cfg.rawPath, storage=storage)
     if not schemas:
         console.print(f"[red]No snapshot found in '{cfg.rawPath}'. Run 'leai extract' first.[/red]")
         raise typer.Exit(code=1)
@@ -736,6 +753,7 @@ def default(
 def doc(
     object_name: str = typer.Argument(None, help="Name of the database object to document (e.g. EMPLOYEES, PKG_FIN)"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load snapshots from SeaweedFS S3 storage"),
 ) -> None:
     """Interactive in-terminal documentation and annotation editor."""
     try:
@@ -744,8 +762,9 @@ def doc(
         console.print(f"[red]Config error:[/red] {exc}")
         raise typer.Exit(code=1)
 
+    storage = _resolve_storage(cfg, seaweed)
     target_schemas = cfg.schemas if not cfg.is_all_schemas else None
-    schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas)
+    schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage)
     if not schemas_meta:
         console.print(f"[yellow]No snapshots found in '{cfg.rawPath}'. Run 'leai extract' first.[/yellow]")
         raise typer.Exit(code=1)
@@ -763,6 +782,7 @@ def compile(
     with_traces: bool = typer.Option(True, "--with-traces/--no-traces", help="Include dependency lineage, risk analysis and Mermaid graph"),
     rag_json: bool = typer.Option(False, "--rag-json", "--rag", help="Also export structured JSON chunks to docs/chunks/ for Vector DB"),
     depth: int = typer.Option(1, "--depth", "-d", help="Max dependency graph traversal depth (default: 1)"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Compile docs using schemas and annotations from SeaweedFS S3 storage"),
 ) -> None:
     """Compiles Markdown docs in docPath merging rawPath + annotationsPath (Offline)."""
     try:
@@ -797,10 +817,11 @@ def compile(
         console.print(f"[red]Config error:[/red] {exc}")
         raise typer.Exit(code=1)
 
+    storage = _resolve_storage(cfg, seaweed)
     try:
         console.print(f"[cyan]Loading snapshots from[/cyan] [bold]{cfg.rawPath}[/bold]...\n")
         target_schemas = cfg.schemas if not cfg.is_all_schemas else None
-        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas)
+        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage)
 
         if object_name:
             clean_obj = object_name.strip().upper()
@@ -946,6 +967,7 @@ def generate(
     with_traces: bool = typer.Option(True, "--with-traces/--no-traces", help="Include dependency lineage, risk analysis and Mermaid graph"),
     rag_json: bool = typer.Option(False, "--rag-json", "--rag", help="Also export structured JSON chunks to docs/chunks/ for Vector DB"),
     depth: int = typer.Option(1, "--depth", "-d", help="Max dependency graph traversal depth (default: 1)"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Store RAW snapshots and annotations in SeaweedFS S3 storage"),
 ) -> None:
     """Generates complete documentation (Extracts RAW -> Syncs Annotations -> Compiles Markdown)."""
     try:
@@ -975,6 +997,17 @@ def generate(
     except ConfigError as exc:
         console.print(f"[red]Config error:[/red] {exc}")
         raise typer.Exit(code=1)
+
+    storage = _resolve_storage(cfg, seaweed)
+    if storage:
+        try:
+            storage.ensure_bucket_exists()
+            console.print(
+                f"[cyan]SeaweedFS Storage:[/cyan] [bold green]Active[/bold green] (Endpoint: {cfg.storage.seaweedfs.endpoint_url}, Bucket: {cfg.storage.seaweedfs.bucket})\n"
+            )
+        except Exception as exc:
+            console.print(f"[red]SeaweedFS error:[/red] {exc}")
+            raise typer.Exit(code=1)
 
     try:
         connection = oracledb.connect(**_build_connect_kwargs(cfg.dsn))
@@ -1045,7 +1078,7 @@ def generate(
                     totals["synonyms"] += len(schema_meta.synonyms)
 
                     # 1. Save RAW Snapshot
-                    save_raw_schema(schema_meta, cfg.rawPath, multi_schema=True)
+                    save_raw_schema(schema_meta, cfg.rawPath, multi_schema=True, storage=storage)
 
                     # 2 & 3. Sync Annotations and Compile Docs with granular object progress
                     schema_total_objs = count_schema_objects(schema_meta, cfg.object_types)
@@ -1059,7 +1092,7 @@ def generate(
                         pct = int((current / total) * 100) if total else 100
                         progress.update(
                             schema_task,
-                            completed=current,
+                            completed=pct,
                             total=total,
                             description=f"Compiling [bold yellow]{s_title}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({current:,}/{total:,} objs) [dim]│ {cat} {name}[/dim]",
                         )
@@ -1090,12 +1123,17 @@ def generate(
         finally:
             connection.close()
 
+        if storage:
+            storage.push_local_to_remote(local_raw_path=cfg.rawPath, local_annotations_path=cfg.annotationsPath)
+
         elapsed = time.perf_counter() - start_time
         out_paths = {
             "RAW Snapshot": cfg.rawPath,
             "Markdown Documents": cfg.docPath,
             "Synchronized YAML Annotations": cfg.annotationsPath,
         }
+        if storage:
+            out_paths["SeaweedFS Storage"] = f"{cfg.storage.seaweedfs.bucket}"
         if rag_json:
             out_paths["RAG Vector Chunks"] = cfg.docPath / "chunks"
         _print_final_summary_panel(
@@ -1115,6 +1153,7 @@ def changes(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
     days: int = typer.Option(7, "--days", "-d", help="Filter objects modified in the last N days"),
     user: str = typer.Option(None, "--user", "-u", help="Filter by modifying user or schema"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load schemas from SeaweedFS S3 storage"),
 ) -> None:
     """Tracks and displays database objects modified in the last N days."""
     from datetime import datetime, timedelta
@@ -1125,9 +1164,10 @@ def changes(
         console.print(f"[red]Config error:[/red] {exc}")
         raise typer.Exit(code=1)
 
+    storage = _resolve_storage(cfg, seaweed)
     try:
         target_schemas = cfg.schemas if not cfg.is_all_schemas else None
-        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas)
+        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage)
         cutoff = datetime.now() - timedelta(days=days)
         results = []
 
@@ -1203,6 +1243,7 @@ def trace(
     schema: str = typer.Option(None, "--schema", "-s", help="Specific schema (if different from leai.yml)"),
     offline: bool = typer.Option(False, "--offline", help="Force dependency resolution from RAW snapshot instead of database"),
     output: Path = typer.Option(None, "--output", "-o", help="Path for output Markdown file"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load schemas from SeaweedFS S3 storage"),
 ) -> None:
     """Generates in-depth technical dossier and Mermaid.js dependency graph for a specific object."""
     from rich.tree import Tree
@@ -1228,6 +1269,7 @@ def trace(
         raise typer.Exit(code=1)
 
     target_obj = object_name.strip().upper()
+    storage = _resolve_storage(cfg, seaweed)
 
     try:
         if offline or not cfg.dsn:
@@ -1235,7 +1277,7 @@ def trace(
                 f"\n[dim]🔍 Offline Mode: Tracing dependencies for [bold yellow]{target_obj}[/bold yellow] (Depth: {depth})...[/dim]"
             )
             trace_target_schemas = [schema.strip().upper()] if schema else (cfg.schemas if not cfg.is_all_schemas else None)
-            schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=trace_target_schemas)
+            schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=trace_target_schemas, storage=storage)
             if not schemas_meta:
                 console.print(f"[red]No snapshot found in '{cfg.rawPath}'. Run 'leai extract' first.[/red]")
                 raise typer.Exit(code=1)
@@ -1249,7 +1291,7 @@ def trace(
             except Exception as live_exc:
                 console.print(f"[yellow]Warning: online connection failed ({live_exc}). Falling back to local RAW snapshot...[/yellow]")
                 trace_target_schemas = [schema.strip().upper()] if schema else (cfg.schemas if not cfg.is_all_schemas else None)
-                schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=trace_target_schemas)
+                schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=trace_target_schemas, storage=storage)
                 if not schemas_meta:
                     raise live_exc
                 trace_res = trace_raw_dependencies(schemas_meta, target_obj, max_depth=depth)
@@ -1328,6 +1370,7 @@ def enrich(
     schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to enrich (overrides leai.yml)"),
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to enrich (e.g. tables, packages)"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load and update annotations on SeaweedFS S3 storage"),
 ) -> None:
     """Uses AI (LLMs) to automatically populate and enrich business annotations in YAML."""
     start_time = time.perf_counter()
@@ -1339,8 +1382,9 @@ def enrich(
         console.print(f"[red]Config error:[/red] {exc}")
         raise typer.Exit(code=1)
 
+    storage = _resolve_storage(cfg, seaweed)
     target_schemas = cfg.schemas if not cfg.is_all_schemas else None
-    schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas)
+    schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage)
     if not schemas_meta:
         console.print(f"[red]No snapshot found in '{cfg.rawPath}'. Run 'leai extract' first.[/red]")
         raise typer.Exit(code=1)
@@ -1390,6 +1434,11 @@ def enrich(
                 target_object_types=object_types,
                 progress_callback=_on_progress,
             )
+
+        if storage:
+            with console.status("[cyan]Uploading enriched annotations to SeaweedFS...[/cyan]"):
+                pushed = storage.push_local_to_remote(local_raw_path=cfg.rawPath, local_annotations_path=cfg.annotationsPath)
+                console.print(f"[green]✓ Uploaded {pushed['annotations']} enriched annotations to SeaweedFS![/green]")
 
         elapsed = time.perf_counter() - start_time
         console.print(
@@ -1902,3 +1951,168 @@ def git_sync_command(
     else:
         console.print(f"[red]✕ Sync failed:[/red] {msg}\n")
         raise typer.Exit(code=1)
+
+
+# -----------------------------------------------------------------------------
+# SEAWEEDFS SUBCOMMAND GROUP
+# -----------------------------------------------------------------------------
+
+seaweed_app = typer.Typer(help="Manage and synchronize database metadata with SeaweedFS S3 storage.")
+app.add_typer(seaweed_app, name="seaweed")
+
+
+@seaweed_app.command("status")
+def seaweed_status_command(
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+) -> None:
+    """Test connection to SeaweedFS S3 storage and check bucket status."""
+    try:
+        cfg = load_config(config)
+    except ConfigError as exc:
+        console.print(f"[red]Config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    from leai.storage import SeaweedFSStorage
+
+    sw_cfg = cfg.storage.seaweedfs
+    if not sw_cfg.endpoint_url:
+        console.print("[yellow]Warning:[/yellow] SeaweedFS endpoint_url is not configured in leai.yml or LEAI_SEAWEED_ENDPOINT.")
+        console.print("[dim]Example: storage.seaweedfs.endpoint_url: http://localhost:8333[/dim]")
+        raise typer.Exit(code=1)
+
+    console.print(f"[cyan]Testing connection to SeaweedFS S3 at[/cyan] [bold]{sw_cfg.endpoint_url}[/bold]...")
+    storage = SeaweedFSStorage(sw_cfg)
+    res = storage.test_connection()
+
+    table = Table(show_header=True, header_style="bold cyan", box=box.ROUNDED)
+    table.add_column("Property", style="bold white")
+    table.add_column("Value", style="bold green")
+
+    table.add_row("Endpoint URL", sw_cfg.endpoint_url)
+    table.add_row("Bucket", sw_cfg.bucket)
+    table.add_row("RAW Prefix", sw_cfg.raw_prefix)
+    table.add_row("Annotations Prefix", sw_cfg.annotations_prefix)
+    table.add_row("Connection Status", "[green]OPERATIONAL[/green]" if res.get("success") else "[red]FAILED[/red]")
+    if res.get("success"):
+        table.add_row("Sample Objects Found", str(res.get("objects_found", 0)))
+    else:
+        table.add_row("Error Details", f"[red]{res.get('error')}[/red]")
+
+    console.print()
+    console.print(Panel(table, title="[bold green]SeaweedFS S3 Storage Status[/bold green]", border_style="cyan"))
+
+
+@seaweed_app.command("push")
+def seaweed_push_command(
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+) -> None:
+    """Upload local RAW snapshots and YAML annotations to SeaweedFS S3 bucket."""
+    start_time = time.perf_counter()
+    try:
+        cfg = load_config(config)
+    except ConfigError as exc:
+        console.print(f"[red]Config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    from leai.storage import SeaweedFSStorage
+
+    sw_cfg = cfg.storage.seaweedfs
+    if not sw_cfg.endpoint_url:
+        console.print("[red]Error:[/red] SeaweedFS endpoint_url is not configured.")
+        raise typer.Exit(code=1)
+
+    storage = SeaweedFSStorage(sw_cfg)
+    console.print(f"[cyan]⤒ Uploading metadata to SeaweedFS ([bold yellow]{sw_cfg.endpoint_url}/{sw_cfg.bucket}[/bold yellow])...[/cyan]\n")
+
+    with console.status("[cyan]Pushing RAW and annotations to SeaweedFS...[/cyan]"):
+        counts = storage.push_local_to_remote(local_raw_path=cfg.rawPath, local_annotations_path=cfg.annotationsPath)
+
+    elapsed = time.perf_counter() - start_time
+    console.print(
+        Panel(
+            f"[green]✓ {counts['raw']} RAW JSON files uploaded to `{sw_cfg.raw_prefix}/`[/green]\n"
+            f"[green]✓ {counts['annotations']} YAML annotation files uploaded to `{sw_cfg.annotations_prefix}/`[/green]\n"
+            f"[dim]Bucket: {sw_cfg.bucket} • Time: {elapsed:.2f}s[/dim]",
+            title="[bold green]SeaweedFS Push Completed[/bold green]",
+            border_style="green",
+        )
+    )
+
+
+@seaweed_app.command("pull")
+def seaweed_pull_command(
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+) -> None:
+    """Download RAW snapshots and YAML annotations from SeaweedFS S3 bucket to local directories."""
+    start_time = time.perf_counter()
+    try:
+        cfg = load_config(config)
+    except ConfigError as exc:
+        console.print(f"[red]Config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    from leai.storage import SeaweedFSStorage
+
+    sw_cfg = cfg.storage.seaweedfs
+    if not sw_cfg.endpoint_url:
+        console.print("[red]Error:[/red] SeaweedFS endpoint_url is not configured.")
+        raise typer.Exit(code=1)
+
+    storage = SeaweedFSStorage(sw_cfg)
+    console.print(
+        f"[cyan]⤓ Downloading metadata from SeaweedFS ([bold yellow]{sw_cfg.endpoint_url}/{sw_cfg.bucket}[/bold yellow])...[/cyan]\n"
+    )
+
+    with console.status("[cyan]Pulling RAW and annotations from SeaweedFS...[/cyan]"):
+        counts = storage.pull_remote_to_local(local_raw_path=cfg.rawPath, local_annotations_path=cfg.annotationsPath)
+
+    elapsed = time.perf_counter() - start_time
+    console.print(
+        Panel(
+            f"[green]✓ {counts['raw']} RAW JSON files downloaded to `{cfg.rawPath}`[/green]\n"
+            f"[green]✓ {counts['annotations']} YAML annotation files downloaded to `{cfg.annotationsPath}`[/green]\n"
+            f"[dim]Bucket: {sw_cfg.bucket} • Time: {elapsed:.2f}s[/dim]",
+            title="[bold green]SeaweedFS Pull Completed[/bold green]",
+            border_style="green",
+        )
+    )
+
+
+@seaweed_app.command("sync")
+def seaweed_sync_command(
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+) -> None:
+    """Bidirectional synchronization between local metadata and SeaweedFS S3 bucket."""
+    start_time = time.perf_counter()
+    try:
+        cfg = load_config(config)
+    except ConfigError as exc:
+        console.print(f"[red]Config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    from leai.storage import SeaweedFSStorage
+
+    sw_cfg = cfg.storage.seaweedfs
+    if not sw_cfg.endpoint_url:
+        console.print("[red]Error:[/red] SeaweedFS endpoint_url is not configured.")
+        raise typer.Exit(code=1)
+
+    storage = SeaweedFSStorage(sw_cfg)
+    console.print(
+        f"[cyan]🔄 Synchronizing metadata with SeaweedFS ([bold yellow]{sw_cfg.endpoint_url}/{sw_cfg.bucket}[/bold yellow])...[/cyan]\n"
+    )
+
+    with console.status("[cyan]Synchronizing with SeaweedFS...[/cyan]"):
+        pushed = storage.push_local_to_remote(local_raw_path=cfg.rawPath, local_annotations_path=cfg.annotationsPath)
+        pulled = storage.pull_remote_to_local(local_raw_path=cfg.rawPath, local_annotations_path=cfg.annotationsPath)
+
+    elapsed = time.perf_counter() - start_time
+    console.print(
+        Panel(
+            f"[green]✓ Pushed {pushed['raw']} RAW and {pushed['annotations']} annotations to SeaweedFS[/green]\n"
+            f"[green]✓ Pulled {pulled['raw']} RAW and {pulled['annotations']} annotations from SeaweedFS[/green]\n"
+            f"[dim]Bucket: {sw_cfg.bucket} • Time: {elapsed:.2f}s[/dim]",
+            title="[bold green]SeaweedFS Sync Completed[/bold green]",
+            border_style="green",
+        )
+    )

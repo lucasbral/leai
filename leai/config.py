@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 
 import yaml
@@ -44,6 +45,24 @@ class GitConfig(BaseModel):
     tracked_paths: list[str] = Field(default_factory=lambda: ["annotations", "docs", "raw", "leai.yml"])
 
 
+class SeaweedFSConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    enabled: bool = False
+    endpoint_url: str = ""
+    bucket: str = "leai"
+    access_key: str | None = None
+    secret_key: str | None = None
+    region_name: str = "us-east-1"
+    raw_prefix: str = "raw"
+    annotations_prefix: str = "annotations"
+    auto_create_bucket: bool = True
+
+
+class StorageConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    seaweedfs: SeaweedFSConfig = Field(default_factory=SeaweedFSConfig)
+
+
 class LeaiConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -58,6 +77,7 @@ class LeaiConfig(BaseModel):
     docs: dict[str, dict[str, str]] = Field(default_factory=dict)
     ai: AIConfig = Field(default_factory=AIConfig)
     git: GitConfig = Field(default_factory=GitConfig)
+    storage: StorageConfig = Field(default_factory=StorageConfig)
 
     @property
     def schema_name(self) -> str:
@@ -72,12 +92,25 @@ class ConfigError(ValueError):
     pass
 
 
+def expand_env_vars(text: str) -> str:
+    """Expands environment variables with support for ${VAR:-default} and standard $VAR / ${VAR}."""
+
+    def _replace_default(match: re.Match) -> str:
+        var_name = match.group(1)
+        default_val = match.group(2) if match.group(2) is not None else ""
+        return os.environ.get(var_name, default_val)
+
+    pattern = re.compile(r"\$\{([A-Za-z0-9_]+):-([^}]*)\}")
+    text = pattern.sub(_replace_default, text)
+    return os.path.expandvars(text)
+
+
 def load_config(config_path: Path) -> LeaiConfig:
     if not config_path.exists():
         raise ConfigError(f"Config file not found: {config_path}")
 
     raw_text = config_path.read_text(encoding="utf-8")
-    expanded_text = os.path.expandvars(raw_text)
+    expanded_text = expand_env_vars(raw_text)
     raw = yaml.safe_load(expanded_text)
     if not isinstance(raw, dict):
         raise ConfigError("Invalid config format: expected a YAML mapping")
@@ -106,6 +139,22 @@ def load_config(config_path: Path) -> LeaiConfig:
             parsed_schemas.append(str(s).strip().upper())
 
     raw["schemas"] = parsed_schemas
+
+    # Environment variables overrides for SeaweedFS
+    storage_dict = raw.setdefault("storage", {})
+    if isinstance(storage_dict, dict):
+        sw_dict = storage_dict.setdefault("seaweedfs", {})
+        if isinstance(sw_dict, dict):
+            if os.environ.get("LEAI_SEAWEED_ENABLED"):
+                sw_dict["enabled"] = os.environ["LEAI_SEAWEED_ENABLED"].strip().lower() in ("true", "1", "yes")
+            if os.environ.get("LEAI_SEAWEED_ENDPOINT"):
+                sw_dict["endpoint_url"] = os.environ["LEAI_SEAWEED_ENDPOINT"]
+            if os.environ.get("LEAI_SEAWEED_BUCKET"):
+                sw_dict["bucket"] = os.environ["LEAI_SEAWEED_BUCKET"]
+            if os.environ.get("LEAI_SEAWEED_ACCESS_KEY"):
+                sw_dict["access_key"] = os.environ["LEAI_SEAWEED_ACCESS_KEY"]
+            if os.environ.get("LEAI_SEAWEED_SECRET_KEY"):
+                sw_dict["secret_key"] = os.environ["LEAI_SEAWEED_SECRET_KEY"]
 
     try:
         config = LeaiConfig.model_validate(raw)

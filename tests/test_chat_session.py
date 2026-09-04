@@ -131,6 +131,65 @@ class ChatSessionTests(unittest.TestCase):
         self.assertEqual(short_session.messages[-1]["role"], "assistant")
         self.assertEqual(short_session.messages[-1]["content"], "Asst msg 6")
 
+    def test_session_audit_context_and_structured_output(self):
+        import json
+
+        from leai.audit import SessionAuditLogger, ToolExecutionAudit
+
+        # 1. Send query to populate ChatSession context fields
+        reply, detected = self.session.send("Explique a tabela FUNCIONARIOS")
+        self.assertTrue(len(self.session.last_system_prompt) > 0)
+        self.assertIn("HR", self.session.last_system_prompt)
+        self.assertTrue(len(self.session.last_working_messages) > 0)
+
+        # 2. Test ToolExecutionAudit structured output_data and model_thought
+        tool_json_str = json.dumps([{"col": "ID", "type": "NUMBER"}, {"col": "NAME", "type": "VARCHAR2"}])
+        audit_tool = ToolExecutionAudit(
+            step=1,
+            tool_name="get_table_columns",
+            arguments={"table_name": "FUNCIONARIOS"},
+            model_thought="Preciso checar as colunas da tabela primeiro.",
+            output_data=json.loads(tool_json_str),
+            raw_output=tool_json_str,
+            summary="2 columns found",
+            duration_seconds=0.05,
+        )
+        self.assertIsInstance(audit_tool.output_data, list)
+        self.assertEqual(audit_tool.model_thought, "Preciso checar as colunas da tabela primeiro.")
+
+        # 3. Test SessionAuditLogger with new context fields
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            logger = SessionAuditLogger(log_dir=Path(tmp_dir))
+            turn = logger.record_turn(
+                user_prompt="Explique a tabela FUNCIONARIOS",
+                ai_response=reply,
+                provider="mock",
+                model="mock-chat",
+                latency_seconds=1.23,
+                tokens_used=450,
+                rag_entities=detected,
+                tools_executed=[audit_tool],
+                system_prompt=self.session.last_system_prompt,
+                rag_context=self.session.last_rag_context,
+                messages=self.session.last_working_messages,
+            )
+
+            # Check TurnAuditRecord fields
+            self.assertEqual(turn.system_prompt, self.session.last_system_prompt)
+            self.assertEqual(turn.rag_context, self.session.last_rag_context)
+            self.assertEqual(turn.messages, self.session.last_working_messages)
+            self.assertEqual(turn.tools_executed[0].output_data[0]["col"], "ID")
+
+            # Check JSON serialization on disk
+            self.assertTrue(logger.log_file.exists())
+            saved_json = json.loads(logger.log_file.read_text(encoding="utf-8"))
+            saved_turn = saved_json["turns"][0]
+            self.assertIn("system_prompt", saved_turn)
+            self.assertIn("rag_context", saved_turn)
+            self.assertIn("messages", saved_turn)
+            self.assertIsInstance(saved_turn["tools_executed"][0]["output_data"], list)
+            self.assertEqual(saved_turn["tools_executed"][0]["model_thought"], "Preciso checar as colunas da tabela primeiro.")
+
 
 if __name__ == "__main__":
     unittest.main()

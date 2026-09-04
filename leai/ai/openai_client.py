@@ -255,6 +255,42 @@ class OpenAICompatibleClient(BaseLLMClient):
                         }
                     )
 
+                # Fallback: some local models (e.g. Ollama with Qwen) output tool calls
+                # as a JSON string inside content instead of the structured tool_calls array
+                if not tool_calls and content and tools:
+                    stripped = content.strip()
+                    if stripped.startswith("```"):
+                        first_newline = stripped.find("\n")
+                        if first_newline != -1:
+                            stripped = stripped[first_newline + 1 :]
+                        if stripped.endswith("```"):
+                            stripped = stripped[:-3].strip()
+                    try:
+                        parsed_c = json.loads(stripped)
+                        if isinstance(parsed_c, dict) and "name" in parsed_c and ("arguments" in parsed_c or "parameters" in parsed_c):
+                            tool_calls.append(
+                                {
+                                    "id": f"call_{parsed_c['name']}",
+                                    "name": parsed_c["name"],
+                                    "arguments": parsed_c.get("arguments") or parsed_c.get("parameters") or {},
+                                }
+                            )
+                            content = None
+                        elif (
+                            isinstance(parsed_c, list) and len(parsed_c) > 0 and all(isinstance(x, dict) and "name" in x for x in parsed_c)
+                        ):
+                            for i, tc_item in enumerate(parsed_c):
+                                tool_calls.append(
+                                    {
+                                        "id": f"call_{tc_item['name']}_{i}",
+                                        "name": tc_item["name"],
+                                        "arguments": tc_item.get("arguments") or tc_item.get("parameters") or {},
+                                    }
+                                )
+                            content = None
+                    except Exception:
+                        pass
+
                 return content, tool_calls
         except urllib.error.HTTPError as exc:
             err_body = exc.read().decode("utf-8", errors="replace")

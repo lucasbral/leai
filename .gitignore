@@ -21,6 +21,7 @@ annotations/
 .leai/
 .leai_sessions/
 *.log
+*.zip
 
 # IDE & OS files
 .idea/

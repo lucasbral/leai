@@ -61,9 +61,14 @@ def _is_excluded(name: str, patterns: list[str]) -> bool:
     return any(_like_pattern_to_regex(pattern.upper()).match(upper) for pattern in patterns)
 
 
+def _is_included(name: str, patterns: list[str]) -> bool:
+    upper = name.upper()
+    return any(_like_pattern_to_regex(pattern.upper()).match(upper) for pattern in patterns)
+
+
 def _should_include(name: str, config: LeaiConfig) -> bool:
     name_upper = name.upper()
-    if config.include and name_upper not in config.include:
+    if config.include and not _is_included(name_upper, config.include):
         return False
     if _is_excluded(name_upper, config.exclude):
         return False

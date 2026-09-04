@@ -15,6 +15,8 @@ class ToolExecutionAudit(BaseModel):
     step: int
     tool_name: str
     arguments: dict[str, Any] = Field(default_factory=dict)
+    model_thought: str | None = None
+    output_data: Any = None
     raw_output: str = ""
     summary: str = ""
     timestamp: str = Field(default_factory=lambda: datetime.datetime.now().isoformat())
@@ -28,6 +30,9 @@ class TurnAuditRecord(BaseModel):
     timestamp: str = Field(default_factory=lambda: datetime.datetime.now().isoformat())
     user_prompt: str
     ai_response: str
+    system_prompt: str = ""
+    rag_context: str = ""
+    messages: list[dict[str, Any]] = Field(default_factory=list)
     provider: str = ""
     model: str = ""
     latency_seconds: float = 0.0
@@ -84,12 +89,18 @@ class SessionAuditLogger:
         completion_tokens: int | None = None,
         rag_entities: list[str] | None = None,
         tools_executed: list[ToolExecutionAudit] | None = None,
+        system_prompt: str = "",
+        rag_context: str = "",
+        messages: list[dict[str, Any]] | None = None,
     ) -> TurnAuditRecord:
         """Records a new conversation turn and automatically flushes the session audit file."""
         record = TurnAuditRecord(
             turn_id=str(len(self.turns) + 1),
             user_prompt=user_prompt,
             ai_response=ai_response,
+            system_prompt=system_prompt,
+            rag_context=rag_context,
+            messages=messages or [],
             provider=provider,
             model=model,
             latency_seconds=round(latency_seconds, 3),
@@ -191,6 +202,10 @@ class SessionAuditLogger:
             lines.append(f"- **Turn Latency:** `{turn.latency_seconds}s` • **Tokens:** `{turn.tokens_used:,}`")
             if turn.rag_entities:
                 lines.append(f"- **RAG Injected Entities:** {', '.join(f'`{e}`' for e in turn.rag_entities)}")
+            if turn.rag_context:
+                lines.append(
+                    f"\n<details><summary><b>📜 RAG Context Dossier</b></summary>\n\n```markdown\n{turn.rag_context}\n```\n</details>\n"
+                )
             lines.append("")
 
             if turn.tools_executed:
@@ -198,17 +213,22 @@ class SessionAuditLogger:
                 for te in turn.tools_executed:
                     lines.append(f"##### Step {te.step}: `{te.tool_name}` ({te.duration_seconds:.3f}s)")
                     lines.append(f"- **Summary:** {te.summary or 'Completed'}")
+                    if te.model_thought:
+                        lines.append(f"- **Model Thought:**\n> {te.model_thought.strip()}")
                     lines.append("- **Input Arguments:**")
                     lines.append("```json")
                     lines.append(json.dumps(te.arguments, indent=2, ensure_ascii=False))
                     lines.append("```")
-                    lines.append("- **Raw Tool Output:**")
+                    lines.append("- **Tool Output:**")
                     lines.append("```json")
-                    try:
-                        parsed = json.loads(te.raw_output)
-                        lines.append(json.dumps(parsed, indent=2, ensure_ascii=False))
-                    except Exception:
-                        lines.append(te.raw_output)
+                    if te.output_data is not None:
+                        lines.append(json.dumps(te.output_data, indent=2, ensure_ascii=False))
+                    elif te.raw_output:
+                        try:
+                            parsed = json.loads(te.raw_output)
+                            lines.append(json.dumps(parsed, indent=2, ensure_ascii=False))
+                        except Exception:
+                            lines.append(te.raw_output)
                     lines.append("```")
                     lines.append("")
 

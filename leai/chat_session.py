@@ -30,6 +30,10 @@ class ChatSession:
         self.active_entities: set[str] = set()
         self.last_turn_tokens: int | None = None
         self.total_tokens: int = 0
+        self.last_system_prompt: str = ""
+        self.last_rag_context: str = ""
+        self.last_working_messages: list[dict[str, Any]] = []
+        self.last_tool_audits: list[Any] = []
         self.agent_engine = AgentExecutionEngine(
             schemas=schemas,
             config=config,
@@ -162,6 +166,9 @@ class ChatSession:
 
         self.last_turn_tokens = diff
         self.total_tokens += diff
+        self.last_system_prompt = combined_sys
+        self.last_rag_context = rag_context or ""
+        self.last_working_messages = list(getattr(self.agent_engine, "last_working_messages", []))
         self.last_tool_audits = list(self.agent_engine.last_tool_audits)
 
         return reply, detected
