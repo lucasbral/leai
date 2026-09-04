@@ -1,53 +1,89 @@
 # AI Commands (ask, chat, models)
 
-LEAI transforms your Oracle database catalog into an interactive knowledge base capable of answering complex engineering and business logic questions directly from your shell.
+LEAI transforms your Oracle database catalog into an interactive knowledge base capable of answering complex engineering and business logic questions directly from your terminal.
 
 ---
 
 ## 1. `leai ask <QUESTION>`
 
-Answers one-off natural language queries about your database architecture, tables, procedures, and business rules.
+Answers one-off natural language queries about database architecture, tables, procedures, and business rules with surgical context injection.
 
 ```bash
-leai ask "What is the business rule inside CALC_TERMINATION and which tables does it read?"
+leai ask "What is the business rule inside CALC_TERMINATION and which tables does it query?" -p gemini
 ```
 
-### Internal Execution Flow:
-1. LEAI parses entities and technical keywords mentioned in the user prompt.
-2. Dynamically fetches upstream/downstream lineage and definitions.
-3. Applies PL/SQL semantic compression on large package bodies to conserve context tokens.
-4. Delivers the surgical payload to the active LLM and formats the answer with rich markdown highlighting.
+### Parameters and Flags:
+
+| Parameter / Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `QUESTION` | Argument | **Required** | Natural language question regarding database logic or schema. |
+| `-p`, `--provider TEXT` | Option | From config | AI provider (`openai`, `gemini`, `claude`, `deepseek`, `ollama`, etc.). |
+| `-m`, `--model TEXT` | Option | From config | Target model identifier. |
+| `-c`, `--config PATH` | Option | `leai.yml` | Path to `leai.yml`. |
+| `--seaweed` | Flag | `False` | Resolves metadata from remote S3 bucket. |
+| `--no-cache` | Flag | `False` | Operates in 100% remote mode without local files. |
 
 ---
 
 ## 2. `leai chat`
 
-Launches an interactive, stateful terminal console with the autonomous database copilot.
+Launches an interactive, stateful terminal console styled with Catppuccin Mocha themes, persistent memory, smart autocompletion, and live tool calling.
 
 ```bash
-leai chat
+# Terminal interactive copilot:
+leai chat -p gemini -m gemini-2.0-flash
+
+# Launch and open Web Chat Studio directly in browser:
+leai chat --web
 ```
 
-### Key Capabilities:
-* **Autonomous Tool-Calling:** The agent can independently invoke offline memory tools (`search_database_objects`, `view_object_definition`, `trace_object_lineage`) during reasoning turns before formulating its answer.
-* **Session Memory:** Retains prior questions and context within the active terminal session.
-* **Console Commands:**
-  * `/help`: Displays available chat controls.
-  * `/clear`: Clears conversation history.
-  * `/exit` or `quit`: Terminates the session.
+### Parameters and Flags:
+
+| Parameter / Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `-p`, `--provider TEXT` | Option | From config | Active AI provider. |
+| `-m`, `--model TEXT` | Option | From config | Target AI model identifier. |
+| `-c`, `--config PATH` | Option | `leai.yml` | Path to configuration file. |
+| `-w`, `--web` | Flag | `False` | Launches Web Studio server and opens chat in browser. |
+| `--seaweed` | Flag | `False` | Resolves metadata from remote S3 storage. |
+| `--no-cache` | Flag | `False` | Runs purely in memory. |
+
+### 📋 In-Session Slash Commands:
+
+| Command | Category | Description |
+| :--- | :--- | :--- |
+| `/copy [all\|code\|N]` | Clipboard | Copy last AI response or specific code block directly to OS clipboard. |
+| `/doc [obj]` | Documentation | Open interactive in-terminal YAML annotation & documentation editor. |
+| `/enrich [obj]` | AI Studio | Auto-enrich business descriptions & rules with LLM. |
+| `/compile [obj]` | Pipeline | Compile final Markdown docs in `docs/` (supports single object). |
+| `/annotate` | Pipeline | Synchronize YAML annotation stubs in `annotations/`. |
+| `/extract [s\|ALL]` | Pipeline | Connect to Oracle and extract fresh raw metadata snapshot. |
+| `/serve [port\|stop]` | Web Studio | Launch interactive Web Studio with in-browser editor & real-time sync. |
+| `/trace <obj>` | Lineage | Perform inline dependency lineage & impact X-ray with Mermaid. |
+| `/tables` | Inspection | List all tables with column counts and primary keys. |
+| `/schema [s]` | Inspection | Show comprehensive overview of all catalog objects. |
+| `/changes [d]` | Inspection | Inspect database objects modified in last N days (Default: 7). |
+| `/models [p]` | AI Config | List all available AI models returned by provider API. |
+| `/model <p> [m]` | AI Config | Switch AI provider and model at runtime. |
+| `/audit [last\|session\|export]`| Audit & Logs | Inspect AI tool call trace, latency & session audit log. |
+| `/tools` | Audit & Logs | Quick viewer for last turn's tool execution inputs/outputs. |
+| `/save [file.md]` | Session | Export current conversation transcript to Markdown. |
+| `/check` | Diagnostics | Verify Oracle connection, metadata snapshots, docs and AI status. |
+| `/clear` | Session | Clear conversation memory and reset terminal screen. |
+| `/exit`, `/quit` | Session | Exit LEAI interactive copilot. |
 
 ---
 
 ## 3. `leai models`
 
-Lists all supported LLM providers, recommended models, and benchmarks API latency and credential health.
+Tests credentials, lists available models returned by provider APIs, and benchmarks roundtrip REST latency.
 
 ```bash
-leai models
+leai models -p gemini
+leai models -p openai
 ```
 
-### Diagnostic Output:
-Provides a status table highlighting:
-* Provider names (OpenAI, Gemini, Claude, DeepSeek, Ollama, AWS Bedrock, etc.).
-* API key detection status (`CONFIGURED` or `NOT DETECTED`).
-* Real-time network latency in milliseconds.
+| Parameter / Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `-p`, `--provider TEXT` | Option | All | Filters by specific provider. |
+| `-c`, `--config PATH` | Option | `leai.yml` | Path to `leai.yml`. |

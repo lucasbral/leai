@@ -740,6 +740,19 @@ class TuiUnitTests(unittest.TestCase):
         self.assertTrue(res)
         mock_push.assert_called_once()
 
+    @patch("leai.storage.SeaweedFSStorage.pull_remote_to_local")
+    @patch("leai.storage.SeaweedFSStorage.push_local_to_remote")
+    def test_session_slash_seaweed_sync(self, mock_push, mock_pull):
+        mock_push.return_value = {"raw": 10, "annotations": 5}
+        mock_pull.return_value = {"raw": 2, "annotations": 1}
+        self.config.storage.seaweedfs.endpoint_url = "http://localhost:8333"
+        self.config.storage.seaweedfs.bucket = "leai-test"
+        session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+        res = session.handle_slash_command("/seaweed sync")
+        self.assertTrue(res)
+        mock_push.assert_called_once()
+        mock_pull.assert_called_once()
+
     def test_completer_seaweed_and_extract_flags(self):
         completer = LeaiCompleter([self.schema], config=self.config)
 
@@ -757,6 +770,7 @@ class TuiUnitTests(unittest.TestCase):
         self.assertIn("status", completions_sw)
         self.assertIn("push", completions_sw)
         self.assertIn("pull", completions_sw)
+        self.assertIn("sync", completions_sw)
 
         # 3. /annotate flags
         doc_ann = Document("/annotate -")
@@ -807,6 +821,19 @@ class TuiUnitTests(unittest.TestCase):
         self.assertTrue(res)
         mock_save.assert_called_once()
         self.assertEqual(mock_save.call_args.kwargs.get("storage"), mock_storage)
+
+    @patch("leai.tui.session.DocEditor")
+    def test_session_doc_command_does_not_pass_storage(self, mock_doc_editor_cls):
+        self.config.storage.seaweedfs.enabled = True
+        mock_instance = MagicMock()
+        mock_instance.run.return_value = False
+        mock_doc_editor_cls.return_value = mock_instance
+
+        session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+        session.handle_slash_command("/doc EMPLOYEES")
+
+        mock_doc_editor_cls.assert_called_once_with(self.config, session.schemas)
+        mock_instance.run.assert_called_once_with("EMPLOYEES")
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
+from unittest.mock import MagicMock
 
 from leai.config import LeaiConfig
 from leai.models import (
@@ -354,6 +355,107 @@ class WebServerTests(unittest.TestCase):
                 self.assertEqual(len(g_list_after["terms"]), 0)
                 self.assertEqual(g_list_after["compiled_markdown"], "")
                 self.assertFalse((cfg.docPath / "GLOSSARY.md").exists())
+
+            finally:
+                server.shutdown()
+                server.server_close()
+
+    def test_web_server_seaweedfs_integration(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            cfg = LeaiConfig(
+                dsn="test/test@db:1521/XEPDB1",
+                schemas=["HR"],
+                rawPath=base / "raw",
+                annotationsPath=base / "annotations",
+                docPath=base / "docs",
+            )
+            cfg.storage.seaweedfs.enabled = True
+            cfg.storage.seaweedfs.bucket = "leai-web"
+            cfg.storage.seaweedfs.endpoint_url = "http://localhost:8333"
+
+            schema = SchemaMetadata(schema_name="HR", tables=[self.table])
+
+            mock_storage = MagicMock()
+            mock_storage.config = cfg.storage.seaweedfs
+            mock_storage.save_annotation.return_value = "annotations/HR/tables/EMPLOYEES.yml"
+
+            from leai.models import ObjectAnnotation
+
+            mock_remote_ann = ObjectAnnotation(
+                description="Remote Employee Table",
+                tags=["HR", "Remote"],
+                columns={"EMP_ID": "Remote PK"},
+            )
+            mock_storage.load_annotation.return_value = mock_remote_ann
+
+            server, url = start_server(
+                config=cfg,
+                schemas=[schema],
+                host="127.0.0.1",
+                port=8915,
+                open_browser=False,
+                in_background=True,
+                storage=mock_storage,
+            )
+
+            try:
+                # 1. Test GET /api/status includes seaweedfs
+                res_status = urllib.request.urlopen(f"{url}/api/status")
+                self.assertEqual(res_status.status, 200)
+                status_data = json.loads(res_status.read().decode("utf-8"))
+                self.assertIn("seaweedfs", status_data)
+                self.assertTrue(status_data["seaweedfs"]["enabled"])
+                self.assertTrue(status_data["seaweedfs"]["connected"])
+                self.assertEqual(status_data["seaweedfs"]["bucket"], "leai-web")
+
+                # 2. Test GET /api/object with remote loading
+                req_obj = urllib.request.urlopen(f"{url}/api/object?schema=HR&type=TABLE&name=EMPLOYEES")
+                self.assertEqual(req_obj.status, 200)
+                obj_data = json.loads(req_obj.read().decode("utf-8"))
+                self.assertIn("annotations", obj_data)
+                self.assertEqual(obj_data["annotations"].get("description"), "Remote Employee Table")
+                mock_storage.load_annotation.assert_called()
+
+                # 3. Test POST /api/annotations saves to SeaweedFS
+                ann_payload = {
+                    "schema": "HR",
+                    "object_type": "TABLE",
+                    "object_name": "EMPLOYEES",
+                    "business_description": "Updated Business Employee Table",
+                    "tags": ["HR", "Core"],
+                    "business_rules": ["Must have valid ID"],
+                    "use_cases": ["Payroll sync"],
+                    "warnings": [],
+                    "related_objects": ["DEPARTMENTS"],
+                    "columns": {"EMP_ID": {"description": "Primary key"}, "NAME": "Employee full name"},
+                }
+                req_save_ann = urllib.request.Request(
+                    f"{url}/api/annotations",
+                    data=json.dumps(ann_payload).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                res_save_ann = urllib.request.urlopen(req_save_ann)
+                self.assertEqual(res_save_ann.status, 200)
+                save_ann_data = json.loads(res_save_ann.read().decode("utf-8"))
+                self.assertTrue(save_ann_data["success"])
+                self.assertIn("seaweedfs", save_ann_data)
+                self.assertTrue(save_ann_data["seaweedfs"]["synced"])
+                self.assertEqual(save_ann_data["seaweedfs"]["bucket"], "leai-web")
+
+                # Verify mock_storage.save_annotation was called
+                mock_storage.save_annotation.assert_called_once()
+                call_args = mock_storage.save_annotation.call_args
+                self.assertEqual(call_args[0][0], "HR")  # schema_name
+                self.assertEqual(call_args[0][1], "tables")  # obj_folder
+                self.assertEqual(call_args[0][2], "EMPLOYEES")  # obj_name
+                saved_obj = call_args[0][3]  # annotation
+                self.assertEqual(saved_obj.description, "Updated Business Employee Table")
+
+                # Verify local file was also created
+                local_ann = cfg.annotationsPath / "tables" / "EMPLOYEES.yml"
+                self.assertTrue(local_ann.exists())
 
             finally:
                 server.shutdown()

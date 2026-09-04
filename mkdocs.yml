@@ -62,8 +62,19 @@ plugins:
             Referência do CLI: CLI Reference
             Visão Geral: Overview
             Extração & Compilação: Extraction & Compilation
+            Editor TUI no Terminal: In-Terminal TUI Editor
             IA & Chat: AI & Chat
             Utilitários & Diagnóstico: Utilities & Diagnostics
+            Web Studio: Web Studio
+            Estúdio Web Interativo: Interactive Web Studio
+            Subagentes & Workflows: Subagents & Workflows
+            Subagentes Especializados: Specialized Subagents
+            Workflows Autônomos: Autonomous Workflows
+            Regras de Negócio: Business Rules
+            Glossário & Regras Canônicas: Glossary & Canonical Rules
+            Storage & GitOps: Storage & GitOps
+            SeaweedFS & Object Storage S3: SeaweedFS & S3 Object Storage
+            GitOps & Controle de Versão: GitOps & Version Control
             IA & RAG: AI & RAG
             Agente Autônomo & Tools: Autonomous Agent & Tools
             Provedores de LLM: LLM Providers
@@ -111,8 +122,19 @@ nav:
   - Referência do CLI:
       - Visão Geral: cli-reference/overview.md
       - Extração & Compilação: cli-reference/extraction-compilation.md
+      - Editor TUI no Terminal: cli-reference/tui-editor.md
       - IA & Chat: cli-reference/ai-interaction.md
       - Utilitários & Diagnóstico: cli-reference/maintenance.md
+  - Web Studio:
+      - Estúdio Web Interativo: web-studio/overview.md
+  - Subagentes & Workflows:
+      - Subagentes Especializados: agents-and-workflows/subagents.md
+      - Workflows Autônomos: agents-and-workflows/workflows.md
+  - Regras de Negócio:
+      - Glossário & Regras Canônicas: rules-and-glossary/rules.md
+  - Storage & GitOps:
+      - SeaweedFS & Object Storage S3: storage-and-gitops/seaweedfs.md
+      - GitOps & Controle de Versão: storage-and-gitops/gitops.md
   - IA & RAG:
       - Agente Autônomo & Tools: ai-and-rag/autonomous-agent.md
       - Provedores de LLM: ai-and-rag/llm-providers.md

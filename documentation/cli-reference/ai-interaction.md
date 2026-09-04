@@ -6,48 +6,84 @@ O LEAI transforma seu catálogo Oracle em uma base de conhecimento interativa ca
 
 ## 1. `leai ask <PERGUNTA>`
 
-Permite fazer perguntas pontuais em linguagem natural sobre qualquer aspecto do banco de dados.
+Permite fazer perguntas pontuais em linguagem natural sobre qualquer aspecto do banco de dados com injeção cirúrgica de contexto.
 
 ```bash
-leai ask "Como funciona a regra de rescisão na procedure CALC_RESCISAO e quais tabelas ela consulta?"
+leai ask "Como funciona a regra de rescisão na procedure CALC_RESCISAO e quais tabelas ela consulta?" -p gemini
 ```
 
-### O que acontece internamente:
-1. O LEAI analisa as entidades mencionadas na pergunta.
-2. Recupera dinamicamente a linhagem e as definições das tabelas e procedimentos envolvidos.
-3. Se houver pacotes grandes, comprime o código PL/SQL semanticamente para poupar tokens.
-4. Envia o contexto cirúrgico para a LLM configurada e exibe a resposta formatada em Markdown no terminal.
+### Parâmetros e Opções:
+
+| Parâmetro / Flag | Tipo | Padrão | Descrição |
+| :--- | :--- | :--- | :--- |
+| `QUESTION` | Argumento | **Obrigatório** | Pergunta técnica ou funcional sobre o banco de dados. |
+| `-p`, `--provider TEXT` | Opção | Do config | Provedor de IA (`openai`, `gemini`, `claude`, `deepseek`, `ollama`, etc.). |
+| `-m`, `--model TEXT` | Opção | Do config | Modelo de IA a utilizar. |
+| `-c`, `--config PATH` | Opção | `leai.yml` | Caminho para o arquivo `leai.yml`. |
+| `--seaweed` | Flag | `False` | Consulta metadados direto do bucket S3. |
+| `--no-cache` | Flag | `False` | Opera em modo 100% remoto sem arquivos locais. |
 
 ---
 
 ## 2. `leai chat`
 
-Inicia um console interativo no terminal onde você pode conversar livremente com o agente de banco de dados.
+Inicia um console interativo no terminal no estilo Catppuccin Mocha com histórico de conversa, autocompletar e raciocínio autônomo com ferramentas in-memory.
 
 ```bash
-leai chat
+# Iniciar console no terminal:
+leai chat -p gemini -m gemini-2.0-flash
+
+# Iniciar e abrir diretamente no navegador (Web Chat Studio):
+leai chat --web
 ```
 
-### Funcionalidades do Chat:
-* **Execução Autônoma de Ferramentas:** Durante a conversa, o modelo pode chamar ferramentas offline (`search_database_objects`, `view_object_definition`, `trace_object_lineage`) para inspecionar schemas e sanar dúvidas antes de responder.
-* **Histórico Conversacional:** Mantém o contexto de perguntas anteriores na mesma sessão.
-* **Comandos Especiais:**
-  * `/help`: Exibe comandos disponíveis na sessão interativa.
-  * `/clear`: Limpa o histórico da conversa atual.
-  * `/exit` ou `quit`: Encerra o chat.
+### Parâmetros e Opções:
+
+| Parâmetro / Flag | Tipo | Padrão | Descrição |
+| :--- | :--- | :--- | :--- |
+| `-p`, `--provider TEXT` | Opção | Do config | Provedor de IA ativo. |
+| `-m`, `--model TEXT` | Opção | Do config | Modelo de IA a utilizar. |
+| `-c`, `--config PATH` | Opção | `leai.yml` | Caminho do arquivo de configuração. |
+| `-w`, `--web` | Flag | `False` | Inicia o servidor Web Studio e abre o chat no navegador. |
+| `--seaweed` | Flag | `False` | Utiliza snapshots do storage S3. |
+| `--no-cache` | Flag | `False` | Modo 100% em memória. |
+
+### 📋 Comandos de Barra (Slash Commands) na Sessão Interativa:
+
+| Comando | Categoria | Descrição |
+| :--- | :--- | :--- |
+| `/copy [all\|code\|N]` | Clipboard | Copia a última resposta ou bloco de código direto para a área de transferência do OS. |
+| `/doc [obj]` | Documentação | Abre o editor interativo de documentação no terminal para a tabela ou pacote. |
+| `/enrich [obj]` | IA Studio | Auto-enriquece descrições e regras com IA. |
+| `/compile [obj]` | Pipeline | Recompila a documentação Markdown em `docs/` (suporta objeto individual). |
+| `/annotate` | Pipeline | Sincroniza stubs YAML em `annotations/`. |
+| `/extract [s\|ALL]` | Pipeline | Conecta ao Oracle e extrai snapshot técnico atualizado. |
+| `/serve [port\|stop]` | Web Studio | Inicia o Web Studio no navegador com editor e diagramas em tempo real. |
+| `/trace <obj>` | Linhagem | Executa raio-X de dependências e risco com diagramas Mermaid. |
+| `/tables` | Inspeção | Lista tabelas do catálogo com contagem de colunas e PKs. |
+| `/schema [s]` | Inspeção | Exibe visão panorâmica consolidada do schema. |
+| `/changes [d]` | Inspeção | Inspeciona objetos modificados nos últimos N dias (Padrão: 7). |
+| `/models [p]` | IA Config | Lista modelos disponíveis na API do provedor configurado. |
+| `/model <p> [m]` | IA Config | Alterna de provedor e modelo de IA em tempo de execução. |
+| `/audit [last\|session\|export]`| Auditoria | Inspeciona as chamadas de ferramentas da IA, latência e log da sessão. |
+| `/tools` | Auditoria | Exibe as entradas e saídas detalhadas das ferramentas do último turno. |
+| `/save [arquivo.md]` | Sessão | Exporta o histórico completo da conversa para arquivo Markdown. |
+| `/check` | Diagnóstico | Valida conexões, permissões e status dos modelos de IA. |
+| `/clear` | Sessão | Limpa a memória conversacional e reinicia a tela. |
+| `/exit`, `/quit` | Sessão | Encerra a sessão do copilot. |
 
 ---
 
 ## 3. `leai models`
 
-Exibe a lista de provedores de IA suportados, modelos recomendados e permite testar a conectividade de suas chaves de API com medição de latência.
+Testa credenciais, exibe a lista de modelos suportados e afere a latência da conexão REST com os provedores configurados.
 
 ```bash
-leai models
+leai models -p gemini
+leai models -p openai
 ```
 
-### Saída de Diagnóstico:
-O comando exibe uma tabela indicando:
-* Provedor (OpenAI, Gemini, Claude, DeepSeek, Ollama, Bedrock, etc.).
-* Status da chave de API (`CONFIGURADO` ou `NÃO DETECTADO`).
-* Teste de latência de ping em milissegundos.
+| Parâmetro / Flag | Tipo | Padrão | Descrição |
+| :--- | :--- | :--- | :--- |
+| `-p`, `--provider TEXT` | Opção | Todos | Filtra por um provedor específico. |
+| `-c`, `--config PATH` | Opção | `leai.yml` | Caminho do arquivo de configuração. |

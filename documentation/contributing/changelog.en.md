@@ -4,6 +4,21 @@ All notable changes to the **LEAI** project are documented here.
 
 ---
 
+## [0.2.17] — 2026
+
+### 🌟 Added
+* **SeaweedFS S3 Synchronization in Web Studio (`/serve`):** Annotation edits made in the browser (`POST /api/annotations`) are synchronized directly to the S3 bucket in real time.
+* **Remote Annotation Fallback in Web Studio:** The `GET /api/object` endpoint automatically fetches annotations from SeaweedFS if the local file does not exist, populating local cache transparently.
+* **Visual S3 Feedback in Web UI:** Header status badge (`☁️ S3: <bucket>`) and sync confirmation message in the save toast notification.
+* **`/seaweed sync` Subcommand in TUI:** Smart bi-directional synchronization (push + pull with SHA-256 deduplication) directly runnable from the interactive terminal.
+* **Local Disk Isolation for `/doc`:** The in-terminal documentation editor saves exclusively to local disk, preventing unintended remote uploads.
+
+### ⚡ Improvements
+* Support and documentation for S3 Lifecycle Rules (`NoncurrentVersionExpiration`) targeting `annotations/` prefix to purge non-current version history.
+* Terminal autocompletion updated with `/seaweed sync` and `--seaweed`, `-W`, and `--no-cache` flags for `/annotate`.
+
+---
+
 ## [0.2.15] — 2026
 
 ### 🌟 Added
