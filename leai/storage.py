@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -21,6 +22,19 @@ class StorageError(Exception):
     pass
 
 
+class SaveResult(list):
+    """Result of saving a raw schema to SeaweedFS, inheriting from list for backwards compatibility."""
+
+    def __init__(self, keys: list[str], uploaded: int = 0, skipped: int = 0, total: int = 0):
+        super().__init__(keys)
+        self.uploaded = uploaded
+        self.skipped = skipped
+        self.total = total
+
+    def __repr__(self) -> str:
+        return f"<SaveResult uploaded={self.uploaded} skipped={self.skipped} total={self.total} keys={len(self)}>"
+
+
 class SeaweedFSStorage:
     """Manages raw schemas and annotations stored in a SeaweedFS S3-compatible bucket."""
 
@@ -39,9 +53,12 @@ class SeaweedFSStorage:
                     "boto3 is required for SeaweedFS integration. Install it via 'pip install boto3' or 'uv add boto3'."
                 ) from err
 
-            endpoint = self.config.endpoint_url or None
+            endpoint = self.config.endpoint_url.strip() if self.config.endpoint_url else None
             if not endpoint:
-                raise StorageError("SeaweedFS endpoint_url must be provided in configuration (e.g. http://localhost:8333).")
+                raise StorageError("SeaweedFS endpoint_url must be provided in configuration (e.g. https://s3-sad.pe.gov.br).")
+
+            if not endpoint.startswith(("http://", "https://")):
+                endpoint = f"https://{endpoint}"
 
             client_kwargs: dict[str, Any] = {
                 "service_name": "s3",
@@ -100,49 +117,117 @@ class SeaweedFSStorage:
             }
 
     # -------------------------------------------------------------------------
-    # RAW METADATA MANAGEMENT
+    # RAW METADATA MANAGEMENT & INCREMENTAL VERSIONING
     # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _compute_canonical_hash(data: dict) -> tuple[str, str]:
+        """Returns canonical formatted JSON content and its SHA-256 hex digest."""
+        canonical = json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False)
+        digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        return canonical, digest
+
+    def load_manifest(self, schema_name: str, multi_schema: bool = True) -> dict[str, str]:
+        """Loads existing object hashes from {schema_path}/_manifest.json in SeaweedFS.
+        Returns a mapping of relative object paths (e.g. 'tables/USERS.json') to their SHA-256 hashes."""
+        self.ensure_bucket_exists()
+        bucket = self.config.bucket
+        prefix = self.config.raw_prefix.strip("/")
+        schema_path = f"{prefix}/{schema_name}" if (multi_schema and schema_name) else prefix
+        manifest_key = f"{schema_path}/_manifest.json"
+
+        try:
+            resp = self.client.get_object(Bucket=bucket, Key=manifest_key)
+            raw_data = json.loads(resp["Body"].read().decode("utf-8"))
+            if isinstance(raw_data, dict):
+                hashes = raw_data.get("hashes", raw_data)
+                if isinstance(hashes, dict):
+                    return hashes
+            return {}
+        except Exception:
+            return {}
+
+    def save_manifest(self, schema_name: str, hashes: dict[str, str], multi_schema: bool = True) -> str:
+        """Saves updated object hashes manifest to {schema_path}/_manifest.json in SeaweedFS."""
+        from datetime import datetime, timezone
+
+        self.ensure_bucket_exists()
+        bucket = self.config.bucket
+        prefix = self.config.raw_prefix.strip("/")
+        schema_path = f"{prefix}/{schema_name}" if (multi_schema and schema_name) else prefix
+        manifest_key = f"{schema_path}/_manifest.json"
+
+        manifest_body = {
+            "version": 1,
+            "schema_name": schema_name,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "hashes": hashes,
+        }
+        self.client.put_object(
+            Bucket=bucket,
+            Key=manifest_key,
+            Body=json.dumps(manifest_body, indent=2, sort_keys=True, ensure_ascii=False).encode("utf-8"),
+            ContentType="application/json",
+        )
+        return manifest_key
 
     def save_raw_schema(
         self,
         schema: SchemaMetadata,
         multi_schema: bool = True,
         max_workers: int = 8,
-    ) -> list[str]:
-        """Uploads granular JSON objects and the consolidated _schema.json snapshot to SeaweedFS."""
+        force: bool = False,
+    ) -> SaveResult:
+        """Uploads granular JSON objects and consolidated snapshot to SeaweedFS.
+        When incremental=True and force=False, skips objects whose SHA-256 content
+        hash matches the existing remote manifest, preventing redundant S3 versions."""
         self.ensure_bucket_exists()
         bucket = self.config.bucket
         prefix = self.config.raw_prefix.strip("/")
-        schema_path = f"{prefix}/{schema.schema_name}" if (multi_schema and schema.schema_name) else prefix
+        schema_name = schema.schema_name or ""
+        schema_path = f"{prefix}/{schema_name}" if (multi_schema and schema_name) else prefix
 
-        tasks: list[tuple[str, str]] = []
+        is_incremental = self.config.incremental and not force
+        existing_manifest = self.load_manifest(schema_name, multi_schema=multi_schema) if is_incremental else {}
+        new_manifest: dict[str, str] = dict(existing_manifest)
 
-        def _add_task(category: str, name: str, data: dict):
-            key = f"{schema_path}/{category}/{name}.json"
-            content = json.dumps(data, indent=2, ensure_ascii=False)
-            tasks.append((key, content))
+        candidate_items: list[tuple[str, dict]] = []
+
+        def _add_candidate(category: str, name: str, data: dict):
+            rel_key = f"{category}/{name}.json"
+            candidate_items.append((rel_key, data))
 
         for table in schema.tables:
-            _add_task("tables", table.name, table.model_dump())
+            _add_candidate("tables", table.name, table.model_dump())
         for view in schema.views:
-            _add_task("views", view.name, view.model_dump())
+            _add_candidate("views", view.name, view.model_dump())
         for mview in schema.mviews:
-            _add_task("mviews", mview.name, mview.model_dump())
+            _add_candidate("mviews", mview.name, mview.model_dump())
         for code_obj in schema.code_objects:
             folder = code_obj.object_type.lower().replace(" ", "_") + "s"
-            _add_task(folder, code_obj.name, code_obj.model_dump())
+            _add_candidate(folder, code_obj.name, code_obj.model_dump())
         for trigger in schema.triggers:
-            _add_task("triggers", trigger.name, trigger.model_dump())
+            _add_candidate("triggers", trigger.name, trigger.model_dump())
         for sequence in schema.sequences:
-            _add_task("sequences", sequence.name, sequence.model_dump())
+            _add_candidate("sequences", sequence.name, sequence.model_dump())
         for index in schema.indexes:
-            _add_task("indexes", index.name, index.model_dump())
+            _add_candidate("indexes", index.name, index.model_dump())
         for synonym in schema.synonyms:
-            _add_task("synonyms", synonym.name, synonym.model_dump())
+            _add_candidate("synonyms", synonym.name, synonym.model_dump())
 
-        # Consolidated snapshot
-        snapshot_key = f"{schema_path}/_schema.json"
-        tasks.append((snapshot_key, json.dumps(schema.model_dump(), indent=2, ensure_ascii=False)))
+        total_objects = len(candidate_items)
+        tasks_to_upload: list[tuple[str, str]] = []  # (s3_full_key, canonical_body)
+        skipped_count = 0
+
+        for rel_key, data in candidate_items:
+            canonical_body, content_hash = self._compute_canonical_hash(data)
+            full_key = f"{schema_path}/{rel_key}"
+
+            if is_incremental and existing_manifest.get(rel_key) == content_hash:
+                skipped_count += 1
+            else:
+                tasks_to_upload.append((full_key, canonical_body))
+                new_manifest[rel_key] = content_hash
 
         uploaded_keys: list[str] = []
 
@@ -156,12 +241,31 @@ class SeaweedFSStorage:
             )
             return key
 
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(_upload_item, t) for t in tasks]
-            for f in as_completed(futures):
-                uploaded_keys.append(f.result())
+        if tasks_to_upload:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [executor.submit(_upload_item, t) for t in tasks_to_upload]
+                for f in as_completed(futures):
+                    uploaded_keys.append(f.result())
 
-        return uploaded_keys
+        # If any object changed or force or first run with changes, update _schema.json snapshot and _manifest.json
+        if tasks_to_upload or not existing_manifest or force:
+            snapshot_key = f"{schema_path}/_schema.json"
+            snapshot_body, _ = self._compute_canonical_hash(schema.model_dump())
+            _upload_item((snapshot_key, snapshot_body))
+            uploaded_keys.append(snapshot_key)
+
+            if is_incremental:
+                manifest_key = self.save_manifest(schema_name, new_manifest, multi_schema=multi_schema)
+                uploaded_keys.append(manifest_key)
+
+        result = SaveResult(
+            keys=uploaded_keys,
+            uploaded=len(tasks_to_upload),
+            skipped=skipped_count,
+            total=total_objects,
+        )
+        self.last_save_result = result
+        return result
 
     def load_raw_schemas(self, target_schemas: list[str] | None = None) -> dict[str, SchemaMetadata]:
         """Loads schema metadata snapshots from SeaweedFS S3."""

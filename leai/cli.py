@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 if sys.platform == "win32":
     try:
@@ -299,6 +300,10 @@ def extract(
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to extract (e.g. tables, views, procedures)"),
     days: int = typer.Option(None, "--days", "-d", help="Extract only objects modified in the last N days (incremental extraction)"),
     seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Save RAW snapshots directly to SeaweedFS S3 storage"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local files in rawPath, send only to SeaweedFS"),
+    force_upload: bool = typer.Option(
+        False, "--force-upload", "-F", help="Force upload of all objects to SeaweedFS (bypasses SHA-256 manifest)"
+    ),
 ) -> None:
     """Extracts raw technical snapshot from Oracle database into rawPath."""
     start_time = time.perf_counter()
@@ -313,15 +318,31 @@ def extract(
         raise typer.Exit(code=1)
 
     storage = _resolve_storage(cfg, seaweed)
+    is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
+    if is_no_cache and not storage:
+        console.print("[red]Error:[/red] --no-cache requires SeaweedFS to be enabled (use --seaweed or enable it in leai.yml).")
+        raise typer.Exit(code=1)
+
     if storage:
         try:
             storage.ensure_bucket_exists()
+            mode_tags = []
+            if is_no_cache:
+                mode_tags.append("Remote-only")
+            if cfg.storage.seaweedfs.incremental and not force_upload:
+                mode_tags.append("SHA-256 Incremental")
+            elif force_upload:
+                mode_tags.append("Force Upload")
+            tag_str = f" [dim]({', '.join(mode_tags)})[/dim]" if mode_tags else ""
             console.print(
-                f"[cyan]SeaweedFS Storage:[/cyan] [bold green]Active[/bold green] (Endpoint: {cfg.storage.seaweedfs.endpoint_url}, Bucket: {cfg.storage.seaweedfs.bucket})\n"
+                f"[cyan]SeaweedFS Storage:[/cyan] [bold green]Active[/bold green] (Endpoint: {cfg.storage.seaweedfs.endpoint_url}, Bucket: {cfg.storage.seaweedfs.bucket}){tag_str}\n"
             )
         except Exception as exc:
             console.print(f"[red]SeaweedFS error:[/red] {exc}")
             raise typer.Exit(code=1)
+
+    total_s3_uploaded = 0
+    total_s3_skipped = 0
 
     try:
         connection = oracledb.connect(**_build_connect_kwargs(cfg.dsn))
@@ -388,7 +409,17 @@ def extract(
                     totals["indexes"] += len(schema_meta.indexes)
                     totals["synonyms"] += len(schema_meta.synonyms)
 
-                    save_raw_schema(schema_meta, cfg.rawPath, multi_schema=True, storage=storage)
+                    save_raw_schema(
+                        schema_meta,
+                        cfg.rawPath,
+                        multi_schema=True,
+                        storage=storage,
+                        local_cache=not is_no_cache,
+                        force_upload=force_upload,
+                    )
+                    if storage and hasattr(storage, "last_save_result"):
+                        total_s3_uploaded += getattr(storage.last_save_result, "uploaded", 0)
+                        total_s3_skipped += getattr(storage.last_save_result, "skipped", 0)
 
                     if overall_task is not None:
                         progress.advance(overall_task, 1)
@@ -400,9 +431,16 @@ def extract(
             connection.close()
 
         elapsed = time.perf_counter() - start_time
-        output_paths = {"RAW Snapshot": cfg.rawPath}
+        output_paths: dict[str, Any] = {}
+        if not is_no_cache:
+            output_paths["RAW Snapshot"] = cfg.rawPath
         if storage:
-            output_paths["SeaweedFS Bucket"] = f"{cfg.storage.seaweedfs.bucket}/{cfg.storage.seaweedfs.raw_prefix}"
+            bucket_str = f"{cfg.storage.seaweedfs.bucket}/{cfg.storage.seaweedfs.raw_prefix}"
+            if total_s3_skipped > 0 or total_s3_uploaded > 0:
+                bucket_str += f" ([bold green]{total_s3_uploaded} versionados[/bold green], [dim]{total_s3_skipped} inalterados/skip[/dim])"
+            output_paths["SeaweedFS S3"] = bucket_str
+        if is_no_cache:
+            output_paths["Local Disk Cache"] = "[yellow]Disabled (Remote-only)[/yellow]"
 
         _print_final_summary_panel(
             title="RAW Extraction Completed",
@@ -422,6 +460,7 @@ def annotate(
     schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to sync (overrides leai.yml)"),
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to sync (e.g. tables, views, procedures)"),
     seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Sync annotations with SeaweedFS S3 storage"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local cache files, operate directly with SeaweedFS"),
 ) -> None:
     """Generates/synchronizes YAML annotation stubs in annotationsPath from rawPath (Offline)."""
     start_time = time.perf_counter()
@@ -436,20 +475,27 @@ def annotate(
         raise typer.Exit(code=1)
 
     storage = _resolve_storage(cfg, seaweed)
+    is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
+    if is_no_cache and not storage:
+        console.print("[red]Error:[/red] --no-cache requires SeaweedFS to be enabled (use --seaweed or enable it in leai.yml).")
+        raise typer.Exit(code=1)
+
     if storage:
         try:
             storage.ensure_bucket_exists()
+            remote_tag = " [dim](Remote-only / No local cache)[/dim]" if is_no_cache else ""
             console.print(
-                f"[cyan]SeaweedFS Storage:[/cyan] [bold green]Active[/bold green] (Endpoint: {cfg.storage.seaweedfs.endpoint_url}, Bucket: {cfg.storage.seaweedfs.bucket})\n"
+                f"[cyan]SeaweedFS Storage:[/cyan] [bold green]Active[/bold green] (Endpoint: {cfg.storage.seaweedfs.endpoint_url}, Bucket: {cfg.storage.seaweedfs.bucket}){remote_tag}\n"
             )
         except Exception as exc:
             console.print(f"[red]SeaweedFS error:[/red] {exc}")
             raise typer.Exit(code=1)
 
     try:
-        console.print(f"[cyan]Loading snapshots from[/cyan] [bold]{cfg.rawPath}[/bold]...\n")
+        source_desc = f"SeaweedFS ({cfg.storage.seaweedfs.bucket})" if (storage and is_no_cache) else str(cfg.rawPath)
+        console.print(f"[cyan]Loading snapshots from[/cyan] [bold]{source_desc}[/bold]...\n")
         target_schemas = cfg.schemas if not cfg.is_all_schemas else None
-        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage)
+        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
         is_multi = len(schemas_meta) > 1
 
         totals = {
@@ -550,6 +596,7 @@ def ask(
     model: str = typer.Option(None, "--model", "-m", help="AI model name"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
     seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load database knowledge from SeaweedFS S3 storage"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local cache files, operate directly with SeaweedFS"),
 ) -> None:
     """Interactive AI assistant to answer technical and business questions about the database."""
     from rich.markdown import Markdown
@@ -562,7 +609,8 @@ def ask(
         raise typer.Exit(code=1)
 
     storage = _resolve_storage(cfg, seaweed)
-    schemas = load_raw_schemas(cfg.rawPath, storage=storage)
+    is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
+    schemas = load_raw_schemas(cfg.rawPath, storage=storage, local_cache=not is_no_cache)
     if not schemas:
         console.print(f"[red]No snapshot found in '{cfg.rawPath}'. Run 'leai extract' first.[/red]")
         raise typer.Exit(code=1)
@@ -613,6 +661,7 @@ def chat(
     model: str = typer.Option(None, "--model", "-m", help="AI model name"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
     seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load schema knowledge from SeaweedFS S3 storage"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local cache files, operate directly with SeaweedFS"),
 ) -> None:
     """Starts an interactive OpenCode-style TUI copilot with RAG, tools and @ mentions."""
     try:
@@ -622,7 +671,8 @@ def chat(
         raise typer.Exit(code=1)
 
     storage = _resolve_storage(cfg, seaweed)
-    schemas = load_raw_schemas(cfg.rawPath, storage=storage)
+    is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
+    schemas = load_raw_schemas(cfg.rawPath, storage=storage, local_cache=not is_no_cache)
     if not schemas:
         console.print(f"[red]No snapshot found in '{cfg.rawPath}'. Run 'leai extract' first.[/red]")
         raise typer.Exit(code=1)
@@ -754,6 +804,7 @@ def doc(
     object_name: str = typer.Argument(None, help="Name of the database object to document (e.g. EMPLOYEES, PKG_FIN)"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
     seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load snapshots from SeaweedFS S3 storage"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local cache files, operate directly with SeaweedFS"),
 ) -> None:
     """Interactive in-terminal documentation and annotation editor."""
     try:
@@ -763,8 +814,9 @@ def doc(
         raise typer.Exit(code=1)
 
     storage = _resolve_storage(cfg, seaweed)
+    is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
     target_schemas = cfg.schemas if not cfg.is_all_schemas else None
-    schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage)
+    schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
     if not schemas_meta:
         console.print(f"[yellow]No snapshots found in '{cfg.rawPath}'. Run 'leai extract' first.[/yellow]")
         raise typer.Exit(code=1)
@@ -783,6 +835,7 @@ def compile(
     rag_json: bool = typer.Option(False, "--rag-json", "--rag", help="Also export structured JSON chunks to docs/chunks/ for Vector DB"),
     depth: int = typer.Option(1, "--depth", "-d", help="Max dependency graph traversal depth (default: 1)"),
     seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Compile docs using schemas and annotations from SeaweedFS S3 storage"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local cache files, operate directly with SeaweedFS"),
 ) -> None:
     """Compiles Markdown docs in docPath merging rawPath + annotationsPath (Offline)."""
     try:
@@ -818,10 +871,16 @@ def compile(
         raise typer.Exit(code=1)
 
     storage = _resolve_storage(cfg, seaweed)
+    is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
+    if is_no_cache and not storage:
+        console.print("[red]Error:[/red] --no-cache requires SeaweedFS to be enabled (use --seaweed or enable it in leai.yml).")
+        raise typer.Exit(code=1)
+
     try:
-        console.print(f"[cyan]Loading snapshots from[/cyan] [bold]{cfg.rawPath}[/bold]...\n")
+        source_desc = f"SeaweedFS ({cfg.storage.seaweedfs.bucket})" if (storage and is_no_cache) else str(cfg.rawPath)
+        console.print(f"[cyan]Loading snapshots from[/cyan] [bold]{source_desc}[/bold]...\n")
         target_schemas = cfg.schemas if not cfg.is_all_schemas else None
-        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage)
+        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
 
         if object_name:
             clean_obj = object_name.strip().upper()
@@ -968,6 +1027,10 @@ def generate(
     rag_json: bool = typer.Option(False, "--rag-json", "--rag", help="Also export structured JSON chunks to docs/chunks/ for Vector DB"),
     depth: int = typer.Option(1, "--depth", "-d", help="Max dependency graph traversal depth (default: 1)"),
     seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Store RAW snapshots and annotations in SeaweedFS S3 storage"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local files in rawPath, send only to SeaweedFS"),
+    force_upload: bool = typer.Option(
+        False, "--force-upload", "-F", help="Force upload of all objects to SeaweedFS (bypasses SHA-256 manifest)"
+    ),
 ) -> None:
     """Generates complete documentation (Extracts RAW -> Syncs Annotations -> Compiles Markdown)."""
     try:
@@ -999,11 +1062,17 @@ def generate(
         raise typer.Exit(code=1)
 
     storage = _resolve_storage(cfg, seaweed)
+    is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
+    if is_no_cache and not storage:
+        console.print("[red]Error:[/red] --no-cache requires SeaweedFS to be enabled (use --seaweed or enable it in leai.yml).")
+        raise typer.Exit(code=1)
+
     if storage:
         try:
             storage.ensure_bucket_exists()
+            remote_tag = " [dim](Remote-only / No local cache)[/dim]" if is_no_cache else ""
             console.print(
-                f"[cyan]SeaweedFS Storage:[/cyan] [bold green]Active[/bold green] (Endpoint: {cfg.storage.seaweedfs.endpoint_url}, Bucket: {cfg.storage.seaweedfs.bucket})\n"
+                f"[cyan]SeaweedFS Storage:[/cyan] [bold green]Active[/bold green] (Endpoint: {cfg.storage.seaweedfs.endpoint_url}, Bucket: {cfg.storage.seaweedfs.bucket}){remote_tag}\n"
             )
         except Exception as exc:
             console.print(f"[red]SeaweedFS error:[/red] {exc}")
@@ -1078,7 +1147,14 @@ def generate(
                     totals["synonyms"] += len(schema_meta.synonyms)
 
                     # 1. Save RAW Snapshot
-                    save_raw_schema(schema_meta, cfg.rawPath, multi_schema=True, storage=storage)
+                    save_raw_schema(
+                        schema_meta,
+                        cfg.rawPath,
+                        multi_schema=True,
+                        storage=storage,
+                        local_cache=not is_no_cache,
+                        force_upload=force_upload,
+                    )
 
                     # 2 & 3. Sync Annotations and Compile Docs with granular object progress
                     schema_total_objs = count_schema_objects(schema_meta, cfg.object_types)
@@ -1127,13 +1203,15 @@ def generate(
             storage.push_local_to_remote(local_raw_path=cfg.rawPath, local_annotations_path=cfg.annotationsPath)
 
         elapsed = time.perf_counter() - start_time
-        out_paths = {
-            "RAW Snapshot": cfg.rawPath,
-            "Markdown Documents": cfg.docPath,
-            "Synchronized YAML Annotations": cfg.annotationsPath,
-        }
+        out_paths = {}
+        if not is_no_cache:
+            out_paths["RAW Snapshot"] = cfg.rawPath
+        out_paths["Markdown Documents"] = cfg.docPath
+        out_paths["Synchronized YAML Annotations"] = cfg.annotationsPath
         if storage:
             out_paths["SeaweedFS Storage"] = f"{cfg.storage.seaweedfs.bucket}"
+        if is_no_cache:
+            out_paths["Local Disk Cache"] = "[yellow]Disabled (Remote-only)[/yellow]"
         if rag_json:
             out_paths["RAG Vector Chunks"] = cfg.docPath / "chunks"
         _print_final_summary_panel(
@@ -1154,6 +1232,7 @@ def changes(
     days: int = typer.Option(7, "--days", "-d", help="Filter objects modified in the last N days"),
     user: str = typer.Option(None, "--user", "-u", help="Filter by modifying user or schema"),
     seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load schemas from SeaweedFS S3 storage"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local cache files, operate directly with SeaweedFS"),
 ) -> None:
     """Tracks and displays database objects modified in the last N days."""
     from datetime import datetime, timedelta
@@ -1165,9 +1244,10 @@ def changes(
         raise typer.Exit(code=1)
 
     storage = _resolve_storage(cfg, seaweed)
+    is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
     try:
         target_schemas = cfg.schemas if not cfg.is_all_schemas else None
-        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage)
+        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
         cutoff = datetime.now() - timedelta(days=days)
         results = []
 
@@ -1244,6 +1324,7 @@ def trace(
     offline: bool = typer.Option(False, "--offline", help="Force dependency resolution from RAW snapshot instead of database"),
     output: Path = typer.Option(None, "--output", "-o", help="Path for output Markdown file"),
     seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load schemas from SeaweedFS S3 storage"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local cache files, operate directly with SeaweedFS"),
 ) -> None:
     """Generates in-depth technical dossier and Mermaid.js dependency graph for a specific object."""
     from rich.tree import Tree
@@ -1270,6 +1351,7 @@ def trace(
 
     target_obj = object_name.strip().upper()
     storage = _resolve_storage(cfg, seaweed)
+    is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
 
     try:
         if offline or not cfg.dsn:
@@ -1277,7 +1359,7 @@ def trace(
                 f"\n[dim]🔍 Offline Mode: Tracing dependencies for [bold yellow]{target_obj}[/bold yellow] (Depth: {depth})...[/dim]"
             )
             trace_target_schemas = [schema.strip().upper()] if schema else (cfg.schemas if not cfg.is_all_schemas else None)
-            schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=trace_target_schemas, storage=storage)
+            schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=trace_target_schemas, storage=storage, local_cache=not is_no_cache)
             if not schemas_meta:
                 console.print(f"[red]No snapshot found in '{cfg.rawPath}'. Run 'leai extract' first.[/red]")
                 raise typer.Exit(code=1)
@@ -1291,7 +1373,9 @@ def trace(
             except Exception as live_exc:
                 console.print(f"[yellow]Warning: online connection failed ({live_exc}). Falling back to local RAW snapshot...[/yellow]")
                 trace_target_schemas = [schema.strip().upper()] if schema else (cfg.schemas if not cfg.is_all_schemas else None)
-                schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=trace_target_schemas, storage=storage)
+                schemas_meta = load_raw_schemas(
+                    cfg.rawPath, target_schemas=trace_target_schemas, storage=storage, local_cache=not is_no_cache
+                )
                 if not schemas_meta:
                     raise live_exc
                 trace_res = trace_raw_dependencies(schemas_meta, target_obj, max_depth=depth)
@@ -1371,6 +1455,7 @@ def enrich(
     object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to enrich (e.g. tables, packages)"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
     seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load and update annotations on SeaweedFS S3 storage"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local cache files, operate directly with SeaweedFS"),
 ) -> None:
     """Uses AI (LLMs) to automatically populate and enrich business annotations in YAML."""
     start_time = time.perf_counter()
@@ -1383,8 +1468,9 @@ def enrich(
         raise typer.Exit(code=1)
 
     storage = _resolve_storage(cfg, seaweed)
+    is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
     target_schemas = cfg.schemas if not cfg.is_all_schemas else None
-    schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage)
+    schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
     if not schemas_meta:
         console.print(f"[red]No snapshot found in '{cfg.rawPath}'. Run 'leai extract' first.[/red]")
         raise typer.Exit(code=1)

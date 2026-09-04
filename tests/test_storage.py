@@ -273,3 +273,160 @@ def test_cli_extract_with_seaweed_flag_help():
     assert result.exit_code == 0
     assert "--seaweed" in result.output
     assert "-W" in result.output
+    assert "--no-cache" in result.output
+
+
+def test_save_raw_schema_no_cache(tmp_path: Path, sample_schema):
+    from leai.raw import save_raw_schema
+
+    storage = MagicMock()
+    raw_path = tmp_path / "raw"
+
+    saved = save_raw_schema(sample_schema, raw_path, multi_schema=True, storage=storage, local_cache=False)
+    assert len(saved) == 0
+    assert not raw_path.exists()
+    storage.save_raw_schema.assert_called_once_with(sample_schema, multi_schema=True, force=False)
+
+
+def test_load_raw_schemas_no_cache(tmp_path: Path, sample_schema):
+    from leai.raw import load_raw_schemas
+
+    storage = MagicMock()
+    storage.load_raw_schemas.return_value = {"TEST_SCHEMA": sample_schema}
+    raw_path = tmp_path / "raw"
+
+    loaded = load_raw_schemas(raw_path, target_schemas=["TEST_SCHEMA"], storage=storage, local_cache=False)
+    assert len(loaded) == 1
+    assert loaded[0].schema_name == "TEST_SCHEMA"
+    assert not raw_path.exists()
+
+
+def test_cli_extract_no_cache_requires_seaweed(tmp_path: Path):
+    runner = CliRunner()
+    config_file = tmp_path / "leai.yml"
+    config_file.write_text(
+        """
+schemas: [TEST]
+storage:
+  seaweedfs:
+    enabled: false
+""",
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["extract", "--config", str(config_file), "--no-cache"])
+    assert result.exit_code == 1
+    assert "--no-cache requires SeaweedFS to be enabled" in result.output
+
+
+def test_canonical_hash_determinism():
+    data_a = {"name": "USERS", "columns": [{"name": "ID", "type": "NUMBER"}, {"name": "NAME", "type": "VARCHAR2"}]}
+    # Same content, different key insertion order
+    data_b = {"columns": [{"type": "NUMBER", "name": "ID"}, {"name": "NAME", "type": "VARCHAR2"}], "name": "USERS"}
+
+    _, hash_a = SeaweedFSStorage._compute_canonical_hash(data_a)
+    _, hash_b = SeaweedFSStorage._compute_canonical_hash(data_b)
+    assert hash_a == hash_b
+
+
+def test_manifest_load_and_save(mock_s3_client):
+    cfg = SeaweedFSConfig(endpoint_url="http://localhost:8333", bucket="leai-test", raw_prefix="raw")
+    storage = SeaweedFSStorage(cfg)
+    storage._s3_client = mock_s3_client
+
+    # 1. Save manifest
+    hashes = {"tables/USERS.json": "abc123hash"}
+    manifest_key = storage.save_manifest("TEST_SCHEMA", hashes)
+    assert manifest_key == "raw/TEST_SCHEMA/_manifest.json"
+
+    # Verify put_object call
+    mock_s3_client.put_object.assert_called_once()
+    call_kwargs = mock_s3_client.put_object.call_args.kwargs
+    assert call_kwargs["Key"] == "raw/TEST_SCHEMA/_manifest.json"
+    saved_body = json.loads(call_kwargs["Body"].decode("utf-8"))
+    assert saved_body["hashes"] == hashes
+
+    # 2. Load manifest
+    mock_body = MagicMock()
+    mock_body.read.return_value = json.dumps(saved_body).encode("utf-8")
+    mock_s3_client.get_object.return_value = {"Body": mock_body}
+
+    loaded_hashes = storage.load_manifest("TEST_SCHEMA")
+    assert loaded_hashes == hashes
+
+
+def test_save_raw_schema_incremental_skip_unmodified(mock_s3_client, sample_schema):
+    cfg = SeaweedFSConfig(endpoint_url="http://localhost:8333", bucket="leai-test", raw_prefix="raw", incremental=True)
+    storage = SeaweedFSStorage(cfg)
+    storage._s3_client = mock_s3_client
+
+    # Compute expected hash for sample_schema's table
+    _, table_hash = SeaweedFSStorage._compute_canonical_hash(sample_schema.tables[0].model_dump())
+
+    # Pre-populate manifest in mock S3 with the exact same hash
+    mock_manifest = {"version": 1, "hashes": {"tables/USERS.json": table_hash}}
+    mock_body = MagicMock()
+    mock_body.read.return_value = json.dumps(mock_manifest).encode("utf-8")
+    mock_s3_client.get_object.return_value = {"Body": mock_body}
+
+    # Save schema with incremental=True -> should skip USERS.json
+    res = storage.save_raw_schema(sample_schema, multi_schema=True)
+
+    assert res.total == 1
+    assert res.skipped == 1
+    assert res.uploaded == 0
+    # put_object should NOT be called for tables/USERS.json
+    put_keys = [call.kwargs["Key"] for call in mock_s3_client.put_object.call_args_list]
+    assert "raw/TEST_SCHEMA/tables/USERS.json" not in put_keys
+
+
+def test_save_raw_schema_incremental_modified_object(mock_s3_client, sample_schema):
+    cfg = SeaweedFSConfig(endpoint_url="http://localhost:8333", bucket="leai-test", raw_prefix="raw", incremental=True)
+    storage = SeaweedFSStorage(cfg)
+    storage._s3_client = mock_s3_client
+
+    # Manifest has an OLD / outdated hash
+    mock_manifest = {"version": 1, "hashes": {"tables/USERS.json": "old_different_hash"}}
+    mock_body = MagicMock()
+    mock_body.read.return_value = json.dumps(mock_manifest).encode("utf-8")
+    mock_s3_client.get_object.return_value = {"Body": mock_body}
+
+    # Save schema -> should detect modification and upload
+    res = storage.save_raw_schema(sample_schema, multi_schema=True)
+
+    assert res.total == 1
+    assert res.skipped == 0
+    assert res.uploaded == 1
+    put_keys = [call.kwargs["Key"] for call in mock_s3_client.put_object.call_args_list]
+    assert "raw/TEST_SCHEMA/tables/USERS.json" in put_keys
+    assert "raw/TEST_SCHEMA/_manifest.json" in put_keys
+    assert "raw/TEST_SCHEMA/_schema.json" in put_keys
+
+
+def test_save_raw_schema_force_upload(mock_s3_client, sample_schema):
+    cfg = SeaweedFSConfig(endpoint_url="http://localhost:8333", bucket="leai-test", raw_prefix="raw", incremental=True)
+    storage = SeaweedFSStorage(cfg)
+    storage._s3_client = mock_s3_client
+
+    # Pre-populate manifest with matching hash
+    _, table_hash = SeaweedFSStorage._compute_canonical_hash(sample_schema.tables[0].model_dump())
+    mock_manifest = {"version": 1, "hashes": {"tables/USERS.json": table_hash}}
+    mock_body = MagicMock()
+    mock_body.read.return_value = json.dumps(mock_manifest).encode("utf-8")
+    mock_s3_client.get_object.return_value = {"Body": mock_body}
+
+    # Save with force=True -> should bypass manifest check and upload everything
+    res = storage.save_raw_schema(sample_schema, multi_schema=True, force=True)
+
+    assert res.total == 1
+    assert res.uploaded == 1
+    assert res.skipped == 0
+    put_keys = [call.kwargs["Key"] for call in mock_s3_client.put_object.call_args_list]
+    assert "raw/TEST_SCHEMA/tables/USERS.json" in put_keys
+
+
+def test_cli_extract_with_force_upload_help():
+    runner = CliRunner()
+    result = runner.invoke(app, ["extract", "--help"])
+    assert result.exit_code == 0
+    assert "--force-upload" in result.output
+    assert "-F" in result.output
