@@ -1,0 +1,122 @@
+site_name: LEAI
+site_url: https://lucasbral.github.io/leai/
+site_author: Lucas Bral
+site_description: Oracle Database Intelligence & Documentation Engine
+
+repo_name: lucasbral/leai
+repo_url: https://github.com/lucasbral/leai
+edit_uri: blob/main/documentation/
+
+docs_dir: documentation
+
+theme:
+  name: material
+  language: pt
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Mudar para modo escuro
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Mudar para modo claro
+  features:
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+
+plugins:
+  - search
+  - i18n:
+      languages:
+        - locale: pt
+          default: true
+          name: Português
+          build: true
+        - locale: en
+          name: English
+          build: true
+          nav_translations:
+            Início: Home
+            Primeiros Passos: Getting Started
+            Instalação: Installation
+            Guia Rápido: Quickstart
+            Configuração (leai.yml): Configuration (leai.yml)
+            Arquitetura: Architecture
+            Pipeline em 3 Estágios: 3-Stage Pipeline
+            Grafo de Linhagem & Risco: Lineage Graph & Risk
+            Resolução de Sinônimos: Synonym Resolution
+            Compressão Semântica PL/SQL: PL/SQL Semantic Compression
+            Referência do CLI: CLI Reference
+            Visão Geral: Overview
+            Extração & Compilação: Extraction & Compilation
+            IA & Chat: AI & Chat
+            Utilitários & Diagnóstico: Utilities & Diagnostics
+            IA & RAG: AI & RAG
+            Agente Autônomo & Tools: Autonomous Agent & Tools
+            Provedores de LLM: LLM Providers
+            Bancos Vetoriais & RAG: Vector Databases & RAG
+            Contribuição: Contributing
+            Desenvolvimento & Testes: Development & Testing
+            Changelog: Changelog
+  - minify:
+      minify_html: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+nav:
+  - Início: index.md
+  - Primeiros Passos:
+      - Instalação: getting-started/installation.md
+      - Guia Rápido: getting-started/quickstart.md
+      - Configuração (leai.yml): getting-started/configuration.md
+  - Arquitetura:
+      - Pipeline em 3 Estágios: architecture/pipeline.md
+      - Grafo de Linhagem & Risco: architecture/lineage.md
+      - Resolução de Sinônimos: architecture/synonyms.md
+      - Compressão Semântica PL/SQL: architecture/compression.md
+  - Referência do CLI:
+      - Visão Geral: cli-reference/overview.md
+      - Extração & Compilação: cli-reference/extraction-compilation.md
+      - IA & Chat: cli-reference/ai-interaction.md
+      - Utilitários & Diagnóstico: cli-reference/maintenance.md
+  - IA & RAG:
+      - Agente Autônomo & Tools: ai-and-rag/autonomous-agent.md
+      - Provedores de LLM: ai-and-rag/llm-providers.md
+      - Bancos Vetoriais & RAG: ai-and-rag/vector-databases.md
+  - Contribuição:
+      - Desenvolvimento & Testes: contributing/development.md
+      - Changelog: contributing/changelog.md

@@ -34,3 +34,6 @@ Thumbs.db
 .coverage.*
 htmlcov/
 
+# Documentation Build Output
+site/
+

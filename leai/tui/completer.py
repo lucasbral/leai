@@ -201,6 +201,23 @@ class LeaiCompleter(Completer):
                         )
                 return
 
+            # Sub-argument completion for /annotate (SeaweedFS flags)
+            if cmd_name == "/annotate":
+                ann_flags = [
+                    ("--seaweed", "Sync annotations with SeaweedFS S3 storage"),
+                    ("-W", "Short for --seaweed"),
+                    ("--no-cache", "Do not write local files, sync directly with SeaweedFS"),
+                ]
+                for flag_name, flag_desc in ann_flags:
+                    if flag_name.startswith(word_before_cursor):
+                        yield Completion(
+                            text=flag_name,
+                            start_position=-len(word_before_cursor),
+                            display=flag_name,
+                            display_meta=flag_desc,
+                        )
+                return
+
             # Sub-argument completion for /seaweed (status, push, pull)
             if cmd_name == "/seaweed":
                 if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
