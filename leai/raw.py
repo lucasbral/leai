@@ -184,64 +184,68 @@ def save_raw_schema(
     raw_path: Path,
     multi_schema: bool = False,
     storage: Any = None,
+    local_cache: bool = True,
+    force_upload: bool = False,
 ) -> list[Path]:
-    target_path = (raw_path / schema.schema_name) if (multi_schema and schema.schema_name) else raw_path
-    target_path.mkdir(parents=True, exist_ok=True)
     saved_files: list[Path] = []
 
-    def _write_json(file_path: Path, data: dict) -> Path:
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-        return file_path
+    if local_cache:
+        target_path = (raw_path / schema.schema_name) if (multi_schema and schema.schema_name) else raw_path
+        target_path.mkdir(parents=True, exist_ok=True)
 
-    # 1. Tables
-    for table in schema.tables:
-        p = target_path / "tables" / f"{table.name}.json"
-        saved_files.append(_write_json(p, table.model_dump()))
+        def _write_json(file_path: Path, data: dict) -> Path:
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            return file_path
 
-    # 2. Views
-    for view in schema.views:
-        p = target_path / "views" / f"{view.name}.json"
-        saved_files.append(_write_json(p, view.model_dump()))
+        # 1. Tables
+        for table in schema.tables:
+            p = target_path / "tables" / f"{table.name}.json"
+            saved_files.append(_write_json(p, table.model_dump()))
 
-    # 3. Materialized Views
-    for mview in schema.mviews:
-        p = target_path / "mviews" / f"{mview.name}.json"
-        saved_files.append(_write_json(p, mview.model_dump()))
+        # 2. Views
+        for view in schema.views:
+            p = target_path / "views" / f"{view.name}.json"
+            saved_files.append(_write_json(p, view.model_dump()))
 
-    # 4. Code Objects
-    for code_obj in schema.code_objects:
-        obj_folder = code_obj.object_type.lower().replace(" ", "_") + "s"
-        p = target_path / obj_folder / f"{code_obj.name}.json"
-        saved_files.append(_write_json(p, code_obj.model_dump()))
+        # 3. Materialized Views
+        for mview in schema.mviews:
+            p = target_path / "mviews" / f"{mview.name}.json"
+            saved_files.append(_write_json(p, mview.model_dump()))
 
-    # 5. Triggers
-    for trigger in schema.triggers:
-        p = target_path / "triggers" / f"{trigger.name}.json"
-        saved_files.append(_write_json(p, trigger.model_dump()))
+        # 4. Code Objects
+        for code_obj in schema.code_objects:
+            obj_folder = code_obj.object_type.lower().replace(" ", "_") + "s"
+            p = target_path / obj_folder / f"{code_obj.name}.json"
+            saved_files.append(_write_json(p, code_obj.model_dump()))
 
-    # 6. Sequences
-    for sequence in schema.sequences:
-        p = target_path / "sequences" / f"{sequence.name}.json"
-        saved_files.append(_write_json(p, sequence.model_dump()))
+        # 5. Triggers
+        for trigger in schema.triggers:
+            p = target_path / "triggers" / f"{trigger.name}.json"
+            saved_files.append(_write_json(p, trigger.model_dump()))
 
-    # 7. Indexes
-    for index in schema.indexes:
-        p = target_path / "indexes" / f"{index.name}.json"
-        saved_files.append(_write_json(p, index.model_dump()))
+        # 6. Sequences
+        for sequence in schema.sequences:
+            p = target_path / "sequences" / f"{sequence.name}.json"
+            saved_files.append(_write_json(p, sequence.model_dump()))
 
-    # 8. Synonyms
-    for synonym in schema.synonyms:
-        p = target_path / "synonyms" / f"{synonym.name}.json"
-        saved_files.append(_write_json(p, synonym.model_dump()))
+        # 7. Indexes
+        for index in schema.indexes:
+            p = target_path / "indexes" / f"{index.name}.json"
+            saved_files.append(_write_json(p, index.model_dump()))
 
-    # 9. Consolidated Schema Snapshot (written for fast TUI/CLI startup cache)
-    snapshot_path = target_path / "_schema.json"
-    _write_json(snapshot_path, schema.model_dump())
+        # 8. Synonyms
+        for synonym in schema.synonyms:
+            p = target_path / "synonyms" / f"{synonym.name}.json"
+            saved_files.append(_write_json(p, synonym.model_dump()))
+
+        # 9. Consolidated Schema Snapshot (written for fast TUI/CLI startup cache)
+        snapshot_path = target_path / "_schema.json"
+        _write_json(snapshot_path, schema.model_dump())
 
     if storage is not None:
         try:
-            storage.save_raw_schema(schema, multi_schema=multi_schema)
+            storage.save_raw_schema(schema, multi_schema=multi_schema, force=force_upload)
         except Exception as exc:
             import sys
 
@@ -406,14 +410,16 @@ def load_raw_schemas(
     raw_path: Path,
     target_schemas: list[str] | None = None,
     storage: Any = None,
+    local_cache: bool = True,
 ) -> list[SchemaMetadata]:
     if storage is not None:
         try:
             remote_schemas = storage.load_raw_schemas(target_schemas=target_schemas)
             if remote_schemas:
-                for schema_name, meta in remote_schemas.items():
-                    # Populate local cache without re-uploading to storage
-                    save_raw_schema(meta, raw_path, multi_schema=True)
+                if local_cache:
+                    for schema_name, meta in remote_schemas.items():
+                        # Populate local cache without re-uploading to storage
+                        save_raw_schema(meta, raw_path, multi_schema=True)
                 return list(remote_schemas.values())
         except Exception as exc:
             import sys

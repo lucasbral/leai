@@ -132,6 +132,8 @@ storage:
     raw_prefix: "raw"                              # Prefixo/pasta no bucket para os snapshots JSON brutos
     annotations_prefix: "annotations"              # Prefixo/pasta no bucket para os arquivos YAML de anotações
     auto_create_bucket: true                       # Cria o bucket automaticamente caso ainda não exista
+    no_cache: false                                # Se true, opera em modo 100% remoto: não grava arquivos locais em rawPath
+    incremental: true                              # Se true, calcula hash SHA-256 e só cria novas versões no S3 para objetos modificados
 
 
 

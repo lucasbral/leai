@@ -56,6 +56,8 @@ class SeaweedFSConfig(BaseModel):
     raw_prefix: str = "raw"
     annotations_prefix: str = "annotations"
     auto_create_bucket: bool = True
+    no_cache: bool = False
+    incremental: bool = True
 
 
 class StorageConfig(BaseModel):
@@ -155,6 +157,10 @@ def load_config(config_path: Path) -> LeaiConfig:
                 sw_dict["access_key"] = os.environ["LEAI_SEAWEED_ACCESS_KEY"]
             if os.environ.get("LEAI_SEAWEED_SECRET_KEY"):
                 sw_dict["secret_key"] = os.environ["LEAI_SEAWEED_SECRET_KEY"]
+            if os.environ.get("LEAI_SEAWEED_NO_CACHE"):
+                sw_dict["no_cache"] = os.environ["LEAI_SEAWEED_NO_CACHE"].strip().lower() in ("true", "1", "yes")
+            if os.environ.get("LEAI_SEAWEED_INCREMENTAL"):
+                sw_dict["incremental"] = os.environ["LEAI_SEAWEED_INCREMENTAL"].strip().lower() in ("true", "1", "yes")
 
     try:
         config = LeaiConfig.model_validate(raw)
