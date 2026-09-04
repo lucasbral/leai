@@ -293,6 +293,14 @@ def check(
         console.print(f"[yellow]! Warning during AI initialization:[/yellow] {exc}")
 
 
+@app.command(name="doctor")
+def doctor(
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+) -> None:
+    """Pre-flight diagnostic health check (alias for 'check'). Validates Oracle connection, config, and AI."""
+    check(config=config)
+
+
 @app.command()
 def extract(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),

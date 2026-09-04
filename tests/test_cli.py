@@ -525,6 +525,15 @@ docPath: "{(base / "docs").as_posix()}"
             self.assertIn("Web Studio Running", result.output)
             self.assertTrue(mock_start_server.called)
 
+    @patch("leai.cli.check")
+    def test_doctor_command_alias(self, mock_check):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_file = Path(tmpdir) / "leai.yml"
+            cfg_file.write_text("schemas:\n  - HR\n", encoding="utf-8")
+            result = self.runner.invoke(app, ["doctor", "-c", str(cfg_file)])
+            self.assertEqual(result.exit_code, 0)
+            mock_check.assert_called_once_with(config=cfg_file)
+
 
 if __name__ == "__main__":
     unittest.main()
