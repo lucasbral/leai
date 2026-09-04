@@ -729,8 +729,8 @@ class InteractiveTUISession:
             console.print(f"[green]✓ Conversation transcript saved to:[/green] [bold cyan]{saved}[/bold cyan]")
             return True
 
-        if cmd == "/check":
-            self._run_check()
+        if cmd in ("/doctor", "/check"):
+            self._run_doctor()
             return True
 
         if cmd == "/init":
@@ -1717,7 +1717,22 @@ class InteractiveTUISession:
             f"[green]✓ Documentation Store:[/green] [cyan]{ann_count}[/cyan] annotations in [bold]{self.config.annotationsPath}[/bold] • [cyan]{doc_count}[/cyan] docs in [bold]{self.config.docPath}[/bold]"
         )
 
-        # 5. Check Git / GitLab Status
+        # 5. Check SeaweedFS S3 Storage
+        if getattr(self.config, "storage", None) and self.config.storage.seaweedfs.enabled:
+            try:
+                from leai.storage import SeaweedFSStorage
+
+                sw_storage = SeaweedFSStorage(self.config.storage.seaweedfs)
+                res = sw_storage.test_connection()
+                status_str = "OK" if res.get("success") else "Failed"
+                objs = res.get("objects_found", 0)
+                console.print(
+                    f"[green]✓ SeaweedFS S3 Storage:[/green] [bold]{status_str}[/bold] (Bucket: {self.config.storage.seaweedfs.bucket}, Objects: {objs})"
+                )
+            except Exception as exc:
+                console.print(f"[yellow]! SeaweedFS Warning:[/yellow] {exc}")
+
+        # 6. Check Git / GitLab Status
         try:
             from leai.git_ops import get_git_status
 
@@ -1732,6 +1747,10 @@ class InteractiveTUISession:
                 console.print("[dim]! Git Repository: not inside a git working tree[/dim]\n")
         except Exception:
             console.print()
+
+    def _run_doctor(self) -> None:
+        """Executes full diagnostic pre-flight health check (alias for /check)."""
+        self._run_check()
 
     def _run_init(self, force: bool = False) -> None:
         """Informs or initializes leai.yml with interactive overwrite confirmation."""
@@ -1785,7 +1804,7 @@ class InteractiveTUISession:
         table.add_row("/workflow <name> <obj>", "Workflows", "Execute autonomous pipeline (impact, refactor)")
         table.add_row("/models [p]", "AI Config", "List available AI models from the provider API")
         table.add_row("/model <p> [m]", "AI Config", "Switch provider (openai, gemini, grok, etc.) and model")
-        table.add_row("/check", "Diagnostics", "Check Oracle connection, snapshots, docs, and AI status")
+        table.add_row("/doctor, /check", "Diagnostics", "Pre-flight health check on Oracle, AI, Storage, and Git")
         table.add_row("/init", "Setup", "Check or initialize the leai.yml configuration file")
 
         # Session & Utilities

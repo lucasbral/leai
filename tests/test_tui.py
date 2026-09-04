@@ -835,6 +835,15 @@ class TuiUnitTests(unittest.TestCase):
         mock_doc_editor_cls.assert_called_once_with(self.config, session.schemas)
         mock_instance.run.assert_called_once_with("EMPLOYEES")
 
+    @patch("leai.tui.session.InteractiveTUISession._run_doctor")
+    def test_session_doctor_command(self, mock_doctor):
+        session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+        res1 = session.handle_slash_command("/doctor")
+        self.assertTrue(res1)
+        res2 = session.handle_slash_command("/check")
+        self.assertTrue(res2)
+        self.assertEqual(mock_doctor.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

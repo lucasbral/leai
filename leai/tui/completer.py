@@ -29,6 +29,7 @@ SLASH_COMMANDS: list[tuple[str, str]] = [
     ("/tools", "Quick viewer for last turn's tool execution inputs/outputs"),
     ("/git", "Check Git status, pull updates, or sync metadata with remote"),
     ("/seaweed", "SeaweedFS S3 storage status, push, and pull operations"),
+    ("/doctor", "Pre-flight health check on Oracle, AI, Storage, and Git (alias: /check)"),
     ("/check", "Run environment diagnostics on DB, config and AI provider"),
     ("/init", "Create or check leai.yml configuration file"),
     ("/clear", "Clear conversation memory and terminal screen"),
