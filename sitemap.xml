@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+    <url>
+        <loc>https://lucasbral.github.io/leai/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/ai-and-rag/autonomous-agent/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/ai-and-rag/autonomous-agent/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/ai-and-rag/autonomous-agent/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/ai-and-rag/llm-providers/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/ai-and-rag/llm-providers/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/ai-and-rag/llm-providers/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/ai-and-rag/vector-databases/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/ai-and-rag/vector-databases/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/ai-and-rag/vector-databases/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/architecture/compression/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/architecture/compression/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/architecture/compression/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/architecture/lineage/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/architecture/lineage/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/architecture/lineage/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/architecture/pipeline/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/architecture/pipeline/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/architecture/pipeline/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/architecture/synonyms/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/architecture/synonyms/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/architecture/synonyms/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/cli-reference/ai-interaction/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/cli-reference/ai-interaction/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/cli-reference/ai-interaction/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/cli-reference/extraction-compilation/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/cli-reference/extraction-compilation/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/cli-reference/extraction-compilation/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/cli-reference/maintenance/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/cli-reference/maintenance/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/cli-reference/maintenance/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/cli-reference/overview/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/cli-reference/overview/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/cli-reference/overview/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/contributing/changelog/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/contributing/changelog/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/contributing/changelog/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/contributing/development/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/contributing/development/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/contributing/development/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/getting-started/configuration/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/getting-started/configuration/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/getting-started/configuration/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/getting-started/installation/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/getting-started/installation/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/getting-started/installation/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/getting-started/quickstart/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/getting-started/quickstart/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/getting-started/quickstart/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/ai-and-rag/autonomous-agent/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/ai-and-rag/autonomous-agent/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/ai-and-rag/autonomous-agent/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/ai-and-rag/llm-providers/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/ai-and-rag/llm-providers/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/ai-and-rag/llm-providers/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/ai-and-rag/vector-databases/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/ai-and-rag/vector-databases/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/ai-and-rag/vector-databases/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/architecture/compression/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/architecture/compression/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/architecture/compression/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/architecture/lineage/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/architecture/lineage/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/architecture/lineage/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/architecture/pipeline/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/architecture/pipeline/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/architecture/pipeline/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/architecture/synonyms/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/architecture/synonyms/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/architecture/synonyms/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/cli-reference/ai-interaction/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/cli-reference/ai-interaction/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/cli-reference/ai-interaction/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/cli-reference/extraction-compilation/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/cli-reference/extraction-compilation/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/cli-reference/extraction-compilation/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/cli-reference/maintenance/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/cli-reference/maintenance/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/cli-reference/maintenance/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/cli-reference/overview/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/cli-reference/overview/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/cli-reference/overview/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/contributing/changelog/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/contributing/changelog/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/contributing/changelog/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/contributing/development/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/contributing/development/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/contributing/development/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/getting-started/configuration/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/getting-started/configuration/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/getting-started/configuration/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/getting-started/installation/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/getting-started/installation/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/getting-started/installation/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/getting-started/quickstart/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/getting-started/quickstart/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/getting-started/quickstart/"/>
+    </url>
+</urlset>
