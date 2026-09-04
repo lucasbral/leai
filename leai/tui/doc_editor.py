@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from prompt_toolkit import prompt
 from rich import box
@@ -378,10 +378,12 @@ class DocEditor:
         config: LeaiConfig,
         schemas: list[SchemaMetadata],
         input_fn: Callable[[str], str] | None = None,
+        storage: Any = None,
     ) -> None:
         self.config = config
         self.schemas = schemas
         self.input_fn = input_fn or _default_input_fn
+        self.storage = storage
         self.is_multi = len(schemas) > 1 or config.is_all_schemas
 
     def run(self, object_name_arg: str | None = None) -> bool:
@@ -480,15 +482,29 @@ class DocEditor:
             cols = [sp.name for sp in obj_meta.subprograms]
 
         # Load or initialize annotation
-        if ann_file.exists():
-            annotation = load_annotation(ann_file)
+        if ann_file.exists() or (self.storage and s_name and category and o_name):
+            annotation = load_annotation(
+                ann_file,
+                storage=self.storage,
+                schema_name=s_name,
+                obj_folder=category,
+                obj_name=o_name,
+            )
             # Ensure missing columns are present
             for col in cols:
                 if col not in annotation.columns:
                     annotation.columns[col] = ""
         else:
             db_comment = getattr(obj_meta, "comments", "") or ""
-            annotation = ensure_annotation_stub(ann_file, db_comment=db_comment, column_names=cols)
+            annotation = ensure_annotation_stub(
+                ann_file,
+                db_comment=db_comment,
+                column_names=cols,
+                storage=self.storage,
+                schema_name=s_name,
+                obj_folder=category,
+                obj_name=o_name,
+            )
 
         # Main interactive editing loop
         dirty = False
@@ -534,7 +550,14 @@ class DocEditor:
                     dirty = True
 
             elif choice in ("7", "s", "save"):
-                save_annotation(ann_file, annotation)
+                save_annotation(
+                    ann_file,
+                    annotation,
+                    storage=self.storage,
+                    schema_name=s_name,
+                    obj_folder=category,
+                    obj_name=o_name,
+                )
                 self._display_save_success(ann_file, annotation)
 
                 # Prompt to compile markdown doc for this specific object
@@ -759,12 +782,18 @@ class DocEditor:
         )
         syntax = Syntax(yaml_content, "yaml", theme="monokai", line_numbers=True)
 
+        sub_text = (
+            f"[dim]{ann_file} • Synced to SeaweedFS ({self.config.storage.seaweedfs.bucket})[/dim]"
+            if self.storage
+            else f"[dim]{ann_file}[/dim]"
+        )
+
         console.print()
         console.print(
             Panel(
                 syntax,
                 title=f"[bold green]✓ Successfully Saved Annotation to {ann_file.name}[/bold green]",
-                subtitle=f"[dim]{ann_file}[/dim]",
+                subtitle=sub_text,
                 border_style="green",
             )
         )

@@ -509,7 +509,8 @@ class InteractiveTUISession:
             return True
 
         if cmd == "/annotate":
-            self._run_annotate()
+            args = parts[1:] if len(parts) > 1 else None
+            self._run_annotate(args)
             return True
 
         if cmd == "/enrich":
@@ -1015,7 +1016,16 @@ class InteractiveTUISession:
             console.print("[yellow]! No database metadata loaded. Please run [bold cyan]/extract[/bold cyan] first.[/yellow]\n")
             return
 
-        editor = DocEditor(self.config, self.schemas)
+        storage = None
+        if self.config.storage.seaweedfs.enabled:
+            from leai.storage import SeaweedFSStorage
+
+            try:
+                storage = SeaweedFSStorage(self.config.storage.seaweedfs)
+            except Exception:
+                storage = None
+
+        editor = DocEditor(self.config, self.schemas, storage=storage)
         saved = editor.run(object_name)
         if saved:
             # Refresh schemas and completer cache while preserving conversation history
@@ -1400,11 +1410,50 @@ class InteractiveTUISession:
         except Exception as exc:
             console.print(f"[red]Error during compilation:[/red] {exc}\n")
 
-    def _run_annotate(self) -> None:
-        """Synchronizes YAML annotation stubs in annotationsPath."""
+    def _run_annotate(self, args: list[str] | None = None) -> None:
+        """Synchronizes YAML annotation stubs in annotationsPath and/or SeaweedFS."""
         if not self.schemas:
             console.print("[yellow]! No database snapshots found in raw/. Run [bold cyan]/extract[/bold cyan] first.[/yellow]\n")
             return
+
+        seaweed_flag = False
+        no_cache_flag = False
+        if args:
+            for a in args:
+                a_lower = a.strip().lower()
+                if a_lower in ("--seaweed", "-w"):
+                    seaweed_flag = True
+                elif a_lower == "--no-cache":
+                    no_cache_flag = True
+
+        # Resolve SeaweedFS storage
+        use_seaweed = seaweed_flag or self.config.storage.seaweedfs.enabled
+        is_no_cache = no_cache_flag or self.config.storage.seaweedfs.no_cache
+
+        storage = None
+        if is_no_cache and not use_seaweed:
+            console.print("[red]✕ Error:[/red] --no-cache requires SeaweedFS to be enabled (use --seaweed or enable it in leai.yml).\n")
+            return
+
+        if use_seaweed:
+            from leai.storage import SeaweedFSStorage
+
+            try:
+                storage = SeaweedFSStorage(self.config.storage.seaweedfs)
+                storage.ensure_bucket_exists()
+                mode_tags = []
+                if is_no_cache:
+                    mode_tags.append("Remote-only")
+                tag_str = f" [dim]({', '.join(mode_tags)})[/dim]" if mode_tags else ""
+                console.print(
+                    f"[cyan]SeaweedFS Storage:[/cyan] [bold green]Active[/bold green] (Endpoint: {self.config.storage.seaweedfs.endpoint_url}, Bucket: {self.config.storage.seaweedfs.bucket}){tag_str}\n"
+                )
+            except Exception as exc:
+                console.print(f"[red]SeaweedFS error:[/red] {exc}\n")
+                if is_no_cache:
+                    return
+                console.print("[yellow]Falling back to local-only annotation sync.[/yellow]\n")
+                storage = None
 
         start_time = time.perf_counter()
         total_ann = 0
@@ -1445,6 +1494,7 @@ class InteractiveTUISession:
                         multi_schema=is_multi,
                         object_types=self.config.object_types,
                         progress_callback=_on_ann_progress,
+                        storage=storage,
                     )
                     total_ann += len(gen_ann)
 
@@ -1456,10 +1506,15 @@ class InteractiveTUISession:
                         )
 
             elapsed = time.perf_counter() - start_time
+            storage_info = (
+                f"\n[bold]SeaweedFS:[/bold] [bold cyan]{self.config.storage.seaweedfs.bucket}/{self.config.storage.seaweedfs.annotations_prefix}[/bold cyan]"
+                if storage
+                else ""
+            )
             console.print(
                 Panel(
                     f"[green]✓ {total_ann} YAML Annotation Stubs Synchronized[/green]\n"
-                    f"[bold]Elapsed:[/bold] {elapsed:.2f}s • [bold]Destination:[/bold] [bold cyan]{self.config.annotationsPath}[/bold cyan]\n\n"
+                    f"[bold]Elapsed:[/bold] {elapsed:.2f}s • [bold]Destination:[/bold] [bold cyan]{self.config.annotationsPath}[/bold cyan]{storage_info}\n\n"
                     f"[dim]Tip: Use [bold cyan]/doc <OBJECT>[/bold cyan] to edit annotations right in this terminal.[/dim]",
                     title="[bold green]Annotation Synchronization Completed[/bold green]",
                     border_style="green",
@@ -1686,6 +1741,7 @@ class InteractiveTUISession:
         table.add_row("/rule [list|add|find]", "Glossary", "Manage global business rules and canonical domain filters")
         table.add_row("/enrich [obj]", "AI Studio", "Auto-enrich descriptions and business rules with AI")
         table.add_row("/compile [obj]", "Pipeline", "Compile final Markdown files into docs/ (supports single object)")
+        table.add_row("/annotate [-W]", "Pipeline", "Synchronize YAML annotation stubs into annotations/ and/or SeaweedFS")
         table.add_row(
             "/extract [s] [d] [-W]", "Pipeline", "Extract Oracle snapshot (supports schema, days, --seaweed, --no-cache, --force-upload)"
         )

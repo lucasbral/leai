@@ -758,6 +758,56 @@ class TuiUnitTests(unittest.TestCase):
         self.assertIn("push", completions_sw)
         self.assertIn("pull", completions_sw)
 
+        # 3. /annotate flags
+        doc_ann = Document("/annotate -")
+        completions_ann = [c.text for c in completer.get_completions(doc_ann, event)]
+        self.assertIn("--seaweed", completions_ann)
+        self.assertIn("-W", completions_ann)
+        self.assertIn("--no-cache", completions_ann)
+
+    @patch("leai.tui.session.sync_schema_annotations")
+    def test_session_slash_annotate_local(self, mock_sync):
+        mock_sync.return_value = [Path("test.yml")]
+        session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+        res = session.handle_slash_command("/annotate")
+        self.assertTrue(res)
+        mock_sync.assert_called_once()
+        self.assertIsNone(mock_sync.call_args.kwargs.get("storage"))
+
+    @patch("leai.storage.SeaweedFSStorage.ensure_bucket_exists")
+    @patch("leai.tui.session.sync_schema_annotations")
+    def test_session_slash_annotate_seaweed(self, mock_sync, mock_ensure_bucket):
+        mock_sync.return_value = [Path("test.yml")]
+        self.config.storage.seaweedfs.endpoint_url = "http://localhost:8333"
+        self.config.storage.seaweedfs.bucket = "leai-test"
+        session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+
+        res = session.handle_slash_command("/annotate --seaweed")
+        self.assertTrue(res)
+        mock_ensure_bucket.assert_called()
+        mock_sync.assert_called_once()
+        self.assertIsNotNone(mock_sync.call_args.kwargs.get("storage"))
+
+    @patch("leai.tui.session.sync_schema_annotations")
+    def test_session_slash_annotate_no_cache_without_seaweed(self, mock_sync):
+        self.config.storage.seaweedfs.enabled = False
+        session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+        res = session.handle_slash_command("/annotate --no-cache")
+        self.assertTrue(res)
+        mock_sync.assert_not_called()
+
+    @patch("leai.tui.doc_editor.save_annotation")
+    def test_doc_editor_save_with_seaweed_storage(self, mock_save):
+        from leai.tui.doc_editor import DocEditor
+
+        mock_storage = MagicMock()
+        inputs = iter(["7", "n"])  # 7 = Save Changes, n = Don't recompile docs
+        editor = DocEditor(self.config, [self.schema], input_fn=lambda _: next(inputs), storage=mock_storage)
+        res = editor.run("EMPLOYEES")
+        self.assertTrue(res)
+        mock_save.assert_called_once()
+        self.assertEqual(mock_save.call_args.kwargs.get("storage"), mock_storage)
+
 
 if __name__ == "__main__":
     unittest.main()
