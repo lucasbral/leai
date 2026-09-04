@@ -11,7 +11,7 @@ from leai.annotations import ensure_annotation_stub, save_annotation
 from leai.config import LeaiConfig
 from leai.models import CodeObjectMeta, ObjectAnnotation, SchemaMetadata, TableMeta
 
-console = Console()
+console = Console(legacy_windows=False)
 
 
 def enrich_table_annotation(
