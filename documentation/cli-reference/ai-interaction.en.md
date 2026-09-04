@@ -54,21 +54,27 @@ leai chat --web
 | :--- | :--- | :--- |
 | `/copy [all\|code\|N]` | Clipboard | Copy last AI response or specific code block directly to OS clipboard. |
 | `/doc [obj]` | Documentation | Open interactive in-terminal YAML annotation & documentation editor. |
+| `/rule [list\|add\|find]` | Glossary | Manage global business rules and canonical domain filters. |
 | `/enrich [obj]` | AI Studio | Auto-enrich business descriptions & rules with LLM. |
 | `/compile [obj]` | Pipeline | Compile final Markdown docs in `docs/` (supports single object). |
-| `/annotate` | Pipeline | Synchronize YAML annotation stubs in `annotations/`. |
-| `/extract [s\|ALL]` | Pipeline | Connect to Oracle and extract fresh raw metadata snapshot. |
+| `/annotate [-W]` | Pipeline | Synchronize YAML annotation stubs in `annotations/` and/or SeaweedFS. |
+| `/extract [s\|d\|-W]` | Pipeline | Connect to Oracle and extract fresh raw metadata snapshot. |
+| `/seaweed [status\|push\|pull\|sync]` | SeaweedFS | Check SeaweedFS S3 status, push, pull, or bi-directional sync. |
 | `/serve [port\|stop]` | Web Studio | Launch interactive Web Studio with in-browser editor & real-time sync. |
+| `/git [status\|pull\|sync]` | GitOps | Check Git commit status, pull updates, or sync metadata with remote. |
 | `/trace <obj>` | Lineage | Perform inline dependency lineage & impact X-ray with Mermaid. |
 | `/tables` | Inspection | List all tables with column counts and primary keys. |
 | `/schema [s]` | Inspection | Show comprehensive overview of all catalog objects. |
 | `/changes [d]` | Inspection | Inspect database objects modified in last N days (Default: 7). |
+| `/agent <role> <task>` | Multi-Agent | Execute specialized subagents (`catalog`, `plsql`, `lineage`, `patch`, `doc`). |
+| `/workflow <name> <obj>` | Workflows | Execute autonomous pipelines (`impact`, `refactor`). |
 | `/models [p]` | AI Config | List all available AI models returned by provider API. |
 | `/model <p> [m]` | AI Config | Switch AI provider and model at runtime. |
 | `/audit [last\|session\|export]`| Audit & Logs | Inspect AI tool call trace, latency & session audit log. |
 | `/tools` | Audit & Logs | Quick viewer for last turn's tool execution inputs/outputs. |
 | `/save [file.md]` | Session | Export current conversation transcript to Markdown. |
-| `/check` | Diagnostics | Verify Oracle connection, metadata snapshots, docs and AI status. |
+| `/doctor` (or `/check`) | Diagnostics | Run pre-flight health checks across Oracle, AI, Storage, and Git. |
+| `/init` | Setup | Initialize or update the `leai.yml` configuration file. |
 | `/clear` | Session | Clear conversation memory and reset terminal screen. |
 | `/exit`, `/quit` | Session | Exit LEAI interactive copilot. |
 

@@ -39,11 +39,15 @@ leai doctor
 | `-c`, `--config PATH` | Option | `leai.yml` | Path to `leai.yml`. |
 
 ### What `doctor` checks:
-* **Network Connectivity:** Validates TCP and database listener connectivity to the configured Oracle host and port.
+* **Network Connectivity:** Validates TCP connection to Oracle Database and queries `v$version`.
 * **Catalog Permissions:** Tests read access across Oracle system views: `ALL_TABLES`, `ALL_TAB_COLUMNS`, `ALL_CONSTRAINTS`, `ALL_SOURCE`, and `ALL_SYNONYMS`.
 * **Workspace Permissions:** Checks read and write access for `rawPath`, `annotationsPath`, and `docPath`.
 * **S3 Object Storage:** Verifies connection and bucket health for SeaweedFS if enabled.
-* **AI API Keys:** Verifies the availability and readiness of configured LLM credentials.
+* **AI Provider Readiness:** Confirms active AI provider credentials and model responsiveness.
+* **GitOps Integration:** Validates Git repository status, active branch, and remote sync state.
+
+> [!TIP]
+> Diagnostics can also be run directly inside the interactive copilot session (`leai chat`) by typing `/doctor` or `/check`.
 
 ---
 

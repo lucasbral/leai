@@ -4,6 +4,15 @@ All notable changes to the **LEAI** project are documented here.
 
 ---
 
+## [0.2.18] — 2026
+
+### 🌟 Added
+* **`leai doctor` CLI Command:** New command and official alias for `check`, providing end-to-end pre-flight health checks across Oracle Database (`v$version`), catalog permissions, pipeline directories, S3 bucket (SeaweedFS), AI model connectivity, and GitOps status.
+* **`/doctor` and `/check` in TUI:** In-terminal pre-flight diagnostics runnable directly inside the interactive session (`leai chat`) with structured Rich table feedback.
+* **Updated Documentation:** Expanded CLI and TUI slash command reference tables with `/doctor`, `/seaweed`, `/git`, `/rule`, `/agent`, and `/workflow`.
+
+---
+
 ## [0.2.17] — 2026
 
 ### 🌟 Added
