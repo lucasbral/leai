@@ -4,6 +4,15 @@ Todas as alterações notáveis no projeto **LEAI** são documentadas nesta pág
 
 ---
 
+## [0.2.18] — 2026
+
+### 🌟 Adicionado
+* **Comando `leai doctor` na CLI:** Novo comando e alias oficial para `check`, executando diagnóstico preventivo do Oracle (`v$version`), permissões de catálogo, diretórios do pipeline, bucket S3 (SeaweedFS), conectividade do modelo de IA e status do GitOps.
+* **Comandos `/doctor` e `/check` no TUI:** Diagnóstico completo executável diretamente dentro do terminal interativo (`leai chat`) com tabela formatada via Rich.
+* **Documentação Atualizada:** Referências de comandos CLI e slash commands do TUI atualizados com `/doctor`, `/seaweed`, `/git`, `/rule`, `/agent` e `/workflow`.
+
+---
+
 ## [0.2.17] — 2026
 
 ### 🌟 Adicionado
