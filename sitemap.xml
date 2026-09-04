@@ -8,6 +8,20 @@
         <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/"/>
     </url>
     <url>
+        <loc>https://lucasbral.github.io/leai/agents-and-workflows/subagents/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/agents-and-workflows/subagents/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/agents-and-workflows/subagents/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/agents-and-workflows/workflows/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/agents-and-workflows/workflows/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/agents-and-workflows/workflows/"/>
+    </url>
+    <url>
         <loc>https://lucasbral.github.io/leai/ai-and-rag/autonomous-agent/</loc>
         <lastmod>2026-09-04</lastmod>
         <changefreq>daily</changefreq>
@@ -85,6 +99,13 @@
         <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/cli-reference/overview/"/>
     </url>
     <url>
+        <loc>https://lucasbral.github.io/leai/cli-reference/tui-editor/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/cli-reference/tui-editor/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/cli-reference/tui-editor/"/>
+    </url>
+    <url>
         <loc>https://lucasbral.github.io/leai/contributing/changelog/</loc>
         <lastmod>2026-09-04</lastmod>
         <changefreq>daily</changefreq>
@@ -120,11 +141,53 @@
         <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/getting-started/quickstart/"/>
     </url>
     <url>
+        <loc>https://lucasbral.github.io/leai/rules-and-glossary/rules/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/rules-and-glossary/rules/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/rules-and-glossary/rules/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/storage-and-gitops/gitops/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/storage-and-gitops/gitops/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/storage-and-gitops/gitops/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/storage-and-gitops/seaweedfs/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/storage-and-gitops/seaweedfs/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/storage-and-gitops/seaweedfs/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/web-studio/overview/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/web-studio/overview/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/web-studio/overview/"/>
+    </url>
+    <url>
         <loc>https://lucasbral.github.io/leai/en/</loc>
         <lastmod>2026-09-04</lastmod>
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/"/>
         <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/agents-and-workflows/subagents/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/agents-and-workflows/subagents/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/agents-and-workflows/subagents/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/agents-and-workflows/workflows/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/agents-and-workflows/workflows/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/agents-and-workflows/workflows/"/>
     </url>
     <url>
         <loc>https://lucasbral.github.io/leai/en/ai-and-rag/autonomous-agent/</loc>
@@ -204,6 +267,13 @@
         <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/cli-reference/overview/"/>
     </url>
     <url>
+        <loc>https://lucasbral.github.io/leai/en/cli-reference/tui-editor/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/cli-reference/tui-editor/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/cli-reference/tui-editor/"/>
+    </url>
+    <url>
         <loc>https://lucasbral.github.io/leai/en/contributing/changelog/</loc>
         <lastmod>2026-09-04</lastmod>
         <changefreq>daily</changefreq>
@@ -237,5 +307,33 @@
         <changefreq>daily</changefreq>
         <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/getting-started/quickstart/"/>
         <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/getting-started/quickstart/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/rules-and-glossary/rules/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/rules-and-glossary/rules/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/rules-and-glossary/rules/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/storage-and-gitops/gitops/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/storage-and-gitops/gitops/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/storage-and-gitops/gitops/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/storage-and-gitops/seaweedfs/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/storage-and-gitops/seaweedfs/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/storage-and-gitops/seaweedfs/"/>
+    </url>
+    <url>
+        <loc>https://lucasbral.github.io/leai/en/web-studio/overview/</loc>
+        <lastmod>2026-09-04</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://lucasbral.github.io/leai/en/web-studio/overview/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://lucasbral.github.io/leai/web-studio/overview/"/>
     </url>
 </urlset>
