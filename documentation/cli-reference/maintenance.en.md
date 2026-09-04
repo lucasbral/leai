@@ -10,10 +10,17 @@ Initializes a workspace directory by generating a starter `leai.yml` configurati
 
 ```bash
 leai init
+# Generate fully commented reference template:
+leai init --example
 ```
 
-* If a `leai.yml` file already exists, it issues a warning and prevents accidental overwrites.
-* Provides connection examples, object type filters, and AI provider templates.
+### Parameters and Flags:
+
+| Parameter / Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `-f`, `--force` | Flag | `False` | Overwrites existing `leai.yml` without prompt. |
+| `-e`, `--example` | Flag | `False` | Generates fully commented `leai.example.yml`. |
+| `-c`, `--config PATH` | Option | `leai.yml` | Target configuration path. |
 
 ---
 
@@ -25,24 +32,36 @@ Runs automated pre-flight diagnostics to ensure your environment is fully operat
 leai doctor
 ```
 
+### Parameters and Flags:
+
+| Parameter / Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `-c`, `--config PATH` | Option | `leai.yml` | Path to `leai.yml`. |
+
 ### What `doctor` checks:
 * **Network Connectivity:** Validates TCP and database listener connectivity to the configured Oracle host and port.
 * **Catalog Permissions:** Tests read access across Oracle system views: `ALL_TABLES`, `ALL_TAB_COLUMNS`, `ALL_CONSTRAINTS`, `ALL_SOURCE`, and `ALL_SYNONYMS`.
 * **Workspace Permissions:** Checks read and write access for `rawPath`, `annotationsPath`, and `docPath`.
+* **S3 Object Storage:** Verifies connection and bucket health for SeaweedFS if enabled.
 * **AI API Keys:** Verifies the availability and readiness of configured LLM credentials.
 
 ---
 
 ## 3. `leai changes`
 
-Audits schema evolution and detects *schema drift* by comparing the active snapshot against previous extractions in `./raw/`.
+Audits and lists recently created or altered database objects using Oracle's `LAST_DDL_TIME` timestamp.
 
 ```bash
-leai changes
+leai changes --days 15
+leai changes --days 30 -u HR
 ```
 
-### Change Audit Report:
-* **New:** Tables, columns, or views added to the schema.
-* **Dropped:** Tables, columns, or constraints that have been removed.
-* **Altered:** Column type or nullability modifications (e.g. `VARCHAR2(50)` expanded to `VARCHAR2(100)`).
-* **Source Updates:** PL/SQL package bodies or triggers with altered code implementations.
+### Parameters and Flags:
+
+| Parameter / Flag | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `-d`, `--days INT` | Option | `7` | Number of trailing days to audit. |
+| `-u`, `--user TEXT` | Option | `None` | Filters by specific modifying user or schema. |
+| `-c`, `--config PATH` | Option | `leai.yml` | Path to `leai.yml`. |
+| `--seaweed` | Flag | `False` | Audits snapshots stored in remote S3 bucket. |
+| `--no-cache` | Flag | `False` | Avoids writing snapshots to local disk. |

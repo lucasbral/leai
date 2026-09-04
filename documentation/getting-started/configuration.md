@@ -1,6 +1,6 @@
 # Configuração (`leai.yml`)
 
-O arquivo de configuração `leai.yml` controla todos os aspectos de extração, filtragem, armazenamento e integração com IA do LEAI.
+O arquivo de configuração `leai.yml` controla todos os aspectos de extração, filtragem, armazenamento, versionamento Git e integração com IA do LEAI.
 
 ---
 
@@ -45,12 +45,52 @@ object_types:
   - triggers
   - synonyms
 
-# 6. Configurações de IA (Opcional - para leai ask, leai chat e leai enrich)
+# 6. Configurações de IA (LLMs para Auto-Enriquecimento, Chat e Subagentes)
 ai:
-  provider: "openai"              # openai | gemini | claude | deepseek | qwen | ollama
-  model: "gpt-4o"
+  default_provider: "openai"      # openai | gemini | anthropic | deepseek | qwen | kimi | grok | ollama
   temperature: 0.2
-  max_iterations: 10              # Limite de voltas no loop autônomo de ferramentas
+  providers:
+    openai:
+      api_key: "${OPENAI_API_KEY}"
+      model: "gpt-4o-mini"
+    gemini:
+      api_key: "${GEMINI_API_KEY}"
+      model: "gemini-2.0-flash"
+    anthropic:
+      api_key: "${ANTHROPIC_API_KEY}"
+      model: "claude-3-5-sonnet-20241022"
+    ollama:
+      base_url: "http://localhost:11434/v1"
+      model: "qwen2.5-coder:latest"
+
+# 7. Sincronização com Git / GitLab / GitHub (GitOps)
+git:
+  enabled: false                                 # Ativa comandos leai git e /git
+  remote_url: "${GIT_REMOTE_URL}"                # URL do repositório remoto
+  branch: "main"                                 # Branch de rastreamento
+  author_name: "LEAI Bot"                        # Nome do autor nos commits
+  author_email: "leai@empresa.com"               # E-mail do autor nos commits
+  auto_sync: false                               # Push automático após extract/compile
+  tracked_paths:
+    - "annotations"
+    - "docs"
+    - "raw"
+    - "leai.yml"
+
+# 8. Armazenamento Distribuído / Object Storage (SeaweedFS / S3)
+storage:
+  seaweedfs:
+    enabled: false                                 # Se true, usa S3 sem precisar da flag --seaweed
+    endpoint_url: "http://localhost:8333"          # Gateway S3 do SeaweedFS ou MinIO
+    bucket: "leai"                                 # Nome do bucket S3
+    access_key: "${SEAWEEDFS_ACCESS_KEY}"
+    secret_key: "${SEAWEEDFS_SECRET_KEY}"
+    region_name: "us-east-1"
+    raw_prefix: "raw"                              # Prefixo dos snapshots JSON
+    annotations_prefix: "annotations"              # Prefixo das anotações YAML
+    auto_create_bucket: true                       # Cria o bucket caso não exista
+    no_cache: false                                # Se true, opera em modo 100% remoto
+    incremental: true                              # Deduplicação SHA-256
 ```
 
 ---

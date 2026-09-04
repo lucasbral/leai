@@ -1016,16 +1016,8 @@ class InteractiveTUISession:
             console.print("[yellow]! No database metadata loaded. Please run [bold cyan]/extract[/bold cyan] first.[/yellow]\n")
             return
 
-        storage = None
-        if self.config.storage.seaweedfs.enabled:
-            from leai.storage import SeaweedFSStorage
-
-            try:
-                storage = SeaweedFSStorage(self.config.storage.seaweedfs)
-            except Exception:
-                storage = None
-
-        editor = DocEditor(self.config, self.schemas, storage=storage)
+        # /doc saves strictly to local disk (no SeaweedFS sync)
+        editor = DocEditor(self.config, self.schemas)
         saved = editor.run(object_name)
         if saved:
             # Refresh schemas and completer cache while preserving conversation history
@@ -1284,7 +1276,24 @@ class InteractiveTUISession:
                     console.print(f"[red]Pull failed:[/red] {exc}\n")
             return
 
-        console.print(f"[yellow]Unknown /seaweed subcommand '{sub_arg}'. Available: status, push, pull.[/yellow]\n")
+        if sub_arg == "sync":
+            with console.status("[cyan]Synchronizing metadata with SeaweedFS...[/cyan]", spinner="dots"):
+                try:
+                    pushed = storage.push_local_to_remote(self.config.rawPath, self.config.annotationsPath)
+                    pulled = storage.pull_remote_to_local(self.config.rawPath, self.config.annotationsPath)
+                    console.print(
+                        f"[green]✓ Pushed {pushed.get('raw', 0)} RAW, {pushed.get('annotations', 0)} annotations[/green]\n"
+                        f"[green]✓ Pulled {pulled.get('raw', 0)} RAW, {pulled.get('annotations', 0)} annotations from '{cfg.bucket}'[/green]\n"
+                    )
+                    target_schemas_filter = self.config.schemas if not self.config.is_all_schemas else None
+                    self.schemas = load_raw_schemas(self.config.rawPath, target_schemas=target_schemas_filter)
+                    self.completer.update_schemas(self.schemas)
+                    self.session.update_schemas(self.schemas)
+                except Exception as exc:
+                    console.print(f"[red]Sync failed:[/red] {exc}\n")
+            return
+
+        console.print(f"[yellow]Unknown /seaweed subcommand '{sub_arg}'. Available: status, push, pull, sync.[/yellow]\n")
 
     def _run_compile(self, object_name: str | None = None) -> None:
         """Compiles Markdown docs merging raw snapshots and annotations."""
@@ -1616,6 +1625,16 @@ class InteractiveTUISession:
         try:
             from leai.web import start_server
 
+            storage = None
+            if self.config.storage.seaweedfs.enabled:
+                from leai.storage import SeaweedFSStorage
+
+                try:
+                    storage = SeaweedFSStorage(self.config.storage.seaweedfs)
+                    storage.ensure_bucket_exists()
+                except Exception:
+                    storage = None
+
             self.web_server, self.web_url = start_server(
                 config=self.config,
                 schemas=self.schemas,
@@ -1624,12 +1643,18 @@ class InteractiveTUISession:
                 port=port,
                 open_browser=True,
                 in_background=True,
+                storage=storage,
             )
             console.print()
+            sw_note = (
+                f"\n[bold white]SeaweedFS S3:[/bold white] [bold green]Active[/bold green] [dim]({self.config.storage.seaweedfs.bucket})[/dim]"
+                if storage
+                else ""
+            )
             console.print(
                 Panel(
                     f"[bold cyan]⚡ LEAI Web Documentation & Annotation Studio[/bold cyan]\n\n"
-                    f"[bold white]URL:[/bold white] [bold yellow underline]{self.web_url}[/bold yellow underline]\n"
+                    f"[bold white]URL:[/bold white] [bold yellow underline]{self.web_url}[/bold yellow underline]{sw_note}\n"
                     f"[bold white]Features:[/bold white] In-browser real-time annotation editor, instant Markdown sync, AI auto-enrichment & lineage graphs.\n\n"
                     f"[dim]Studio opened in your default browser. Type [bold cyan]/serve stop[/bold cyan] anytime to stop the server.[/dim]",
                     title="[bold green]🌐 Web Studio Launched in Background[/bold green]",
@@ -1745,7 +1770,7 @@ class InteractiveTUISession:
         table.add_row(
             "/extract [s] [d] [-W]", "Pipeline", "Extract Oracle snapshot (supports schema, days, --seaweed, --no-cache, --force-upload)"
         )
-        table.add_row("/seaweed [status|push|pull]", "SeaweedFS", "Check SeaweedFS S3 status, push local snapshots or pull remote updates")
+        table.add_row("/seaweed [status|push|pull|sync]", "SeaweedFS", "Check SeaweedFS S3 status, push, pull, or bi-directional sync")
         table.add_row("/serve [port|stop]", "Web Studio", "Launch Web Studio with browser editor and live sync")
         table.add_row("/git [status|pull|sync]", "GitLab/Git", "Check sync status, pull updates, or commit & push metadata")
 

@@ -226,6 +226,7 @@ class LeaiCompleter(Completer):
                         ("status", "Check SeaweedFS S3 connection and bucket operational status"),
                         ("push", "Upload local raw/ snapshots and annotations/ to SeaweedFS"),
                         ("pull", "Download remote raw/ snapshots and annotations/ from SeaweedFS"),
+                        ("sync", "Bidirectional smart synchronization between local disk and SeaweedFS"),
                     ]
                     for sw_cmd, sw_desc in sw_options:
                         if sw_cmd.startswith(sw_query):

@@ -1,6 +1,6 @@
 # Configuration (`leai.yml`)
 
-The `leai.yml` configuration file controls all aspects of extraction, filtering, storage paths, and AI integrations for LEAI.
+The `leai.yml` configuration file controls all aspects of extraction, filtering, storage paths, GitOps version control, and AI integrations for LEAI.
 
 ---
 
@@ -45,12 +45,52 @@ object_types:
   - triggers
   - synonyms
 
-# 6. AI Settings (Optional - for leai ask, leai chat, and leai enrich)
+# 6. AI Settings (LLMs for Auto-Enrichment, Chat, and Subagents)
 ai:
-  provider: "openai"              # openai | gemini | claude | deepseek | qwen | ollama
-  model: "gpt-4o"
+  default_provider: "openai"      # openai | gemini | anthropic | deepseek | qwen | kimi | grok | ollama
   temperature: 0.2
-  max_iterations: 10              # Max turns in the autonomous tool-calling loop
+  providers:
+    openai:
+      api_key: "${OPENAI_API_KEY}"
+      model: "gpt-4o-mini"
+    gemini:
+      api_key: "${GEMINI_API_KEY}"
+      model: "gemini-2.0-flash"
+    anthropic:
+      api_key: "${ANTHROPIC_API_KEY}"
+      model: "claude-3-5-sonnet-20241022"
+    ollama:
+      base_url: "http://localhost:11434/v1"
+      model: "qwen2.5-coder:latest"
+
+# 7. Git / GitLab / GitHub Synchronization (GitOps)
+git:
+  enabled: false                                 # Enables leai git commands and /git
+  remote_url: "${GIT_REMOTE_URL}"                # Remote repository URL
+  branch: "main"                                 # Tracking branch
+  author_name: "LEAI Bot"                        # Commit author name
+  author_email: "leai@company.com"               # Commit author email
+  auto_sync: false                               # Automatic push after extract/compile
+  tracked_paths:
+    - "annotations"
+    - "docs"
+    - "raw"
+    - "leai.yml"
+
+# 8. Distributed Storage / Object Storage (SeaweedFS / S3)
+storage:
+  seaweedfs:
+    enabled: false                                 # Automatically routes operations to S3
+    endpoint_url: "http://localhost:8333"          # SeaweedFS or MinIO S3 gateway
+    bucket: "leai"                                 # S3 bucket name
+    access_key: "${SEAWEEDFS_ACCESS_KEY}"
+    secret_key: "${SEAWEEDFS_SECRET_KEY}"
+    region_name: "us-east-1"
+    raw_prefix: "raw"                              # Folder prefix for JSON snapshots
+    annotations_prefix: "annotations"              # Folder prefix for YAML annotations
+    auto_create_bucket: true                       # Creates bucket if missing
+    no_cache: false                                # Local disk cache or pure remote
+    incremental: true                              # SHA-256 hash deduplication
 ```
 
 ---

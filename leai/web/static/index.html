@@ -1457,6 +1457,8 @@
     </div>
 
     <div class="header-actions">
+      <!-- SeaweedFS Indicator -->
+      <span id="seaweed-badge" class="badge" style="display: none; background: rgba(56, 189, 248, 0.15); color: var(--accent); border: 1px solid var(--accent); border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 600;" title="SeaweedFS S3 Storage">☁️ S3</span>
       <!-- Language Selector -->
       <div class="lang-selector-wrap" title="Idioma / Language">
         <span>🌐</span>
@@ -2482,9 +2484,20 @@ graph TD
       try {
         const res = await fetch('/api/status');
         const data = await res.json();
-        document.getElementById('ai-model-badge').textContent = `AI: ${data.provider.toUpperCase()} (${data.model})`;
+        const badge = document.getElementById('ai-model-badge');
+        if (badge) badge.textContent = `AI: ${data.provider.toUpperCase()} (${data.model})`;
+
+        if (data.seaweedfs && data.seaweedfs.enabled) {
+          const swBadge = document.getElementById('seaweed-badge');
+          if (swBadge) {
+            swBadge.style.display = 'inline-flex';
+            swBadge.textContent = `☁️ S3: ${data.seaweedfs.bucket || 'leai'}`;
+            swBadge.title = `SeaweedFS S3 (${data.seaweedfs.endpoint || ''}) - Connected: ${data.seaweedfs.connected ? 'Yes' : 'No'}`;
+          }
+        }
       } catch (e) {
-        document.getElementById('ai-model-badge').textContent = 'AI: OFFLINE';
+        const badge = document.getElementById('ai-model-badge');
+        if (badge) badge.textContent = 'AI: OFFLINE';
       }
     }
 
@@ -2810,7 +2823,10 @@ graph TD
         });
         const result = await res.json();
         if (result.success) {
-          showToast(dict.toast_save_success);
+          const swMsg = (result.seaweedfs && result.seaweedfs.synced)
+            ? ` • Synced to SeaweedFS (${result.seaweedfs.bucket || 'S3'})`
+            : '';
+          showToast(`${dict.toast_save_success}${swMsg}`);
           await selectObject(currentObject.schema, currentObject.type, currentObject.name);
           await loadCatalog();
         } else {

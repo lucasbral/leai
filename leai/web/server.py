@@ -13,6 +13,7 @@ import yaml
 
 from leai.ai import get_llm_client
 from leai.ai.base import BaseLLMClient
+from leai.annotations import load_annotation, save_annotation
 from leai.config import LeaiConfig
 from leai.docs import generate_mermaid_graph, write_schema_docs
 from leai.enrich import enrich_code_object_annotation, enrich_table_annotation
@@ -470,6 +471,13 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         except Exception:
             pass
 
+        seaweed_data = {
+            "enabled": bool(cfg.storage.seaweedfs.enabled if hasattr(cfg, "storage") else False),
+            "bucket": cfg.storage.seaweedfs.bucket if (hasattr(cfg, "storage") and cfg.storage.seaweedfs.enabled) else None,
+            "endpoint": cfg.storage.seaweedfs.endpoint_url if (hasattr(cfg, "storage") and cfg.storage.seaweedfs.enabled) else None,
+            "connected": self.server.storage is not None,
+        }
+
         self._send_json(
             {
                 "status": "online",
@@ -479,6 +487,7 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                 "annotations_path": str(cfg.annotationsPath),
                 "docs_path": str(cfg.docPath),
                 "git": git_data,
+                "seaweedfs": seaweed_data,
             }
         )
 
@@ -630,17 +639,25 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         s_name = matched_schema.schema_name or "DEFAULT"
         ann_folder = _get_object_folder(resolved_type)
 
-        # Load YAML annotations if existing
+        # Load YAML annotations if existing (supports local file and/or SeaweedFS S3)
         ann_path = cfg.annotationsPath / s_name / ann_folder / f"{obj_name}.yml"
         if not ann_path.exists():
-            ann_path = cfg.annotationsPath / ann_folder / f"{obj_name}.yml"
+            ann_path_single = cfg.annotationsPath / ann_folder / f"{obj_name}.yml"
+            if ann_path_single.exists():
+                ann_path = ann_path_single
 
-        ann_data = {}
-        if ann_path.exists():
-            try:
-                ann_data = yaml.safe_load(ann_path.read_text(encoding="utf-8")) or {}
-            except Exception:
-                pass
+        ann_obj = load_annotation(
+            ann_path,
+            storage=self.server.storage,
+            schema_name=s_name,
+            obj_folder=ann_folder,
+            obj_name=obj_name,
+        )
+        ann_data = (
+            ann_obj.model_dump()
+            if (ann_obj.description or ann_obj.columns or ann_obj.business_rules or ann_obj.tags or ann_path.exists())
+            else {}
+        )
 
         # Load compiled markdown doc if existing
         doc_path = cfg.docPath / s_name / ann_folder / f"{obj_name}.md"
@@ -811,19 +828,24 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
             else:
                 columns_dict[col_k] = str(col_v or "")
 
-        ann_content: dict[str, Any] = {
-            "description": payload.get("business_description") or payload.get("description", ""),
-            "tags": payload.get("tags", []),
-            "business_rules": payload.get("business_rules", []),
-            "use_cases": payload.get("use_cases", []),
-            "warnings": payload.get("warnings", []),
-            "related_objects": payload.get("related_objects", []),
-            "columns": columns_dict,
-        }
+        annotation = ObjectAnnotation(
+            description=payload.get("business_description") or payload.get("description", ""),
+            tags=payload.get("tags", []),
+            business_rules=payload.get("business_rules", []),
+            use_cases=payload.get("use_cases", []),
+            warnings=payload.get("warnings", []),
+            related_objects=payload.get("related_objects", []),
+            columns=columns_dict,
+        )
 
-        # Write YAML
-        with open(target_file, "w", encoding="utf-8") as f:
-            yaml.dump(ann_content, f, allow_unicode=True, sort_keys=False)
+        save_annotation(
+            target_file,
+            annotation,
+            storage=self.server.storage,
+            schema_name=schema_name,
+            obj_folder=ann_folder,
+            obj_name=obj_name,
+        )
 
         # Recompile documentation for this object
         try:
@@ -843,11 +865,16 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
             self._send_error(f"Annotation saved, but failed to recompile Markdown: {exc}")
             return
 
+        sw_bucket = getattr(getattr(self.server.storage, "config", None), "bucket", None) if self.server.storage else None
         self._send_json(
             {
                 "success": True,
                 "saved_file": str(target_file),
                 "object_name": obj_name,
+                "seaweedfs": {
+                    "synced": self.server.storage is not None,
+                    "bucket": sw_bucket,
+                },
             }
         )
 
@@ -1214,6 +1241,7 @@ class LEAIStudioServer(ThreadingHTTPServer):
         client: BaseLLMClient | None = None,
         provider_name: str | None = None,
         config_path: Path | None = None,
+        storage: Any = None,
     ):
         super().__init__(server_address, LEAIStudioHandler)
         self.schemas = schemas
@@ -1221,6 +1249,19 @@ class LEAIStudioServer(ThreadingHTTPServer):
         self.client = client
         self.provider_name = provider_name
         self.config_path = config_path or Path("leai.yml")
+
+        if storage is not None:
+            self.storage = storage
+        elif getattr(config, "storage", None) and config.storage.seaweedfs.enabled:
+            from leai.storage import SeaweedFSStorage
+
+            try:
+                self.storage = SeaweedFSStorage(config.storage.seaweedfs)
+                self.storage.ensure_bucket_exists()
+            except Exception:
+                self.storage = None
+        else:
+            self.storage = None
 
 
 def start_server(
@@ -1234,6 +1275,7 @@ def start_server(
     in_background: bool = False,
     config_path: Path | None = None,
     initial_path: str = "/",
+    storage: Any = None,
 ) -> tuple[LEAIStudioServer, str]:
     """Starts the LEAI Web Studio server, optionally in background thread."""
     if schemas is None:
@@ -1252,6 +1294,7 @@ def start_server(
         client=client,
         provider_name=provider_name or (config.ai.default_provider if config.ai else None),
         config_path=config_path,
+        storage=storage,
     )
 
     url = f"http://{host}:{port}"

@@ -645,7 +645,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/5e/73/e01e4c5e11ad0494f
 
 [[package]]
 name = "leai"
-version = "0.2.16"
+version = "0.2.17"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
