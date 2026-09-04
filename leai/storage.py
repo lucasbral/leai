@@ -10,7 +10,7 @@ from typing import Any, Callable
 import yaml
 
 from leai.config import SeaweedFSConfig
-from leai.models import ObjectAnnotation, SchemaMetadata
+from leai.models import BusinessGlossary, ObjectAnnotation, SchemaMetadata
 from leai.raw import _construct_schema_metadata
 
 logger = logging.getLogger(__name__)
@@ -177,6 +177,7 @@ class SeaweedFSStorage:
         multi_schema: bool = True,
         max_workers: int = 8,
         force: bool = False,
+        is_delta: bool = False,
     ) -> SaveResult:
         """Uploads granular JSON objects and consolidated snapshot to SeaweedFS.
         When incremental=True and force=False, skips objects whose SHA-256 content
@@ -250,7 +251,20 @@ class SeaweedFSStorage:
         # If any object changed or force or first run with changes, update _schema.json snapshot and _manifest.json
         if tasks_to_upload or not existing_manifest or force:
             snapshot_key = f"{schema_path}/_schema.json"
-            snapshot_body, _ = self._compute_canonical_hash(schema.model_dump())
+            if is_delta:
+                try:
+                    resp = self.client.get_object(Bucket=bucket, Key=snapshot_key)
+                    existing_data = json.loads(resp["Body"].read().decode("utf-8"))
+                    base_meta = _construct_schema_metadata(existing_data, schema_name=schema_name)
+                    from leai.raw import merge_schema_metadata
+
+                    full_schema = merge_schema_metadata(base_meta, schema)
+                    snapshot_body, _ = self._compute_canonical_hash(full_schema.model_dump())
+                except Exception:
+                    snapshot_body, _ = self._compute_canonical_hash(schema.model_dump())
+            else:
+                snapshot_body, _ = self._compute_canonical_hash(schema.model_dump())
+
             _upload_item((snapshot_key, snapshot_body))
             uploaded_keys.append(snapshot_key)
 
@@ -365,6 +379,74 @@ class SeaweedFSStorage:
         except Exception:
             pass
         return ObjectAnnotation()
+
+    # -------------------------------------------------------------------------
+    # GLOSSARY MANAGEMENT
+    # -------------------------------------------------------------------------
+
+    def get_glossary_key(self) -> str:
+        """Returns the SeaweedFS S3 object key for the business glossary."""
+        prefix = self.config.annotations_prefix.strip("/")
+        return f"{prefix}/glossary.yml" if prefix else "glossary.yml"
+
+    def save_glossary(self, glossary: BusinessGlossary) -> str:
+        """Saves the business glossary YAML to SeaweedFS S3."""
+        from leai.glossary import dump_glossary_yaml
+
+        self.ensure_bucket_exists()
+        bucket = self.config.bucket
+        key = self.get_glossary_key()
+        body = dump_glossary_yaml(glossary)
+
+        self.client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=body.encode("utf-8"),
+            ContentType="text/yaml",
+        )
+        return key
+
+    def load_glossary(self) -> BusinessGlossary:
+        """Loads the business glossary YAML from SeaweedFS S3."""
+        from leai.glossary import load_glossary as parse_glossary
+
+        self.ensure_bucket_exists()
+        bucket = self.config.bucket
+        key = self.get_glossary_key()
+        try:
+            resp = self.client.get_object(Bucket=bucket, Key=key)
+            content = resp["Body"].read().decode("utf-8")
+            return parse_glossary(content=content)
+        except Exception:
+            return BusinessGlossary()
+
+    def sync_glossary(
+        self,
+        local_annotations_path: Path | str | None,
+        no_cache: bool = False,
+    ) -> BusinessGlossary:
+        """Synchronizes business glossary between SeaweedFS and local annotations directory.
+
+        Loads remote and local versions, performs a non-destructive merge, saves the result
+        to SeaweedFS, and writes back locally (unless no_cache=True).
+        """
+        from leai.glossary import load_glossary as parse_glossary
+        from leai.glossary import merge_glossaries, save_glossary
+
+        remote_glossary = self.load_glossary()
+        local_glossary = parse_glossary(annotations_path=local_annotations_path) if local_annotations_path else BusinessGlossary()
+
+        # Remote is base (preserves central definitions), local is delta
+        merged = merge_glossaries(base=remote_glossary, delta=local_glossary)
+
+        # Save to remote S3
+        self.save_glossary(merged)
+
+        # Save to local disk if caching is enabled
+        if not no_cache and local_annotations_path:
+            save_glossary(local_annotations_path, merged)
+
+        return merged
 
     # -------------------------------------------------------------------------
     # SYNCHRONIZATION (LOCAL <-> REMOTE)

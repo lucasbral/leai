@@ -463,6 +463,185 @@ def extract(
 
 
 @app.command()
+def update(
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    hours: float = typer.Option(None, "--hours", "-H", help="Extract objects modified in last N hours (e.g. 4, 12, 24)"),
+    days: float = typer.Option(None, "--days", "-d", help="Extract objects modified in last N days (Default: 1)"),
+    schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to update (overrides leai.yml)"),
+    object_types: list[str] = typer.Option(None, "--object-type", "-t", help="Object types to update (e.g. tables, views, procedures)"),
+    compile_docs: bool = typer.Option(False, "--compile", "-C", help="Also recompile Markdown documentation for updated objects"),
+    with_traces: bool = typer.Option(True, "--with-traces/--no-traces", help="Include dependency lineage in compiled docs"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Sync updated RAW and annotations with SeaweedFS S3 storage"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local files in rawPath, operate directly with SeaweedFS"),
+    force_upload: bool = typer.Option(
+        False, "--force-upload", "-F", help="Force upload of all objects to SeaweedFS (bypasses SHA-256 manifest)"
+    ),
+) -> None:
+    """Fast incremental update: extracts recently modified objects from Oracle, merges snapshots, syncs annotations, and pushes delta to SeaweedFS."""
+    start_time = time.perf_counter()
+    try:
+        cfg = load_config(config)
+        if schemas:
+            cfg.schemas = [s.strip().upper() for s in schemas]
+        if object_types:
+            cfg.object_types = [t.lower() for t in object_types]
+    except ConfigError as exc:
+        console.print(f"[red]Config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    effective_days = days
+    effective_hours = hours
+    if effective_days is None and effective_hours is None:
+        effective_days = 1.0
+
+    time_desc = f"last {effective_hours:g} hours" if effective_hours else f"last {effective_days:g} days"
+
+    storage = _resolve_storage(cfg, seaweed)
+    is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
+    if is_no_cache and not storage:
+        console.print("[red]Error:[/red] --no-cache requires SeaweedFS to be enabled (use --seaweed or enable it in leai.yml).")
+        raise typer.Exit(code=1)
+
+    if storage:
+        try:
+            storage.ensure_bucket_exists()
+            mode_tags = []
+            if is_no_cache:
+                mode_tags.append("Remote-only")
+            if cfg.storage.seaweedfs.incremental and not force_upload:
+                mode_tags.append("SHA-256 Incremental")
+            elif force_upload:
+                mode_tags.append("Force Upload")
+            tag_str = f" [dim]({', '.join(mode_tags)})[/dim]" if mode_tags else ""
+            console.print(
+                f"[cyan]SeaweedFS Storage:[/cyan] [bold green]Active[/bold green] (Endpoint: {cfg.storage.seaweedfs.endpoint_url}, Bucket: {cfg.storage.seaweedfs.bucket}){tag_str}\n"
+            )
+        except Exception as exc:
+            console.print(f"[red]SeaweedFS error:[/red] {exc}")
+            raise typer.Exit(code=1)
+
+    total_s3_uploaded = 0
+    total_s3_skipped = 0
+    total_ann = 0
+    total_md = 0
+
+    try:
+        connection = oracledb.connect(**_build_connect_kwargs(cfg.dsn))
+        try:
+            target_schemas = fetch_available_schemas(connection, cfg)
+            console.print(
+                f"[cyan]Incremental Update:[/cyan] Searching objects modified in [bold yellow]{time_desc}[/bold yellow] across [bold]{len(target_schemas)} schema(s)[/bold]...\n"
+            )
+
+            totals = {
+                "tables": 0,
+                "views": 0,
+                "mviews": 0,
+                "code_objects": 0,
+                "triggers": 0,
+                "sequences": 0,
+                "indexes": 0,
+                "synonyms": 0,
+            }
+
+            for s_idx, schema_name in enumerate(target_schemas, 1):
+                schema_meta = fetch_schema_metadata(
+                    cfg,
+                    schema_name=schema_name,
+                    days=effective_days,
+                    hours=effective_hours,
+                    connection=connection,
+                )
+
+                num_objs = count_schema_objects(schema_meta, cfg.object_types)
+                totals["tables"] += len(schema_meta.tables)
+                totals["views"] += len(schema_meta.views)
+                totals["mviews"] += len(schema_meta.mviews)
+                totals["code_objects"] += len(schema_meta.code_objects)
+                totals["triggers"] += len(schema_meta.triggers)
+                totals["sequences"] += len(schema_meta.sequences)
+                totals["indexes"] += len(schema_meta.indexes)
+                totals["synonyms"] += len(schema_meta.synonyms)
+
+                if num_objs == 0:
+                    console.print(f"  [dim]• Schema [bold]{schema_name}[/bold]: no modifications in {time_desc}.[/dim]")
+                    continue
+
+                console.print(
+                    f"  [green]✓[/green] Schema [bold yellow]{schema_name}[/bold yellow]: [bold green]{num_objs} modified object(s)[/bold green] found."
+                )
+
+                # 1. Save delta RAW and merge with existing snapshot
+                save_raw_schema(
+                    schema_meta,
+                    cfg.rawPath,
+                    multi_schema=True,
+                    storage=storage,
+                    local_cache=not is_no_cache,
+                    force_upload=force_upload,
+                    is_delta=True,
+                )
+                if storage and hasattr(storage, "last_save_result"):
+                    total_s3_uploaded += getattr(storage.last_save_result, "uploaded", 0)
+                    total_s3_skipped += getattr(storage.last_save_result, "skipped", 0)
+
+                # 2. Sync annotations ONLY for the modified objects (preserves all existing descriptions/comments)
+                gen_ann = sync_schema_annotations(
+                    schema_meta,
+                    annotations_path=cfg.annotationsPath,
+                    multi_schema=True,
+                    object_types=cfg.object_types,
+                    storage=storage,
+                )
+                total_ann += len(gen_ann)
+
+                # 3. Optional compilation for modified objects
+                if compile_docs:
+                    gen_md, _ = write_schema_docs(
+                        schema_meta,
+                        doc_path=cfg.docPath,
+                        annotations_path=cfg.annotationsPath,
+                        docs_overrides=cfg.docs,
+                        multi_schema=True,
+                        object_types=cfg.object_types,
+                        with_traces=with_traces,
+                    )
+                    total_md += len(gen_md)
+        finally:
+            connection.close()
+
+        if storage:
+            try:
+                storage.sync_glossary(cfg.annotationsPath, no_cache=is_no_cache)
+            except Exception as exc:
+                console.print(f"[yellow]Warning: Could not synchronize glossary with SeaweedFS: {exc}[/yellow]")
+
+        elapsed = time.perf_counter() - start_time
+        out_paths: dict[str, Any] = {}
+        if not is_no_cache:
+            out_paths["Updated RAW Delta"] = cfg.rawPath
+        out_paths["Synchronized Annotations"] = f"{cfg.annotationsPath} ({total_ann} stubs)"
+        if compile_docs:
+            out_paths["Compiled Markdown Docs"] = f"{cfg.docPath} ({total_md} files)"
+        if storage:
+            bucket_str = f"{cfg.storage.seaweedfs.bucket}"
+            if total_s3_skipped > 0 or total_s3_uploaded > 0:
+                bucket_str += f" ([bold green]{total_s3_uploaded} versionados[/bold green], [dim]{total_s3_skipped} skip[/dim])"
+            out_paths["SeaweedFS S3"] = bucket_str
+
+        _print_final_summary_panel(
+            title=f"Incremental Update Completed ({time_desc})",
+            total_schemas=len(target_schemas),
+            totals=totals,
+            elapsed_seconds=elapsed,
+            output_paths=out_paths,
+        )
+    except Exception as exc:
+        console.print(f"[red]Error during incremental update:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+
+@app.command()
 def annotate(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
     schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to sync (overrides leai.yml)"),
@@ -575,6 +754,12 @@ def annotate(
                         overall_task,
                         description=f"[bold cyan]Overall Synchronization[/bold cyan] ({s_idx}/{len(schemas_meta)} schemas)",
                     )
+
+        if storage:
+            try:
+                storage.sync_glossary(cfg.annotationsPath, no_cache=is_no_cache)
+            except Exception as exc:
+                console.print(f"[yellow]Warning: Could not synchronize glossary with SeaweedFS: {exc}[/yellow]")
 
         elapsed = time.perf_counter() - start_time
         out_paths = {
@@ -1841,6 +2026,7 @@ app.add_typer(rule_app, name="rule")
 @rule_app.command("list")
 def list_rules_command(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load and merge glossary directly from SeaweedFS S3 storage"),
 ) -> None:
     """List all defined business glossary terms and canonical rules."""
     from leai.glossary import load_glossary
@@ -1850,7 +2036,22 @@ def list_rules_command(
     except Exception:
         cfg = LeaiConfig()
 
-    glossary = load_glossary(cfg.annotationsPath)
+    storage = _resolve_storage(cfg, seaweed)
+    glossary = None
+    if storage:
+        try:
+            remote_glossary = storage.load_glossary()
+            if remote_glossary.terms:
+                local_glossary = load_glossary(cfg.annotationsPath)
+                from leai.glossary import merge_glossaries
+
+                glossary = merge_glossaries(remote_glossary, local_glossary)
+        except Exception:
+            pass
+
+    if glossary is None:
+        glossary = load_glossary(cfg.annotationsPath)
+
     if not glossary.terms:
         console.print(f"[yellow]No business rules found in '{cfg.annotationsPath}/glossary.yml'.[/yellow]")
         console.print("Use [bold cyan]leai rule add <term>[/bold cyan] to register rules.")
@@ -1876,7 +2077,8 @@ def list_rules_command(
 
     console.print()
     console.print(table)
-    console.print(f"\n[dim]Total: {len(glossary.terms)} terms defined in {cfg.annotationsPath}/glossary.yml[/dim]\n")
+    s3_info = f" (synced with SeaweedFS bucket '[bold cyan]{cfg.storage.seaweedfs.bucket}[/bold cyan]')" if storage else ""
+    console.print(f"\n[dim]Total: {len(glossary.terms)} terms defined in {cfg.annotationsPath}/glossary.yml{s3_info}[/dim]\n")
 
 
 @rule_app.command("add")
@@ -1887,8 +2089,9 @@ def add_rule_command(
     canonical_filter: str = typer.Option(None, "--filter", "-f", help="Canonical SQL filter condition (e.g. STATUS = 'A')"),
     tags: str = typer.Option(None, "--tags", help="Comma-separated tags (e.g. 'rh,seguranca')"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Sync term directly to SeaweedFS S3 storage"),
 ) -> None:
-    """Register or update a business glossary term in annotations/glossary.yml."""
+    """Register or update a business glossary term in annotations/glossary.yml and SeaweedFS."""
     from leai.glossary import add_or_update_term
     from leai.models import GlossaryTerm
 
@@ -1896,6 +2099,8 @@ def add_rule_command(
         cfg = load_config(config)
     except Exception:
         cfg = LeaiConfig()
+
+    storage = _resolve_storage(cfg, seaweed)
 
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
 
@@ -1907,10 +2112,37 @@ def add_rule_command(
         tags=tag_list,
     )
 
-    add_or_update_term(cfg.annotationsPath, new_term)
+    add_or_update_term(cfg.annotationsPath, new_term, storage=storage)
+    s3_msg = f" and synchronized with SeaweedFS bucket '[bold]{cfg.storage.seaweedfs.bucket}[/bold]'" if storage else ""
     console.print(
-        f"[green]✓ Term '[bold]{new_term.term}[/bold]' saved to [bold cyan]{cfg.annotationsPath}/glossary.yml[/bold cyan]![/green]"
+        f"[green]✓ Term '[bold]{new_term.term}[/bold]' saved to [bold cyan]{cfg.annotationsPath}/glossary.yml[/bold cyan]{s3_msg}![/green]"
     )
+
+
+@rule_app.command("del")
+@rule_app.command("delete")
+def delete_rule_command(
+    term: str = typer.Argument(..., help="Name of the business term to remove"),
+    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Delete term from SeaweedFS S3 storage as well"),
+) -> None:
+    """Delete a business glossary term from annotations/glossary.yml and SeaweedFS."""
+    from leai.glossary import delete_term
+
+    try:
+        cfg = load_config(config)
+    except Exception:
+        cfg = LeaiConfig()
+
+    storage = _resolve_storage(cfg, seaweed)
+    removed = delete_term(cfg.annotationsPath, term, storage=storage)
+    if removed:
+        s3_msg = f" and SeaweedFS bucket '[bold]{cfg.storage.seaweedfs.bucket}[/bold]'" if storage else ""
+        console.print(
+            f"[green]✓ Term '[bold]{term}[/bold]' deleted from [bold cyan]{cfg.annotationsPath}/glossary.yml[/bold cyan]{s3_msg}![/green]"
+        )
+    else:
+        console.print(f"[yellow]Term '{term}' not found in glossary.[/yellow]")
 
 
 @rule_app.command("show")

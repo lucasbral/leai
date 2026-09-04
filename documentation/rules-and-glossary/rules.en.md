@@ -40,12 +40,44 @@ leai rule add "ACTIVE_CUSTOMER" \
 
 ---
 
-### 3. `leai rule show <TERM>`
+### 3. `leai rule del <TERM>` (or `delete`)
+Removes a business term or rule from the local glossary and the SeaweedFS bucket.
+
+```bash
+leai rule del ACTIVE_CUSTOMER
+```
+
+---
+
+### 4. `leai rule show <TERM>`
 Displays the comprehensive specification sheet of a codified rule, including linked tables and exact canonical SQL clauses.
 
 ```bash
 leai rule show ACTIVE_CUSTOMER
 ```
+
+---
+
+## ☁️ Continuous SeaweedFS (S3) Synchronization
+
+When SeaweedFS is configured in `leai.yml` (or via `-W` / `--seaweed`), the corporate glossary is automatically managed in the cloud:
+
+- **Immediate Persistence**: Every addition (`leai rule add`) or deletion (`leai rule del`) writes locally and immediately pushes to `annotations/glossary.yml` in the S3 bucket.
+- **Automated Pipelines (`annotate` and `update`)**: Both `leai annotate` and `leai update` perform **non-destructive merges** between local and remote glossaries. If there is a definition conflict, the centralized SeaweedFS definition is prioritized to protect institutional knowledge, while tags and examples are unified.
+- **Offline / `--no-cache` Resilience**: AI agents and tools seamlessly fall back to loading the glossary directly from SeaweedFS when local cache files are absent.
+
+---
+
+## 💻 In-Terminal Interactive Commands (TUI Copilot)
+
+Inside interactive copilot sessions (`leai chat`), manage domain rules directly:
+
+| Command | Description |
+| :--- | :--- |
+| `/rule list` | Display rich visual formatted table with all active glossary terms and rules. |
+| `/rule add [term]` | Guided prompt wizard to register term, definition, primary table, and SQL filters. |
+| `/rule del <term>` | Delete specified rule from local disk and SeaweedFS bucket. |
+| `/rule find <term>` | Search glossary terms by keyword relevance and semantic similarity. |
 
 ---
 

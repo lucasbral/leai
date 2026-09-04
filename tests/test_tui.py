@@ -844,6 +844,84 @@ class TuiUnitTests(unittest.TestCase):
         self.assertTrue(res2)
         self.assertEqual(mock_doctor.call_count, 2)
 
+    @patch("leai.tui.session.InteractiveTUISession._run_update")
+    def test_session_update_command(self, mock_update):
+        session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+        res = session.handle_slash_command("/update 4h -W")
+        self.assertTrue(res)
+        mock_update.assert_called_once_with(["4h", "-W"])
+
+    @patch("oracledb.connect")
+    @patch("leai.oracle.fetch_available_schemas", return_value=["HR"])
+    @patch("leai.oracle.fetch_schema_metadata")
+    def test_session_run_update_logic(self, mock_fetch, mock_avail, mock_connect):
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
+
+        delta = SchemaMetadata(
+            schema_name="HR",
+            tables=[
+                TableMeta(
+                    name="EMPLOYEES",
+                    columns=[
+                        ColumnMeta(name="ID", data_type="NUMBER", nullable=False),
+                        ColumnMeta(name="EMAIL", data_type="VARCHAR2", nullable=True),
+                    ],
+                ),
+                TableMeta(name="NEW_TBL", columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)]),
+            ],
+        )
+        mock_fetch.return_value = delta
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            cfg = self.config.model_copy()
+            cfg.dsn = "oracle://user:pass@localhost:1521/ORCL"
+            cfg.rawPath = base / "raw"
+            cfg.annotationsPath = base / "annotations"
+            cfg.docPath = base / "docs"
+
+            session = InteractiveTUISession([self.schema], cfg, self.mock_client)
+            session._run_update(["2h"])
+
+            # Verify in-memory schemas merged
+            self.assertEqual(len(session.schemas[0].tables), 3)  # EMPLOYEES, DEPARTMENTS, NEW_TBL
+            emp = next(t for t in session.schemas[0].tables if t.name == "EMPLOYEES")
+            self.assertEqual(len(emp.columns), 2)
+            self.assertTrue((base / "raw" / "HR" / "tables" / "NEW_TBL.json").exists())
+            self.assertTrue((base / "annotations" / "HR" / "tables" / "NEW_TBL.yml").exists())
+
+    def test_session_rule_slash_commands(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            cfg = self.config.model_copy()
+            cfg.annotationsPath = base / "annotations"
+
+            session = InteractiveTUISession([self.schema], cfg, self.mock_client)
+            mock_storage = MagicMock()
+            session._get_storage = MagicMock(return_value=mock_storage)
+
+            # 1. /rule list empty
+            self.assertTrue(session.handle_slash_command("/rule list"))
+
+            # 2. /rule add via mock prompt
+            from unittest.mock import patch
+
+            with patch("rich.prompt.Prompt.ask", side_effect=["Definição via TUI", "USUARIOS", "STATUS = 'A'", "rh"]):
+                self.assertTrue(session.handle_slash_command("/rule add TERMO_TUI"))
+
+            mock_storage.save_glossary.assert_called()
+            gloss_file = cfg.annotationsPath / "glossary.yml"
+            self.assertTrue(gloss_file.exists())
+            self.assertIn("TERMO_TUI", gloss_file.read_text(encoding="utf-8"))
+
+            # 3. /rule find
+            self.assertTrue(session.handle_slash_command("/rule find TERMO_TUI"))
+
+            # 4. /rule del
+            self.assertTrue(session.handle_slash_command("/rule del TERMO_TUI"))
+            self.assertNotIn("TERMO_TUI", gloss_file.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

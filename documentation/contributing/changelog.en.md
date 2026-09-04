@@ -4,6 +4,18 @@ All notable changes to the **LEAI** project are documented here.
 
 ---
 
+## [0.2.19] — 2026
+
+### 🌟 Added
+* **`leai update` CLI Command & `/update` in TUI:** Surgical incremental extraction of database objects modified within hours (`--hours`) or days (`--days`), merging technical schemas with consolidated snapshot and uploading deltas to SeaweedFS.
+* **SeaweedFS Annotation Preservation & Merging:** Non-destructive merge logic preserving existing human descriptions, tags, business rules, and column comments in SeaweedFS without overwriting them with blank stubs.
+* **Continuous `GLOSSARY.yml` Sync with SeaweedFS:** Automated synchronization and cloud persistence of corporate domain rules at `annotations/glossary.yml`.
+* **`leai rule del` (CLI) and `/rule del` (TUI):** Removal of business terms with immediate synchronization against SeaweedFS bucket.
+* **Non-destructive Rule Merging (`merge_glossaries`):** Prioritization of centralized SeaweedFS definitions during conflicts and union of domain tags and SQL filters.
+* **TUI Autocompletion:** Enhanced autocompletion for `/update` and `/rule [list|add|del|find]`.
+
+---
+
 ## [0.2.18] — 2026
 
 ### 🌟 Added

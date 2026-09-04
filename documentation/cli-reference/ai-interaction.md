@@ -54,11 +54,12 @@ leai chat --web
 | :--- | :--- | :--- |
 | `/copy [all\|code\|N]` | Clipboard | Copia a última resposta ou bloco de código direto para a área de transferência do OS. |
 | `/doc [obj]` | Documentação | Abre o editor interativo de documentação no terminal para a tabela ou pacote. |
-| `/rule [list\|add\|find]` | Glossário | Gerencia regras de negócio globais e filtros canônicos de domínio. |
+| `/rule [list\|add\|del\|find]` | Glossário | Gerencia regras de negócio globais, filtros canônicos e sincronização com SeaweedFS. |
 | `/enrich [obj]` | IA Studio | Auto-enriquece descrições e regras com IA. |
 | `/compile [obj]` | Pipeline | Recompila a documentação Markdown em `docs/` (suporta objeto individual). |
 | `/annotate [-W]` | Pipeline | Sincroniza stubs YAML em `annotations/` e/ou SeaweedFS. |
 | `/extract [s\|d\|-W]` | Pipeline | Conecta ao Oracle e extrai snapshot técnico atualizado. |
+| `/update [h\|d\|-W]` | Pipeline | Atualização incremental rápida de objetos modificados, anotações e S3. |
 | `/seaweed [status\|push\|pull\|sync]` | SeaweedFS | Gerencia status, push, pull e sincronização com Object Storage S3. |
 | `/serve [port\|stop]` | Web Studio | Inicia o Web Studio no navegador com editor e diagramas em tempo real. |
 | `/git [status\|pull\|sync]` | GitOps | Verifica status de commits, pull ou sincroniza metadados com Git/GitLab. |

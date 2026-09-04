@@ -813,8 +813,8 @@ def _fetch_object_timestamps(
     return timestamps, timestamps_by_name
 
 
-def _fetch_modified_object_names(cursor: oracledb.Cursor, owner: str, days: int, prefix: str = "all") -> set[str]:
-    """Queries ALL_OBJECTS / DBA_OBJECTS for names of objects modified in the last N days."""
+def _fetch_modified_object_names(cursor: oracledb.Cursor, owner: str, days: float | int, prefix: str = "all") -> set[str]:
+    """Queries ALL_OBJECTS / DBA_OBJECTS for names of objects modified in the last N days (or fraction)."""
     try:
         cursor.execute(
             f"""
@@ -824,7 +824,7 @@ def _fetch_modified_object_names(cursor: oracledb.Cursor, owner: str, days: int,
               AND last_ddl_time >= SYSDATE - :days
             """,
             owner=owner,
-            days=days,
+            days=float(days),
         )
         return {str(row[0]).upper() for row in cursor.fetchall()}
     except Exception:
@@ -835,7 +835,8 @@ def fetch_schema_metadata(
     config: LeaiConfig,
     schema_name: str | None = None,
     callback: Callable[[str, int, int, int], None] | None = None,
-    days: int | None = None,
+    days: float | int | None = None,
+    hours: float | int | None = None,
     connection: oracledb.Connection | None = None,
 ) -> SchemaMetadata:
     target_schema = (schema_name or config.schema_name).upper()
@@ -855,9 +856,16 @@ def fetch_schema_metadata(
         temp_config = config.model_copy()
         temp_config.schemas = [target_schema]
 
+        # Calculate effective days filter (hours takes precedence if provided)
+        effective_days: float | None = None
+        if hours is not None and hours > 0:
+            effective_days = float(hours) / 24.0
+        elif days is not None and days > 0:
+            effective_days = float(days)
+
         # If incremental extraction is requested, filter include list to only recently modified objects
-        if days is not None and days > 0:
-            modified_names = _fetch_modified_object_names(cursor, target_schema, days, prefix=prefix)
+        if effective_days is not None and effective_days > 0:
+            modified_names = _fetch_modified_object_names(cursor, target_schema, effective_days, prefix=prefix)
             if temp_config.include:
                 temp_config.include = [name for name in temp_config.include if name.upper() in modified_names]
                 if not temp_config.include:

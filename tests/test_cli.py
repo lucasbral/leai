@@ -34,6 +34,7 @@ class CliIntegrationTests(unittest.TestCase):
         self.assertIn("init", result.output)
         self.assertIn("check", result.output)
         self.assertIn("extract", result.output)
+        self.assertIn("update", result.output)
         self.assertIn("annotate", result.output)
         self.assertIn("compile", result.output)
         self.assertIn("generate", result.output)
@@ -533,6 +534,106 @@ docPath: "{(base / "docs").as_posix()}"
             result = self.runner.invoke(app, ["doctor", "-c", str(cfg_file)])
             self.assertEqual(result.exit_code, 0)
             mock_check.assert_called_once_with(config=cfg_file)
+
+    @patch("leai.cli.oracledb.connect")
+    @patch("leai.cli.fetch_schema_metadata")
+    def test_update_command_incremental(self, mock_fetch_meta, mock_connect):
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
+
+        delta_schema = SchemaMetadata(
+            schema_name="HR",
+            tables=[
+                TableMeta(
+                    name="T_DELTA",
+                    columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)],
+                )
+            ],
+        )
+        mock_fetch_meta.return_value = delta_schema
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            cfg_file = base / "leai.yml"
+            cfg_file.write_text(
+                f"""
+dsn: "oracle://user:pass@localhost:1521/ORCL"
+schemas:
+  - HR
+rawPath: "{(base / "raw").as_posix()}"
+annotationsPath: "{(base / "annotations").as_posix()}"
+docPath: "{(base / "docs").as_posix()}"
+                """,
+                encoding="utf-8",
+            )
+
+            # Invoke update with --hours 4 and --compile
+            result = self.runner.invoke(app, ["update", "-c", str(cfg_file), "--hours", "4", "--compile"])
+            self.assertEqual(result.exit_code, 0, msg=result.output)
+            self.assertIn("Incremental Update Completed", result.output)
+            mock_fetch_meta.assert_called_once()
+            self.assertEqual(mock_fetch_meta.call_args[1]["hours"], 4.0)
+            self.assertTrue((base / "raw" / "HR" / "tables" / "T_DELTA.json").exists())
+            self.assertTrue((base / "annotations" / "HR" / "tables" / "T_DELTA.yml").exists())
+            self.assertTrue((base / "docs" / "HR" / "tables" / "T_DELTA.md").exists())
+
+    @patch("leai.cli._resolve_storage")
+    def test_rule_cli_commands(self, mock_resolve_storage):
+        mock_storage = MagicMock()
+        mock_resolve_storage.return_value = mock_storage
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            cfg_file = base / "leai.yml"
+            ann_path = base / "annotations"
+            cfg_file.write_text(
+                f"""
+schemas:
+  - HR
+annotationsPath: "{ann_path.as_posix()}"
+storage:
+  seaweedfs:
+    enabled: true
+    endpoint_url: "http://localhost:8333"
+    bucket: "leai-test"
+                """,
+                encoding="utf-8",
+            )
+
+            # 1. Rule Add
+            res_add = self.runner.invoke(
+                app,
+                [
+                    "rule",
+                    "add",
+                    "USUÁRIO ATIVO",
+                    "-d",
+                    "Usuário com vínculo ativo no mês",
+                    "-t",
+                    "USUARIOS",
+                    "-f",
+                    "STATUS = 'A'",
+                    "-c",
+                    str(cfg_file),
+                ],
+            )
+            self.assertEqual(res_add.exit_code, 0, msg=res_add.output)
+            self.assertIn("USUÁRIO ATIVO", res_add.output)
+            mock_storage.save_glossary.assert_called()
+            gloss_file = ann_path / "glossary.yml"
+            self.assertTrue(gloss_file.exists())
+            self.assertIn("USUÁRIO ATIVO", gloss_file.read_text(encoding="utf-8"))
+
+            # 2. Rule List
+            res_list = self.runner.invoke(app, ["rule", "list", "-c", str(cfg_file)])
+            self.assertEqual(res_list.exit_code, 0, msg=res_list.output)
+            self.assertIn("USUÁRIO ATIVO", res_list.output)
+
+            # 3. Rule Del
+            res_del = self.runner.invoke(app, ["rule", "del", "USUÁRIO ATIVO", "-c", str(cfg_file)])
+            self.assertEqual(res_del.exit_code, 0, msg=res_del.output)
+            self.assertIn("deleted", res_del.output)
+            self.assertNotIn("USUÁRIO ATIVO", gloss_file.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

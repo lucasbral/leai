@@ -1,7 +1,9 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock
 
+from leai.annotations import ensure_annotation_stub
 from leai.config import load_config
 from leai.docs import (
     MANUAL_END,
@@ -15,6 +17,7 @@ from leai.models import (
     ColumnMeta,
     ForeignKeyMeta,
     IndexMeta,
+    ObjectAnnotation,
     SchemaMetadata,
     SubprogramMeta,
     TableMeta,
@@ -22,7 +25,7 @@ from leai.models import (
     ViewMeta,
 )
 from leai.oracle import _build_connect_kwargs, _like_pattern_to_regex, _split_package_source
-from leai.raw import load_raw_schema, load_raw_schemas, save_raw_schema
+from leai.raw import load_raw_schema, load_raw_schemas, merge_schema_metadata, save_raw_schema
 
 
 class ConfigAndDocsTests(unittest.TestCase):
@@ -733,6 +736,184 @@ FUNCTION get_setor_func (p_numfunc IN NUMBER, p_numvinc IN NUMBER, p_data IN DAT
             self.assertNotIn("EV_FUNC_DTINI_I", content.split("```mermaid")[1].split("```")[0])
             self.assertNotIn("PACK_ERGON_GET_SETOR_FUNC -->|DEPENDS ON| TYPE", content)
             self.assertNotIn("PACK_ERGON_GET_SETOR_FUNC -->|DEPENDS ON| FUNCTION", content)
+
+    def test_merge_schema_metadata(self):
+        base = SchemaMetadata(
+            schema_name="HR",
+            tables=[
+                TableMeta(name="EMPLOYEES", columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)]),
+                TableMeta(name="DEPARTMENTS", columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)]),
+            ],
+            views=[ViewMeta(name="V_EMP", text="SELECT * FROM EMPLOYEES")],
+        )
+        # Delta modifies EMPLOYEES (adds column) and adds a NEW table JOBS
+        delta = SchemaMetadata(
+            schema_name="HR",
+            tables=[
+                TableMeta(
+                    name="EMPLOYEES",
+                    columns=[
+                        ColumnMeta(name="ID", data_type="NUMBER", nullable=False),
+                        ColumnMeta(name="EMAIL", data_type="VARCHAR2", nullable=True),
+                    ],
+                ),
+                TableMeta(name="JOBS", columns=[ColumnMeta(name="JOB_ID", data_type="VARCHAR2", nullable=False)]),
+            ],
+        )
+
+        merged = merge_schema_metadata(base, delta)
+        # Should have 3 tables: DEPARTMENTS (untouched), EMPLOYEES (updated), JOBS (new)
+        self.assertEqual(len(merged.tables), 3)
+        emp = next(t for t in merged.tables if t.name == "EMPLOYEES")
+        self.assertEqual(len(emp.columns), 2)
+        dept = next(t for t in merged.tables if t.name == "DEPARTMENTS")
+        self.assertEqual(len(dept.columns), 1)
+        job = next(t for t in merged.tables if t.name == "JOBS")
+        self.assertEqual(job.name, "JOBS")
+        # View was untouched
+        self.assertEqual(len(merged.views), 1)
+
+    def test_ensure_annotation_stub_preserves_comments(self):
+        from unittest.mock import MagicMock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ann_file = Path(tmpdir) / "EMPLOYEES.yml"
+
+            # Mock storage (SeaweedFS) returning existing annotation with human descriptions
+            mock_storage = MagicMock()
+            remote_ann = ObjectAnnotation(
+                description="Human curated description in SeaweedFS",
+                business_rules=["Rule 1: Must be active"],
+                tags=["CORE", "HR"],
+                columns={"ID": "Employee unique identifier", "NAME": "Full name"},
+            )
+            mock_storage.load_annotation.return_value = remote_ann
+
+            # Oracle DDL added a new column "EMAIL"
+            stub = ensure_annotation_stub(
+                file_path=ann_file,
+                db_comment="Oracle DB Comment",
+                column_names=["ID", "NAME", "EMAIL"],
+                storage=mock_storage,
+                schema_name="HR",
+                obj_folder="tables",
+                obj_name="EMPLOYEES",
+            )
+
+            # Assert existing comments are 100% preserved
+            self.assertEqual(stub.description, "Human curated description in SeaweedFS")
+            self.assertEqual(stub.business_rules, ["Rule 1: Must be active"])
+            self.assertEqual(stub.tags, ["CORE", "HR"])
+            self.assertEqual(stub.columns["ID"], "Employee unique identifier")
+            self.assertEqual(stub.columns["NAME"], "Full name")
+            # Assert new column was added with empty stub
+            self.assertIn("EMAIL", stub.columns)
+            self.assertEqual(stub.columns["EMAIL"], "")
+
+            # Verify saved locally
+            self.assertTrue(ann_file.exists())
+            content = ann_file.read_text(encoding="utf-8")
+            self.assertIn("Human curated description in SeaweedFS", content)
+            self.assertIn("Employee unique identifier", content)
+            self.assertIn("EMAIL: ''", content)
+
+    def test_merge_glossaries_preserves_remote_definitions_and_combines_terms(self):
+        from leai.glossary import merge_glossaries
+        from leai.models import BusinessGlossary, GlossaryTerm
+
+        base = BusinessGlossary(
+            terms=[
+                GlossaryTerm(
+                    term="USUÁRIO ATIVO",
+                    definition="Definição corporativa central no SeaweedFS",
+                    primary_table="USUARIOS",
+                    canonical_filter="STATUS = 'A'",
+                    tags=["rh", "seguranca"],
+                    related_tables=["VINCULOS"],
+                    examples=["SELECT * FROM USUARIOS WHERE STATUS = 'A'"],
+                ),
+                GlossaryTerm(
+                    term="CARGO EFETIVO",
+                    definition="Servidor titular de cargo efetivo",
+                    primary_table="CARGOS",
+                ),
+            ]
+        )
+
+        delta = BusinessGlossary(
+            terms=[
+                GlossaryTerm(
+                    term="USUÁRIO ATIVO",
+                    definition="Definição local provisória",
+                    canonical_filter="STATUS = '1'",
+                    tags=["folha"],
+                    related_tables=["PAGAMENTOS"],
+                    examples=["SELECT 1 FROM DUAL"],
+                ),
+                GlossaryTerm(
+                    term="FOLHA SUPLEMENTAR",
+                    definition="Folha de pagamento complementar",
+                    primary_table="FOLHAS",
+                ),
+            ]
+        )
+
+        merged = merge_glossaries(base, delta)
+        self.assertEqual(len(merged.terms), 3)
+
+        by_name = {t.term: t for t in merged.terms}
+        # Term 1: conflict resolution preserves base definition and canonical filter
+        ua = by_name["USUÁRIO ATIVO"]
+        self.assertEqual(ua.definition, "Definição corporativa central no SeaweedFS")
+        self.assertEqual(ua.canonical_filter, "STATUS = 'A'")
+        self.assertEqual(ua.primary_table, "USUARIOS")
+        self.assertEqual(set(ua.tags), {"rh", "seguranca", "folha"})
+        self.assertEqual(set(ua.related_tables), {"VINCULOS", "PAGAMENTOS"})
+        self.assertEqual(len(ua.examples), 2)
+
+        # Term 2: preserved from base
+        self.assertIn("CARGO EFETIVO", by_name)
+        # Term 3: new term from delta added
+        self.assertIn("FOLHA SUPLEMENTAR", by_name)
+
+    def test_storage_glossary_save_load_sync(self):
+        from leai.config import SeaweedFSConfig
+        from leai.models import BusinessGlossary, GlossaryTerm
+        from leai.storage import SeaweedFSStorage
+
+        cfg = SeaweedFSConfig(endpoint_url="http://localhost:8333", bucket="leai-test", annotations_prefix="annotations")
+        storage = SeaweedFSStorage(cfg)
+        mock_s3 = MagicMock()
+        storage._s3_client = mock_s3
+
+        # Test save_glossary
+        gloss = BusinessGlossary(terms=[GlossaryTerm(term="TESTE", definition="Termo de teste", canonical_filter="ID > 0")])
+        key = storage.save_glossary(gloss)
+        self.assertEqual(key, "annotations/glossary.yml")
+        mock_s3.put_object.assert_called()
+
+        # Test load_glossary
+        body_mock = MagicMock()
+        body_mock.read.return_value = b"terms:\n  - term: REMOTO\n    definition: Do bucket\n"
+        mock_s3.get_object.return_value = {"Body": body_mock}
+
+        loaded = storage.load_glossary()
+        self.assertEqual(len(loaded.terms), 1)
+        self.assertEqual(loaded.terms[0].term, "REMOTO")
+
+        # Test sync_glossary
+        with tempfile.TemporaryDirectory() as tmp:
+            ann_dir = Path(tmp) / "annotations"
+            ann_dir.mkdir(parents=True)
+            local_gloss = ann_dir / "glossary.yml"
+            local_gloss.write_text("terms:\n  - term: LOCAL\n    definition: Do disco\n", encoding="utf-8")
+
+            merged = storage.sync_glossary(ann_dir, no_cache=False)
+            self.assertEqual(len(merged.terms), 2)
+            term_names = {t.term for t in merged.terms}
+            self.assertEqual(term_names, {"LOCAL", "REMOTO"})
+            self.assertTrue(local_gloss.exists())
+            self.assertIn("REMOTO", local_gloss.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

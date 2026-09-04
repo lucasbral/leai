@@ -99,12 +99,26 @@ When SeaweedFS storage is enabled in `leai.yml`, the **LEAI Web Studio** (`leai 
 
 ---
 
-## 💬 Interactive Copilot Commands (`/annotate`)
+## 💬 Interactive Copilot Commands (`/annotate`, `/update`, `/rule`)
 
 Within an interactive copilot session (`leai chat`):
 
-* **/annotate [--seaweed|-W] [--no-cache]:** Generates documentation stubs for all schema tables and views and synchronously uploads them to SeaweedFS. With `--no-cache`, stubs are created in remote storage without local disk persistence.
+* **/update [hours|days] [--seaweed|-W] [--compile|-C]:** Incrementally extracts recently modified objects from Oracle, updates annotations, merges consolidated catalog schemas, syncs `glossary.yml`, and pushes deltas to SeaweedFS.
+* **/annotate [--seaweed|-W] [--no-cache]:** Generates documentation stubs for all schema tables and views, synchronizes `glossary.yml`, and synchronously uploads them to SeaweedFS. With `--no-cache`, stubs are created in remote storage without local disk persistence.
+* **/rule [list|add|del|find]:** Manages corporate glossary rules and synchronizes directly with the SeaweedFS bucket.
 * **/doc &lt;OBJECT&gt;:** Opens the terminal TUI editor for rapid annotation. Changes are saved strictly to local disk (`annotations/`), enabling local review and diffing before pushing via `leai seaweed push` or Web Studio.
+
+---
+
+## 📖 Continuous Glossary Synchronization (`annotations/glossary.yml`)
+
+LEAI treats the business glossary (`annotations/glossary.yml`) as an integral part of the centralized SeaweedFS knowledge base:
+
+* **Real-time Persistence**: Every addition (`leai rule add` or `/rule add`) and deletion (`leai rule del` or `/rule del`) is synchronously uploaded to `annotations/glossary.yml` in the S3 bucket when storage is operational.
+* **Smart Non-Destructive Merging**: During `leai update` or `leai annotate`, LEAI combines local terms with the remote bucket:
+  * **Central Authority on Conflicts**: If a term is defined in both places with differing descriptions, the centralized SeaweedFS definition is prioritized to protect institutional domain rules against accidental overwrites.
+  * **Metadata Union**: Tags, related tables, and code examples are deduplicated and merged together.
+* **AI Tool Resilience**: In containerized or `--no-cache` setups, the glossary lookup tool (`lookup_business_term`) seamlessly queries the SeaweedFS bucket directly when local files are absent.
 
 ---
 

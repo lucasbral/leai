@@ -99,12 +99,26 @@ Quando o armazenamento SeaweedFS está configurado no `leai.yml`, o **LEAI Web S
 
 ---
 
-## 💬 Comandos Interativos do Copilot (`/annotate`)
+## 💬 Comandos Interativos do Copilot (`/annotate`, `/update`, `/rule`)
 
 Dentro da sessão interativa do assistente (`leai chat`):
 
-* **/annotate [--seaweed|-W] [--no-cache]:** Gera stubs de documentação para todas as tabelas e views do catálogo e faz o upload síncrono para o SeaweedFS. Com `--no-cache`, a operação é feita sem persistir no disco local.
+* **/update [horas|dias] [--seaweed|-W] [--compile|-C]:** Extrai cirurgicamente objetos alterados recentemente no Oracle, atualiza as anotações, mescla com o schema consolidado, sincroniza o `glossary.yml` e envia os deltas ao SeaweedFS.
+* **/annotate [--seaweed|-W] [--no-cache]:** Gera stubs de documentação para todas as tabelas e views do catálogo, sincroniza o `glossary.yml` e faz o upload síncrono para o SeaweedFS. Com `--no-cache`, a operação é feita sem persistir no disco local.
+* **/rule [list|add|del|find]:** Gerencia o glossário corporativo e sincroniza diretamente com o bucket SeaweedFS.
 * **/doc &lt;OBJECT&gt;:** Abre o editor TUI no terminal para anotação ágil. Suas alterações são salvas estritamente no disco local (`annotations/`), permitindo revisão e testes locais antes de serem sincronizadas via `leai seaweed push` ou Web Studio.
+
+---
+
+## 📖 Gestão e Sincronização do Glossário (`annotations/glossary.yml`)
+
+O LEAI trata o glossário de negócio (`annotations/glossary.yml`) como parte integrante do repositório central no SeaweedFS:
+
+* **Sincronização Contínua**: Toda inclusão via `leai rule add` (ou `/rule add`) e exclusão via `leai rule del` (ou `/rule del`) é enviada de forma síncrona para a chave `annotations/glossary.yml` no S3 quando o storage está ativo.
+* **Mesclagem Não Destrutiva Inteligente**: Durante `leai update` ou `leai annotate`, o LEAI une os termos do arquivo local com o do bucket remoto:
+  * **Prioridade para o Bucket**: Se o mesmo termo tiver definições divergentes, a versão remota do SeaweedFS é preservada para salvaguardar regras de negócio institucionais já auditadas.
+  * **União de Metadados**: Tags, tabelas relacionadas e exemplos de uso são combinados sem duplicidade.
+* **Resiliência do Agente de IA**: Caso o LEAI esteja rodando em contêineres ou com `--no-cache`, a ferramenta de busca de termos de negócio (`lookup_business_term`) carrega o `glossary.yml` diretamente do SeaweedFS de maneira transparente.
 
 ---
 
