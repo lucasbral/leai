@@ -179,7 +179,12 @@ def _construct_schema_metadata(data: dict[str, Any], schema_name: str = "") -> S
     )
 
 
-def save_raw_schema(schema: SchemaMetadata, raw_path: Path, multi_schema: bool = False) -> list[Path]:
+def save_raw_schema(
+    schema: SchemaMetadata,
+    raw_path: Path,
+    multi_schema: bool = False,
+    storage: Any = None,
+) -> list[Path]:
     target_path = (raw_path / schema.schema_name) if (multi_schema and schema.schema_name) else raw_path
     target_path.mkdir(parents=True, exist_ok=True)
     saved_files: list[Path] = []
@@ -233,6 +238,14 @@ def save_raw_schema(schema: SchemaMetadata, raw_path: Path, multi_schema: bool =
     # 9. Consolidated Schema Snapshot (written for fast TUI/CLI startup cache)
     snapshot_path = target_path / "_schema.json"
     _write_json(snapshot_path, schema.model_dump())
+
+    if storage is not None:
+        try:
+            storage.save_raw_schema(schema, multi_schema=multi_schema)
+        except Exception as exc:
+            import sys
+
+            print(f"Warning: Failed to upload schema to SeaweedFS: {exc}", file=sys.stderr)
 
     return saved_files
 
@@ -389,7 +402,24 @@ def load_raw_schema(raw_path: Path, schema_name: str = "") -> SchemaMetadata:
     return schema
 
 
-def load_raw_schemas(raw_path: Path, target_schemas: list[str] | None = None) -> list[SchemaMetadata]:
+def load_raw_schemas(
+    raw_path: Path,
+    target_schemas: list[str] | None = None,
+    storage: Any = None,
+) -> list[SchemaMetadata]:
+    if storage is not None:
+        try:
+            remote_schemas = storage.load_raw_schemas(target_schemas=target_schemas)
+            if remote_schemas:
+                for schema_name, meta in remote_schemas.items():
+                    # Populate local cache without re-uploading to storage
+                    save_raw_schema(meta, raw_path, multi_schema=True)
+                return list(remote_schemas.values())
+        except Exception as exc:
+            import sys
+
+            print(f"Warning: Failed to load schemas from SeaweedFS: {exc}. Falling back to local disk.", file=sys.stderr)
+
     if not raw_path.exists():
         return []
 

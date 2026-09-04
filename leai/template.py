@@ -1,13 +1,16 @@
-# ==============================================================================
-# Arquivo de Exemplo de Configuração - LEAI (Oracle Database Documentation CLI)
-# Copie este arquivo para leai.yml e ajuste conforme o seu ambiente.
+"""Canonical default configuration template for LEAI."""
+
+from pathlib import Path
+
+DEFAULT_LEAI_CONFIG_TEMPLATE = """# ==============================================================================
+# Arquivo de Configuração - LEAI (Oracle Database Documentation CLI)
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
 # 1. CONEXÃO COM O BANCO DE DADOS ORACLE (DSN)
 # ------------------------------------------------------------------------------
 # Aceita a sintaxe URL oracle:// ou a string de conexão nativa do cx_Oracle/oracledb.
-# Suporta variáveis de ambiente no formato ${NOME_DA_VARIAVEL}.
+# Suporta variáveis de ambiente no formato ${NOME_DA_VARIAVEL} ou ${VAR:-default}.
 dsn: "oracle://${DB_USER}:${DB_PASS}@${DB_HOST}:1521/${DB_SERVICE}"
 
 # Exemplo estático:
@@ -132,6 +135,40 @@ storage:
     raw_prefix: "raw"                              # Prefixo/pasta no bucket para os snapshots JSON brutos
     annotations_prefix: "annotations"              # Prefixo/pasta no bucket para os arquivos YAML de anotações
     auto_create_bucket: true                       # Cria o bucket automaticamente caso ainda não exista
+"""
 
 
+def get_default_config_template() -> str:
+    """Returns the canonical configuration template.
 
+    Attempts to read `leai.example.yml` from the source repository if present,
+    falling back reliably to the embedded `DEFAULT_LEAI_CONFIG_TEMPLATE`.
+    """
+    candidates = [
+        Path(__file__).resolve().parent.parent / "leai.example.yml",
+        Path.cwd() / "leai.example.yml",
+    ]
+    for cand in candidates:
+        if cand.exists():
+            try:
+                content = cand.read_text(encoding="utf-8")
+                if len(content.strip()) > 100:
+                    return content
+            except Exception:
+                pass
+
+    return DEFAULT_LEAI_CONFIG_TEMPLATE
+
+
+def write_default_config(target_path: Path, overwrite: bool = False) -> bool:
+    """Writes the canonical default config to target_path.
+
+    Returns True if written, False if target exists and overwrite is False.
+    """
+    if target_path.exists() and not overwrite:
+        return False
+
+    content = get_default_config_template()
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    target_path.write_text(content, encoding="utf-8")
+    return True

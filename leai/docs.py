@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from leai.annotations import ensure_annotation_stub
 from leai.models import (
@@ -1171,6 +1171,7 @@ def sync_schema_annotations(
     multi_schema: bool = False,
     object_types: list[str] | None = None,
     progress_callback: Callable[[str, str, int, int], None] | None = None,
+    storage: Any = None,
 ) -> list[Path]:
     target_ann_path = (annotations_path / schema.schema_name) if (multi_schema and schema.schema_name) else annotations_path
     allowed_types = {t.lower() for t in object_types} if object_types else None
@@ -1178,6 +1179,7 @@ def sync_schema_annotations(
 
     total_objects = count_schema_objects(schema, object_types)
     processed_count = 0
+    s_name = schema.schema_name or ""
 
     if _is_category_allowed("tables", allowed_types):
         for table in schema.tables:
@@ -1186,7 +1188,15 @@ def sync_schema_annotations(
                 progress_callback("Table", table.name, processed_count, total_objects)
 
             ann_path = target_ann_path / "tables" / f"{table.name}.yml"
-            ensure_annotation_stub(ann_path, db_comment=table.comment, column_names=[c.name for c in table.columns])
+            ensure_annotation_stub(
+                ann_path,
+                db_comment=table.comment,
+                column_names=[c.name for c in table.columns],
+                storage=storage,
+                schema_name=s_name,
+                obj_folder="tables",
+                obj_name=table.name,
+            )
             generated_ann.append(ann_path)
 
     if _is_category_allowed("views", allowed_types):
@@ -1196,7 +1206,15 @@ def sync_schema_annotations(
                 progress_callback("View", view.name, processed_count, total_objects)
 
             ann_path = target_ann_path / "views" / f"{view.name}.yml"
-            ensure_annotation_stub(ann_path, db_comment=view.comment, column_names=[c.name for c in view.columns])
+            ensure_annotation_stub(
+                ann_path,
+                db_comment=view.comment,
+                column_names=[c.name for c in view.columns],
+                storage=storage,
+                schema_name=s_name,
+                obj_folder="views",
+                obj_name=view.name,
+            )
             generated_ann.append(ann_path)
 
     if _is_category_allowed("mviews", allowed_types):
@@ -1206,7 +1224,15 @@ def sync_schema_annotations(
                 progress_callback("MView", mview.name, processed_count, total_objects)
 
             ann_path = target_ann_path / "mviews" / f"{mview.name}.yml"
-            ensure_annotation_stub(ann_path, db_comment=mview.comment, column_names=[c.name for c in mview.columns])
+            ensure_annotation_stub(
+                ann_path,
+                db_comment=mview.comment,
+                column_names=[c.name for c in mview.columns],
+                storage=storage,
+                schema_name=s_name,
+                obj_folder="mviews",
+                obj_name=mview.name,
+            )
             generated_ann.append(ann_path)
 
     for code_obj in schema.code_objects:
@@ -1218,7 +1244,14 @@ def sync_schema_annotations(
 
         obj_folder = code_obj.object_type.lower().replace(" ", "_") + "s"
         ann_path = target_ann_path / obj_folder / f"{code_obj.name}.yml"
-        ensure_annotation_stub(ann_path, db_comment=code_obj.comment)
+        ensure_annotation_stub(
+            ann_path,
+            db_comment=code_obj.comment,
+            storage=storage,
+            schema_name=s_name,
+            obj_folder=obj_folder,
+            obj_name=code_obj.name,
+        )
         generated_ann.append(ann_path)
 
         for sub in code_obj.subprograms:
@@ -1227,7 +1260,14 @@ def sync_schema_annotations(
                 progress_callback("Routine", f"{code_obj.name}.{sub.name}", processed_count, total_objects)
 
             sub_ann_path = target_ann_path / obj_folder / code_obj.name / f"{sub.name}.yml"
-            ensure_annotation_stub(sub_ann_path, db_comment=sub.comment)
+            ensure_annotation_stub(
+                sub_ann_path,
+                db_comment=sub.comment,
+                storage=storage,
+                schema_name=s_name,
+                obj_folder=f"{obj_folder}/{code_obj.name}",
+                obj_name=sub.name,
+            )
             generated_ann.append(sub_ann_path)
 
     if _is_category_allowed("triggers", allowed_types):
@@ -1237,7 +1277,13 @@ def sync_schema_annotations(
                 progress_callback("Trigger", trigger.name, processed_count, total_objects)
 
             ann_path = target_ann_path / "triggers" / f"{trigger.name}.yml"
-            ensure_annotation_stub(ann_path)
+            ensure_annotation_stub(
+                ann_path,
+                storage=storage,
+                schema_name=s_name,
+                obj_folder="triggers",
+                obj_name=trigger.name,
+            )
             generated_ann.append(ann_path)
 
     if _is_category_allowed("sequences", allowed_types):
@@ -1247,7 +1293,13 @@ def sync_schema_annotations(
                 progress_callback("Sequence", sequence.name, processed_count, total_objects)
 
             ann_path = target_ann_path / "sequences" / f"{sequence.name}.yml"
-            ensure_annotation_stub(ann_path)
+            ensure_annotation_stub(
+                ann_path,
+                storage=storage,
+                schema_name=s_name,
+                obj_folder="sequences",
+                obj_name=sequence.name,
+            )
             generated_ann.append(ann_path)
 
     if _is_category_allowed("indexes", allowed_types):
@@ -1257,7 +1309,13 @@ def sync_schema_annotations(
                 progress_callback("Index", index.name, processed_count, total_objects)
 
             ann_path = target_ann_path / "indexes" / f"{index.name}.yml"
-            ensure_annotation_stub(ann_path)
+            ensure_annotation_stub(
+                ann_path,
+                storage=storage,
+                schema_name=s_name,
+                obj_folder="indexes",
+                obj_name=index.name,
+            )
             generated_ann.append(ann_path)
 
     if _is_category_allowed("synonyms", allowed_types):
@@ -1267,7 +1325,13 @@ def sync_schema_annotations(
                 progress_callback("Synonym", synonym.name, processed_count, total_objects)
 
             ann_path = target_ann_path / "synonyms" / f"{synonym.name}.yml"
-            ensure_annotation_stub(ann_path)
+            ensure_annotation_stub(
+                ann_path,
+                storage=storage,
+                schema_name=s_name,
+                obj_folder="synonyms",
+                obj_name=synonym.name,
+            )
             generated_ann.append(ann_path)
 
     return generated_ann

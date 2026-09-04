@@ -514,8 +514,136 @@ class TuiUnitTests(unittest.TestCase):
 
     def test_session_slash_init(self):
         session = InteractiveTUISession([self.schema], self.config, self.mock_client)
-        res = session.handle_slash_command("/init")
-        self.assertTrue(res)
+        with patch("rich.prompt.Confirm.ask", return_value=False):
+            res = session.handle_slash_command("/init")
+            self.assertTrue(res)
+
+    def test_completion_keybindings(self):
+        from prompt_toolkit.buffer import Buffer, CompletionState
+        from prompt_toolkit.completion import Completion
+        from prompt_toolkit.document import Document
+
+        session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+        kb = session.prompt_session.key_bindings
+        self.assertIsNotNone(kb)
+
+        # Retrieve bindings from kb.bindings
+        has_enter = any("c-m" in str(b.keys) and "has_completions" in str(b.filter) for b in kb.bindings)
+        has_tab = any("c-i" in str(b.keys) and "has_completions" in str(b.filter) for b in kb.bindings)
+        has_down = any("down" in str(b.keys) and "has_completions" in str(b.filter) for b in kb.bindings)
+        has_up = any("up" in str(b.keys) and "has_completions" in str(b.filter) for b in kb.bindings)
+        has_esc = any("escape" in str(b.keys) and "has_completions" in str(b.filter) for b in kb.bindings)
+
+        self.assertTrue(has_enter)
+        self.assertTrue(has_tab)
+        self.assertTrue(has_down)
+        self.assertTrue(has_up)
+        self.assertTrue(has_esc)
+
+        # Test simulated buffer completion apply with space
+        b = Buffer(complete_while_typing=False)
+        b.document = Document("@FUNC", 5)
+        c1 = Completion("@FUNCIONARIOS", start_position=-5)
+        c2 = Completion("@FUNCIONARIOS_PND", start_position=-5)
+        b.complete_state = CompletionState(b.document, [c1, c2])
+
+        # Trigger enter binding handler
+        enter_binding = next(b for b in kb.bindings if "c-m" in str(b.keys) and "has_completions" in str(b.filter))
+
+        class DummyEvent:
+            def __init__(self, buf):
+                self.current_buffer = buf
+
+        enter_binding.handler(DummyEvent(b))
+
+        self.assertEqual(b.text, "@FUNCIONARIOS ")
+        self.assertIsNone(b.complete_state)
+
+    def test_run_init_when_not_exists(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            orig_cwd = Path.cwd()
+            import os
+
+            try:
+                os.chdir(tmp_dir)
+                session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+                res = session.handle_slash_command("/init")
+                self.assertTrue(res)
+
+                out_file = Path("leai.yml")
+                self.assertTrue(out_file.exists())
+                content = out_file.read_text(encoding="utf-8")
+                self.assertIn("ollama", content)
+                self.assertIn("seaweedfs", content)
+                self.assertIn("git:", content)
+                self.assertGreater(len(content), 500)
+            finally:
+                os.chdir(orig_cwd)
+
+    def test_run_init_when_exists_and_declined(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            orig_cwd = Path.cwd()
+            import os
+
+            try:
+                os.chdir(tmp_dir)
+                out_file = Path("leai.yml")
+                out_file.write_text("existing_custom: true\n", encoding="utf-8")
+
+                session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+                with patch("rich.prompt.Confirm.ask", return_value=False):
+                    res = session.handle_slash_command("/init")
+                    self.assertTrue(res)
+
+                content = out_file.read_text(encoding="utf-8")
+                self.assertEqual(content, "existing_custom: true\n")
+            finally:
+                os.chdir(orig_cwd)
+
+    def test_run_init_when_exists_and_confirmed(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            orig_cwd = Path.cwd()
+            import os
+
+            try:
+                os.chdir(tmp_dir)
+                out_file = Path("leai.yml")
+                out_file.write_text("existing_custom: true\n", encoding="utf-8")
+
+                session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+                with patch("rich.prompt.Confirm.ask", return_value=True):
+                    res = session.handle_slash_command("/init")
+                    self.assertTrue(res)
+
+                content = out_file.read_text(encoding="utf-8")
+                self.assertIn("ollama", content)
+                self.assertIn("seaweedfs", content)
+                self.assertGreater(len(content), 500)
+            finally:
+                os.chdir(orig_cwd)
+
+    def test_run_init_force_flag(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            orig_cwd = Path.cwd()
+            import os
+
+            try:
+                os.chdir(tmp_dir)
+                out_file = Path("leai.yml")
+                out_file.write_text("existing_custom: true\n", encoding="utf-8")
+
+                session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+                with patch("rich.prompt.Confirm.ask") as mock_ask:
+                    res = session.handle_slash_command("/init --force")
+                    self.assertTrue(res)
+                    mock_ask.assert_not_called()
+
+                content = out_file.read_text(encoding="utf-8")
+                self.assertIn("ollama", content)
+                self.assertIn("seaweedfs", content)
+                self.assertGreater(len(content), 500)
+            finally:
+                os.chdir(orig_cwd)
 
 
 if __name__ == "__main__":

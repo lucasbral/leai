@@ -85,6 +85,7 @@ class AgentExecutionEngine:
         self.client = client
         self.max_iterations = max_iterations
         self.last_tool_audits: list[ToolExecutionAudit] = []
+        self.last_working_messages: list[dict[str, Any]] = []
 
     def run(
         self,
@@ -121,7 +122,11 @@ class AgentExecutionEngine:
                         content = self.client.stream_chat(working_messages, system_prompt=sys_prompt, on_chunk=on_token)
                 elif on_token and callable(on_token) and content:
                     on_token(content)
-                return content or "Could not obtain a response from the model."
+                res = content or "Could not obtain a response from the model."
+                if content:
+                    working_messages.append({"role": "assistant", "content": content})
+                self.last_working_messages = list(working_messages)
+                return res
 
             tools_ran = True
             # If tool calls were returned, process them
@@ -171,10 +176,18 @@ class AgentExecutionEngine:
                 t_dur = time.perf_counter() - t_start
                 summary = summarize_tool_result(t_name, t_args, tool_output)
 
+                parsed_out = None
+                try:
+                    parsed_out = json.loads(tool_output)
+                except Exception:
+                    parsed_out = None
+
                 audit_rec = ToolExecutionAudit(
                     step=step_idx,
                     tool_name=t_name,
                     arguments=t_args,
+                    model_thought=content or None,
+                    output_data=parsed_out,
                     raw_output=tool_output,
                     summary=summary,
                     duration_seconds=round(t_dur, 4),
@@ -219,4 +232,7 @@ class AgentExecutionEngine:
             )
             if on_token and callable(on_token) and final_synth:
                 on_token(final_synth)
+        if final_synth:
+            working_messages.append({"role": "assistant", "content": final_synth})
+        self.last_working_messages = list(working_messages)
         return final_synth
