@@ -389,7 +389,7 @@ wheels = [
 
 [[package]]
 name = "leai"
-version = "0.2.12"
+version = "0.2.13"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
@@ -403,6 +403,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "coverage" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
@@ -411,6 +412,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = ">=1.34.0" },
+    { name = "coverage", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "oracledb", specifier = ">=2.2.0" },
     { name = "prompt-toolkit", specifier = ">=3.0.40" },
     { name = "pydantic", specifier = ">=2.7.0" },
