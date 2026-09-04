@@ -15,7 +15,7 @@ from leai.config import LeaiConfig
 from leai.docs import count_schema_objects, write_schema_docs
 from leai.models import ObjectAnnotation, SchemaMetadata
 
-console = Console()
+console = Console(legacy_windows=False)
 
 
 def _default_input_fn(label: str) -> str:

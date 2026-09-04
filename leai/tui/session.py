@@ -45,7 +45,7 @@ from leai.tui.completer import LeaiCompleter
 from leai.tui.doc_editor import DocEditor
 from leai.tui.styles import PT_STYLE
 
-console = Console()
+console = Console(legacy_windows=False)
 
 
 def _create_progress_bar() -> Progress:
@@ -496,6 +496,11 @@ class InteractiveTUISession:
         if cmd == "/extract":
             schemas_arg = parts[1:] if len(parts) > 1 else None
             self._run_extract(schemas_arg)
+            return True
+
+        if cmd == "/seaweed":
+            sub_arg = parts[1].lower() if len(parts) > 1 else "status"
+            self._run_seaweed(sub_arg)
             return True
 
         if cmd in ("/compile", "/build"):
@@ -1020,8 +1025,10 @@ class InteractiveTUISession:
             self.session.update_schemas(self.schemas)
 
     def _run_extract(self, schemas_arg: list[str] | None = None, days: int | None = None) -> None:
-        """Extracts metadata snapshots from Oracle into rawPath."""
+        """Extracts metadata snapshots from Oracle into rawPath and/or SeaweedFS."""
         import oracledb
+
+        from leai.storage import SeaweedFSStorage
 
         if not self.config.dsn:
             console.print("[red]✕ DSN is not configured in leai.yml or LEAI_DSN env var.[/red]\n")
@@ -1029,10 +1036,21 @@ class InteractiveTUISession:
 
         extract_cfg = self.config.model_copy()
         target_schemas_input = []
+        seaweed_flag = False
+        no_cache_flag = False
+        force_upload_flag = False
+
         if schemas_arg:
             for s in schemas_arg:
                 s_clean = s.strip()
-                if s_clean.isdigit() and days is None:
+                s_lower = s_clean.lower()
+                if s_lower in ("--seaweed", "-w"):
+                    seaweed_flag = True
+                elif s_lower == "--no-cache":
+                    no_cache_flag = True
+                elif s_lower in ("--force-upload", "-f", "--force"):
+                    force_upload_flag = True
+                elif s_clean.isdigit() and days is None:
                     days = int(s_clean)
                 elif s_clean.startswith(("--days=", "-d=")):
                     try:
@@ -1044,6 +1062,39 @@ class InteractiveTUISession:
 
         if target_schemas_input:
             extract_cfg.schemas = target_schemas_input
+
+        # Resolve SeaweedFS storage
+        use_seaweed = seaweed_flag or extract_cfg.storage.seaweedfs.enabled
+        is_no_cache = no_cache_flag or extract_cfg.storage.seaweedfs.no_cache
+
+        storage: SeaweedFSStorage | None = None
+        if use_seaweed:
+            try:
+                storage = SeaweedFSStorage(extract_cfg.storage.seaweedfs)
+                storage.ensure_bucket_exists()
+                mode_tags = []
+                if is_no_cache:
+                    mode_tags.append("Remote-only")
+                if extract_cfg.storage.seaweedfs.incremental and not force_upload_flag:
+                    mode_tags.append("SHA-256 Incremental")
+                elif force_upload_flag:
+                    mode_tags.append("Force Upload")
+                tag_str = f" [dim]({', '.join(mode_tags)})[/dim]" if mode_tags else ""
+                console.print(
+                    f"[cyan]SeaweedFS Storage:[/cyan] [bold green]Active[/bold green] (Endpoint: {extract_cfg.storage.seaweedfs.endpoint_url}, Bucket: {extract_cfg.storage.seaweedfs.bucket}){tag_str}\n"
+                )
+            except Exception as exc:
+                console.print(f"[red]SeaweedFS error:[/red] {exc}\n")
+                if is_no_cache:
+                    return
+                console.print("[yellow]Falling back to local-only extraction.[/yellow]\n")
+                storage = None
+        elif is_no_cache:
+            console.print("[red]Error:[/red] --no-cache requires SeaweedFS to be enabled (use --seaweed or enable it in leai.yml).\n")
+            return
+
+        total_s3_uploaded = 0
+        total_s3_skipped = 0
 
         start_time = time.perf_counter()
         try:
@@ -1093,7 +1144,18 @@ class InteractiveTUISession:
                             )
 
                         schema_meta = fetch_schema_metadata(extract_cfg, schema_name=s_name, callback=_cb, days=days, connection=connection)
-                        save_raw_schema(schema_meta, extract_cfg.rawPath, multi_schema=True)
+                        save_raw_schema(
+                            schema_meta,
+                            extract_cfg.rawPath,
+                            multi_schema=True,
+                            storage=storage,
+                            local_cache=not is_no_cache,
+                            force_upload=force_upload_flag,
+                        )
+                        if storage and hasattr(storage, "last_save_result") and storage.last_save_result:
+                            total_s3_uploaded += getattr(storage.last_save_result, "uploaded", 0)
+                            total_s3_skipped += getattr(storage.last_save_result, "skipped", 0)
+
                         total_tables += len(schema_meta.tables)
                         total_views += len(schema_meta.views)
                         total_code += len(schema_meta.code_objects)
@@ -1111,22 +1173,108 @@ class InteractiveTUISession:
 
             # Reload internal state while preserving conversation history
             target_schemas_filter = self.config.schemas if not self.config.is_all_schemas else None
-            self.schemas = load_raw_schemas(self.config.rawPath, target_schemas=target_schemas_filter)
+            self.schemas = load_raw_schemas(
+                self.config.rawPath,
+                target_schemas=target_schemas_filter,
+                storage=storage,
+                local_cache=not is_no_cache,
+            )
             self.completer.update_schemas(self.schemas)
             self.session.update_schemas(self.schemas)
 
+            dest_display = (
+                "[bold magenta]SeaweedFS S3 (remote-only)[/bold magenta]"
+                if is_no_cache
+                else f"[bold cyan]{self.config.rawPath}[/bold cyan]"
+            )
+            panel_lines = [
+                f"[green]✓ {len(target_schemas)} Schemas Extracted[/green]",
+                f"[green]✓ {total_tables} Tables • {total_views} Views • {total_code} Code Objects[/green]",
+                f"[bold]Elapsed:[/bold] {elapsed:.2f}s • [bold]Snapshot Destination:[/bold] {dest_display}",
+            ]
+            if storage:
+                panel_lines.append(
+                    f"[bold cyan]SeaweedFS S3:[/bold cyan] [bold green]{total_s3_uploaded}[/bold green] uploaded • [dim]{total_s3_skipped} skipped (identical SHA-256)[/dim] • Bucket: [bold]{extract_cfg.storage.seaweedfs.bucket}[/bold]"
+                )
+            panel_lines.append(
+                "\n[dim]Tip: You can now run [bold cyan]/doc <TABLE>[/bold cyan] to document objects or ask questions directly![/dim]"
+            )
+
             console.print(
                 Panel(
-                    f"[green]✓ {len(target_schemas)} Schemas Extracted[/green]\n"
-                    f"[green]✓ {total_tables} Tables • {total_views} Views • {total_code} Code Objects[/green]\n"
-                    f"[bold]Elapsed:[/bold] {elapsed:.2f}s • [bold]Snapshot Destination:[/bold] [bold cyan]{self.config.rawPath}[/bold cyan]\n\n"
-                    f"[dim]Tip: You can now run [bold cyan]/doc <TABLE>[/bold cyan] to document objects or ask questions directly![/dim]",
+                    "\n".join(panel_lines),
                     title="[bold green]RAW Extraction Completed[/bold green]",
                     border_style="green",
                 )
             )
         except Exception as exc:
             console.print(f"[red]Error during extraction:[/red] {exc}\n")
+
+    def _run_seaweed(self, sub_arg: str = "status") -> None:
+        """Manages SeaweedFS S3 storage connection, push, and pull."""
+        from leai.storage import SeaweedFSStorage
+
+        cfg = self.config.storage.seaweedfs
+        if not cfg.enabled and not cfg.endpoint_url:
+            console.print(
+                "[yellow]! SeaweedFS is not configured in leai.yml.[/yellow]\n"
+                "[dim]Configure storage.seaweedfs in leai.yml or set LEAI_SEAWEED_ENDPOINT to use S3 storage.[/dim]\n"
+            )
+            return
+
+        storage = SeaweedFSStorage(cfg)
+
+        if sub_arg == "status":
+            with console.status("[cyan]Testing SeaweedFS connection...[/cyan]", spinner="dots"):
+                res = storage.test_connection()
+
+            table = Table(title="SeaweedFS S3 Storage Status", show_header=True, header_style="bold cyan", box=box.ROUNDED)
+            table.add_column("Property", style="bold")
+            table.add_column("Value")
+            table.add_row("Endpoint URL", res.get("endpoint", cfg.endpoint_url))
+            table.add_row("Bucket", res.get("bucket", cfg.bucket))
+            status_style = "bold green" if res.get("success") else "bold red"
+            status_text = "OPERATIONAL" if res.get("success") else "FAILED"
+            table.add_row("Connection Status", f"[{status_style}]{status_text}[/{status_style}]")
+            if res.get("objects_found") is not None:
+                table.add_row("Objects Found", str(res["objects_found"]))
+            if res.get("message"):
+                table.add_row("Details", res["message"])
+            table.add_row("Raw Prefix", cfg.raw_prefix)
+            table.add_row("Annotations Prefix", cfg.annotations_prefix)
+            table.add_row("Incremental SHA-256", "Enabled" if cfg.incremental else "Disabled")
+            table.add_row("Remote-only (no_cache)", "Yes" if cfg.no_cache else "No")
+            console.print(table)
+            console.print()
+            return
+
+        if sub_arg == "push":
+            with console.status("[cyan]Pushing local metadata to SeaweedFS...[/cyan]", spinner="dots"):
+                try:
+                    res = storage.push_local_to_remote(self.config.rawPath, self.config.annotationsPath)
+                    console.print(
+                        f"[green]✓ Successfully uploaded {res.get('raw', 0)} RAW JSON files and {res.get('annotations', 0)} YAML annotation files to SeaweedFS bucket '{cfg.bucket}'.[/green]\n"
+                    )
+                except Exception as exc:
+                    console.print(f"[red]Push failed:[/red] {exc}\n")
+            return
+
+        if sub_arg == "pull":
+            with console.status("[cyan]Pulling remote metadata from SeaweedFS...[/cyan]", spinner="dots"):
+                try:
+                    res = storage.pull_remote_to_local(self.config.rawPath, self.config.annotationsPath)
+                    console.print(
+                        f"[green]✓ Successfully downloaded {res.get('raw', 0)} RAW JSON files and {res.get('annotations', 0)} YAML annotation files from SeaweedFS bucket '{cfg.bucket}'.[/green]\n"
+                    )
+                    target_schemas_filter = self.config.schemas if not self.config.is_all_schemas else None
+                    self.schemas = load_raw_schemas(self.config.rawPath, target_schemas=target_schemas_filter)
+                    self.completer.update_schemas(self.schemas)
+                    self.session.update_schemas(self.schemas)
+                except Exception as exc:
+                    console.print(f"[red]Pull failed:[/red] {exc}\n")
+            return
+
+        console.print(f"[yellow]Unknown /seaweed subcommand '{sub_arg}'. Available: status, push, pull.[/yellow]\n")
 
     def _run_compile(self, object_name: str | None = None) -> None:
         """Compiles Markdown docs merging raw snapshots and annotations."""
@@ -1538,8 +1686,10 @@ class InteractiveTUISession:
         table.add_row("/rule [list|add|find]", "Glossary", "Manage global business rules and canonical domain filters")
         table.add_row("/enrich [obj]", "AI Studio", "Auto-enrich descriptions and business rules with AI")
         table.add_row("/compile [obj]", "Pipeline", "Compile final Markdown files into docs/ (supports single object)")
-        table.add_row("/annotate", "Pipeline", "Synchronize YAML annotation stubs into annotations/")
-        table.add_row("/extract [s] [d]", "Pipeline", "Extract Oracle snapshot (supports schema and days filter e.g. /extract 30)")
+        table.add_row(
+            "/extract [s] [d] [-W]", "Pipeline", "Extract Oracle snapshot (supports schema, days, --seaweed, --no-cache, --force-upload)"
+        )
+        table.add_row("/seaweed [status|push|pull]", "SeaweedFS", "Check SeaweedFS S3 status, push local snapshots or pull remote updates")
         table.add_row("/serve [port|stop]", "Web Studio", "Launch Web Studio with browser editor and live sync")
         table.add_row("/git [status|pull|sync]", "GitLab/Git", "Check sync status, pull updates, or commit & push metadata")
 

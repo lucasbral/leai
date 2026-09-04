@@ -1,8 +1,16 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 import unittest
+
+if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -644,6 +652,111 @@ class TuiUnitTests(unittest.TestCase):
                 self.assertGreater(len(content), 500)
             finally:
                 os.chdir(orig_cwd)
+
+    @patch("leai.storage.SeaweedFSStorage.save_raw_schema")
+    @patch("leai.storage.SeaweedFSStorage.ensure_bucket_exists")
+    @patch("leai.tui.session.fetch_available_schemas")
+    @patch("leai.tui.session.fetch_schema_metadata")
+    @patch("oracledb.connect")
+    def test_session_slash_extract_with_seaweed_flag(
+        self, mock_connect, mock_fetch_meta, mock_fetch_schemas, mock_ensure_bucket, mock_save_raw_storage
+    ):
+        from leai.storage import SaveResult
+
+        mock_connect.return_value = MagicMock()
+        mock_fetch_schemas.return_value = ["HR"]
+        mock_fetch_meta.return_value = self.schema
+        mock_save_raw_storage.return_value = SaveResult(["key1", "key2"], uploaded=2, skipped=0, total=2)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.config.rawPath = Path(tmpdir) / "raw"
+            self.config.dsn = "oracle://user:pass@localhost:1521/ORCL"
+            self.config.storage.seaweedfs.endpoint_url = "http://localhost:8333"
+            self.config.storage.seaweedfs.bucket = "leai-test"
+            session = InteractiveTUISession([], self.config, self.mock_client)
+
+            res = session.handle_slash_command("/extract HR --seaweed")
+            self.assertTrue(res)
+            mock_ensure_bucket.assert_called()
+            mock_save_raw_storage.assert_called_once()
+            # Local files still written because --no-cache was not passed
+            self.assertTrue((self.config.rawPath / "HR" / "tables" / "EMPLOYEES.json").exists())
+
+    @patch("leai.storage.SeaweedFSStorage.save_raw_schema")
+    @patch("leai.storage.SeaweedFSStorage.ensure_bucket_exists")
+    @patch("leai.storage.SeaweedFSStorage.load_raw_schemas")
+    @patch("leai.tui.session.fetch_available_schemas")
+    @patch("leai.tui.session.fetch_schema_metadata")
+    @patch("oracledb.connect")
+    def test_session_slash_extract_with_no_cache(
+        self, mock_connect, mock_fetch_meta, mock_fetch_schemas, mock_load_raw, mock_ensure_bucket, mock_save_raw_storage
+    ):
+        from leai.storage import SaveResult
+
+        mock_connect.return_value = MagicMock()
+        mock_fetch_schemas.return_value = ["HR"]
+        mock_fetch_meta.return_value = self.schema
+        mock_save_raw_storage.return_value = SaveResult(["key1", "key2"], uploaded=2, skipped=0, total=2)
+        mock_load_raw.return_value = {"HR": self.schema}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.config.rawPath = Path(tmpdir) / "raw"
+            self.config.dsn = "oracle://user:pass@localhost:1521/ORCL"
+            self.config.storage.seaweedfs.endpoint_url = "http://localhost:8333"
+            self.config.storage.seaweedfs.bucket = "leai-test"
+            session = InteractiveTUISession([], self.config, self.mock_client)
+
+            res = session.handle_slash_command("/extract HR --seaweed --no-cache")
+            self.assertTrue(res)
+            mock_ensure_bucket.assert_called()
+            mock_save_raw_storage.assert_called_once()
+            # Local files should NOT exist with --no-cache
+            self.assertFalse(self.config.rawPath.exists())
+            mock_load_raw.assert_called_once()
+
+    @patch("leai.storage.SeaweedFSStorage.test_connection")
+    def test_session_slash_seaweed_status(self, mock_test):
+        mock_test.return_value = {
+            "success": True,
+            "endpoint": "http://localhost:8333",
+            "bucket": "leai-test",
+            "objects_found": 15,
+            "message": "Connection operational",
+        }
+        self.config.storage.seaweedfs.endpoint_url = "http://localhost:8333"
+        self.config.storage.seaweedfs.bucket = "leai-test"
+        session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+        res = session.handle_slash_command("/seaweed status")
+        self.assertTrue(res)
+        mock_test.assert_called_once()
+
+    @patch("leai.storage.SeaweedFSStorage.push_local_to_remote")
+    def test_session_slash_seaweed_push(self, mock_push):
+        mock_push.return_value = {"raw": 10, "annotations": 5}
+        self.config.storage.seaweedfs.endpoint_url = "http://localhost:8333"
+        self.config.storage.seaweedfs.bucket = "leai-test"
+        session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+        res = session.handle_slash_command("/seaweed push")
+        self.assertTrue(res)
+        mock_push.assert_called_once()
+
+    def test_completer_seaweed_and_extract_flags(self):
+        completer = LeaiCompleter([self.schema], config=self.config)
+
+        # 1. /extract flags
+        doc = Document("/extract -")
+        event = CompleteEvent()
+        completions = [c.text for c in completer.get_completions(doc, event)]
+        self.assertIn("--seaweed", completions)
+        self.assertIn("--no-cache", completions)
+        self.assertIn("--force-upload", completions)
+
+        # 2. /seaweed sub-commands
+        doc_sw = Document("/seaweed ")
+        completions_sw = [c.text for c in completer.get_completions(doc_sw, event)]
+        self.assertIn("status", completions_sw)
+        self.assertIn("push", completions_sw)
+        self.assertIn("pull", completions_sw)
 
 
 if __name__ == "__main__":

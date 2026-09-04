@@ -28,6 +28,7 @@ SLASH_COMMANDS: list[tuple[str, str]] = [
     ("/audit", "Inspect AI reasoning, tool execution trace and session logs"),
     ("/tools", "Quick viewer for last turn's tool execution inputs/outputs"),
     ("/git", "Check Git status, pull updates, or sync metadata with remote"),
+    ("/seaweed", "SeaweedFS S3 storage status, push, and pull operations"),
     ("/check", "Run environment diagnostics on DB, config and AI provider"),
     ("/init", "Create or check leai.yml configuration file"),
     ("/clear", "Clear conversation memory and terminal screen"),
@@ -148,28 +149,74 @@ class LeaiCompleter(Completer):
                         )
                 return
 
-            # Sub-argument completion for /extract (Schemas)
+            # Sub-argument completion for /extract (Schemas and SeaweedFS flags)
             if cmd_name == "/extract":
-                if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
-                    schema_query = parts[1].upper() if len(parts) > 1 else ""
+                flag_options = [
+                    ("--seaweed", "Save RAW snapshots directly to SeaweedFS S3 storage"),
+                    ("-W", "Short for --seaweed"),
+                    ("--no-cache", "Do not write local files in raw/, send only to SeaweedFS"),
+                    ("--force-upload", "Force upload all objects (bypasses SHA-256 manifest)"),
+                    ("-F", "Short for --force-upload"),
+                ]
+                if word_before_cursor.startswith("-"):
+                    for flag_name, flag_desc in flag_options:
+                        if flag_name.startswith(word_before_cursor):
+                            yield Completion(
+                                text=flag_name,
+                                start_position=-len(word_before_cursor),
+                                display=flag_name,
+                                display_meta=flag_desc,
+                            )
+                    return
 
-                    # 1. Suggest ALL option first
-                    if "ALL".startswith(schema_query):
+                schema_query = word_before_cursor.upper()
+
+                # 1. Suggest ALL option first
+                if "ALL".startswith(schema_query):
+                    yield Completion(
+                        text="ALL",
+                        start_position=-len(word_before_cursor),
+                        display="ALL",
+                        display_meta="Extract all schemas configured in leai.yml",
+                    )
+
+                # 2. Suggest individual configured schemas from leai.yml
+                for s_name in self._schemas_list:
+                    if s_name != "ALL" and s_name.startswith(schema_query):
                         yield Completion(
-                            text="ALL",
+                            text=s_name,
                             start_position=-len(word_before_cursor),
-                            display="ALL",
-                            display_meta="Extract all schemas configured in leai.yml",
+                            display=s_name,
+                            display_meta="Configured Schema (leai.yml)",
                         )
 
-                    # 2. Suggest individual configured schemas from leai.yml
-                    for s_name in self._schemas_list:
-                        if s_name != "ALL" and s_name.startswith(schema_query):
+                # 3. Also suggest flags
+                for flag_name, flag_desc in flag_options:
+                    if flag_name.startswith(word_before_cursor):
+                        yield Completion(
+                            text=flag_name,
+                            start_position=-len(word_before_cursor),
+                            display=flag_name,
+                            display_meta=flag_desc,
+                        )
+                return
+
+            # Sub-argument completion for /seaweed (status, push, pull)
+            if cmd_name == "/seaweed":
+                if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
+                    sw_query = parts[1].lower() if len(parts) > 1 else ""
+                    sw_options = [
+                        ("status", "Check SeaweedFS S3 connection and bucket operational status"),
+                        ("push", "Upload local raw/ snapshots and annotations/ to SeaweedFS"),
+                        ("pull", "Download remote raw/ snapshots and annotations/ from SeaweedFS"),
+                    ]
+                    for sw_cmd, sw_desc in sw_options:
+                        if sw_cmd.startswith(sw_query):
                             yield Completion(
-                                text=s_name,
+                                text=sw_cmd,
                                 start_position=-len(word_before_cursor),
-                                display=s_name,
-                                display_meta="Configured Schema (leai.yml)",
+                                display=sw_cmd,
+                                display_meta=sw_desc,
                             )
                 return
 
