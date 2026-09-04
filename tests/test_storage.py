@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -232,10 +233,11 @@ storage:
                     "objects_found": 10,
                     "message": "Connection operational",
                 }
-                result = runner.invoke(app, ["seaweed", "status", "--config", str(config_file)])
+                result = runner.invoke(app, ["seaweed", "status", "--config", str(config_file)], color=False)
                 self.assertEqual(result.exit_code, 0)
-                self.assertIn("SeaweedFS S3 Storage Status", result.output)
-                self.assertIn("OPERATIONAL", result.output)
+                clean_output = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", result.output)
+                self.assertIn("SeaweedFS S3 Storage Status", clean_output)
+                self.assertIn("OPERATIONAL", clean_output)
 
     def test_cli_seaweed_push_command(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -255,18 +257,20 @@ storage:
 
             with patch("leai.storage.SeaweedFSStorage.push_local_to_remote") as mock_push:
                 mock_push.return_value = {"raw": 5, "annotations": 3}
-                result = runner.invoke(app, ["seaweed", "push", "--config", str(config_file)])
+                result = runner.invoke(app, ["seaweed", "push", "--config", str(config_file)], color=False)
                 self.assertEqual(result.exit_code, 0)
-                self.assertIn("5 RAW JSON files uploaded", result.output)
-                self.assertIn("3 YAML annotation files uploaded", result.output)
+                clean_output = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", result.output)
+                self.assertIn("5 RAW JSON files uploaded", clean_output)
+                self.assertIn("3 YAML annotation files uploaded", clean_output)
 
     def test_cli_extract_with_seaweed_flag_help(self) -> None:
         runner = CliRunner()
-        result = runner.invoke(app, ["extract", "--help"])
+        result = runner.invoke(app, ["extract", "--help"], color=False)
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("--seaweed", result.output)
-        self.assertIn("-W", result.output)
-        self.assertIn("--no-cache", result.output)
+        clean_output = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", result.output)
+        self.assertIn("--seaweed", clean_output)
+        self.assertIn("-W", clean_output)
+        self.assertIn("--no-cache", clean_output)
 
     def test_save_raw_schema_no_cache(self) -> None:
         from leai.raw import save_raw_schema
@@ -309,9 +313,10 @@ storage:
 """,
                 encoding="utf-8",
             )
-            result = runner.invoke(app, ["extract", "--config", str(config_file), "--no-cache"])
+            result = runner.invoke(app, ["extract", "--config", str(config_file), "--no-cache"], color=False)
             self.assertEqual(result.exit_code, 1)
-            self.assertIn("--no-cache requires SeaweedFS to be enabled", result.output)
+            clean_output = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", result.output)
+            self.assertIn("--no-cache requires SeaweedFS to be enabled", clean_output)
 
     def test_canonical_hash_determinism(self) -> None:
         data_a = {"name": "USERS", "columns": [{"name": "ID", "type": "NUMBER"}, {"name": "NAME", "type": "VARCHAR2"}]}
@@ -416,10 +421,11 @@ storage:
 
     def test_cli_extract_with_force_upload_help(self) -> None:
         runner = CliRunner()
-        result = runner.invoke(app, ["extract", "--help"])
+        result = runner.invoke(app, ["extract", "--help"], color=False)
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("--force-upload", result.output)
-        self.assertIn("-F", result.output)
+        clean_output = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", result.output)
+        self.assertIn("--force-upload", clean_output)
+        self.assertIn("-F", clean_output)
 
 
 if __name__ == "__main__":
