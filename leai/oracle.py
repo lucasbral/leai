@@ -513,7 +513,13 @@ def _split_package_source(package_name: str, source: str | None) -> list[Subprog
     return subprograms
 
 
-def _fetch_code_objects(cursor: oracledb.Cursor, config: LeaiConfig, target_types: set[str], prefix: str = "all") -> list[CodeObjectMeta]:
+def _fetch_code_objects(
+    cursor: oracledb.Cursor,
+    config: LeaiConfig,
+    target_types: set[str],
+    prefix: str = "all",
+    chunk_callback: Callable[[str, int, int], None] | None = None,
+) -> list[CodeObjectMeta]:
     cursor.execute(
         f"""
         SELECT object_name, object_type
@@ -572,8 +578,11 @@ def _fetch_code_objects(cursor: oracledb.Cursor, config: LeaiConfig, target_type
     else:
         needed_names = tuple(sorted({name for name, _ in target_objs}))
         chunk_size = 100
-        for i in range(0, len(needed_names), chunk_size):
+        total_needed = len(needed_names)
+        for i in range(0, total_needed, chunk_size):
             chunk = needed_names[i : i + chunk_size]
+            if chunk_callback:
+                chunk_callback("Code Objects", min(i + len(chunk), total_needed), total_needed)
             name_placeholders = ", ".join(f":nm{j}" for j in range(len(chunk)))
             type_placeholders = ", ".join(f":tp{j}" for j in range(len(needed_types)))
             src_sql = f"""
@@ -856,23 +865,6 @@ def fetch_schema_metadata(
         temp_config = config.model_copy()
         temp_config.schemas = [target_schema]
 
-        # Calculate effective days filter (hours takes precedence if provided)
-        effective_days: float | None = None
-        if hours is not None and hours > 0:
-            effective_days = float(hours) / 24.0
-        elif days is not None and days > 0:
-            effective_days = float(days)
-
-        # If incremental extraction is requested, filter include list to only recently modified objects
-        if effective_days is not None and effective_days > 0:
-            modified_names = _fetch_modified_object_names(cursor, target_schema, effective_days, prefix=prefix)
-            if temp_config.include:
-                temp_config.include = [name for name in temp_config.include if name.upper() in modified_names]
-                if not temp_config.include:
-                    temp_config.include = ["__LEAI_NO_MATCHING_MODIFIED_OBJECTS__"]
-            else:
-                temp_config.include = list(modified_names) if modified_names else ["__LEAI_NO_MATCHING_MODIFIED_OBJECTS__"]
-
         code_target_types = set()
         if "procedures" in types:
             code_target_types.add("PROCEDURE")
@@ -905,6 +897,25 @@ def fetch_schema_metadata(
         total_steps = len(active_steps)
         current_step = 0
 
+        # Calculate effective days filter (hours takes precedence if provided)
+        effective_days: float | None = None
+        if hours is not None and hours > 0:
+            effective_days = float(hours) / 24.0
+        elif days is not None and days > 0:
+            effective_days = float(days)
+
+        # If incremental extraction is requested, filter include list to only recently modified objects
+        if effective_days is not None and effective_days > 0:
+            if callback:
+                callback("Consultando alterações recentes...", 0, 0, total_steps)
+            modified_names = _fetch_modified_object_names(cursor, target_schema, effective_days, prefix=prefix)
+            if temp_config.include:
+                temp_config.include = [name for name in temp_config.include if name.upper() in modified_names]
+                if not temp_config.include:
+                    temp_config.include = ["__LEAI_NO_MATCHING_MODIFIED_OBJECTS__"]
+            else:
+                temp_config.include = list(modified_names) if modified_names else ["__LEAI_NO_MATCHING_MODIFIED_OBJECTS__"]
+
         if "tables" in types:
             if callback:
                 callback("Tables (querying...)", 0, current_step, total_steps)
@@ -932,7 +943,14 @@ def fetch_schema_metadata(
         if code_target_types:
             if callback:
                 callback("Code Objects (querying...)", 0, current_step, total_steps)
-            schema_meta.code_objects = _fetch_code_objects(cursor, temp_config, code_target_types, prefix=prefix)
+
+            def _code_chunk_cb(step_name: str, count_done: int, count_total: int) -> None:
+                if callback:
+                    callback(f"Code Objects ({count_done}/{count_total})", count_done, current_step, total_steps)
+
+            schema_meta.code_objects = _fetch_code_objects(
+                cursor, temp_config, code_target_types, prefix=prefix, chunk_callback=_code_chunk_cb
+            )
             current_step += 1
             if callback:
                 callback("Code Objects", len(schema_meta.code_objects), current_step, total_steps)

@@ -1373,27 +1373,60 @@ class InteractiveTUISession:
             with console.status(
                 f"[cyan]Querying Oracle for objects modified in [bold yellow]{time_desc}[/bold yellow]...[/cyan]",
                 spinner="dots",
-            ):
+            ) as status:
                 connection = oracledb.connect(**_build_connect_kwargs(update_cfg.dsn))
                 try:
                     target_schemas = fetch_available_schemas(connection, update_cfg)
+                    total_schemas = len(target_schemas)
 
-                    for schema_name in target_schemas:
+                    for s_idx, schema_name in enumerate(target_schemas, 1):
+                        schema_t0 = time.perf_counter()
+
+                        def _fmt_dur(secs: float) -> str:
+                            m = int(secs) // 60
+                            s = int(secs) % 60
+                            return f"{m:02d}:{s:02d}"
+
+                        def _on_meta_progress(
+                            step_name: str, count: int, current_step: int, total_steps: int, s_name=schema_name, idx=s_idx
+                        ) -> None:
+                            elapsed_str = _fmt_dur(time.perf_counter() - schema_t0)
+                            status.update(f"[cyan][{s_name} ({idx}/{total_schemas})] [{elapsed_str}] Extraindo {step_name}...[/cyan]")
+
+                        status.update(
+                            f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [00:00] Consultando alterações ({time_desc})...[/cyan]"
+                        )
+
                         schema_meta = fetch_schema_metadata(
                             update_cfg,
                             schema_name=schema_name,
+                            callback=_on_meta_progress,
                             days=days_val,
                             hours=hours_val,
                             connection=connection,
                         )
                         num_objs = count_schema_objects(schema_meta, update_cfg.object_types)
+                        schema_dur = time.perf_counter() - schema_t0
+
                         if num_objs == 0:
-                            console.print(f"  [dim]• Schema [bold]{schema_name}[/bold]: no modifications in {time_desc}.[/dim]")
+                            console.print(
+                                f"  [dim]• Schema [bold]{schema_name}[/bold]: no modifications in {time_desc} ({schema_dur:.1f}s).[/dim]"
+                            )
                             continue
 
                         total_modified += num_objs
                         console.print(
-                            f"  [green]✓[/green] Schema [bold yellow]{schema_name}[/bold yellow]: [bold green]{num_objs} modified object(s)[/bold green] found."
+                            f"  [green]✓[/green] Schema [bold yellow]{schema_name}[/bold yellow]: [bold green]{num_objs} modified object(s)[/bold green] found ({schema_dur:.1f}s)."
+                        )
+
+                        def _on_s3_progress(done: int, total: int, s_name=schema_name, idx=s_idx) -> None:
+                            elapsed_str = _fmt_dur(time.perf_counter() - schema_t0)
+                            status.update(
+                                f"[cyan][{s_name} ({idx}/{total_schemas})] [{elapsed_str}] Sincronizando SeaweedFS S3 ({done}/{total} arquivos)...[/cyan]"
+                            )
+
+                        status.update(
+                            f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] Salvando objetos RAW...[/cyan]"
                         )
 
                         # 1. Save delta RAW and merge with existing snapshot
@@ -1405,10 +1438,15 @@ class InteractiveTUISession:
                             local_cache=not is_no_cache,
                             force_upload=force_upload_flag,
                             is_delta=True,
+                            progress_callback=_on_s3_progress,
                         )
                         if storage and hasattr(storage, "last_save_result"):
                             total_s3_uploaded += getattr(storage.last_save_result, "uploaded", 0)
                             total_s3_skipped += getattr(storage.last_save_result, "skipped", 0)
+
+                        status.update(
+                            f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] Sincronizando anotações...[/cyan]"
+                        )
 
                         # 2. Sync annotations ONLY for modified objects (preserves existing comments)
                         gen_ann = sync_schema_annotations(
@@ -1422,6 +1460,9 @@ class InteractiveTUISession:
 
                         # 3. Optional compilation for modified objects
                         if compile_flag:
+                            status.update(
+                                f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] Compilando documentação Markdown...[/cyan]"
+                            )
                             gen_md, _ = write_schema_docs(
                                 schema_meta,
                                 doc_path=update_cfg.docPath,
@@ -1445,11 +1486,12 @@ class InteractiveTUISession:
                 finally:
                     connection.close()
 
-            if storage:
-                try:
-                    storage.sync_glossary(update_cfg.annotationsPath, no_cache=is_no_cache)
-                except Exception as exc:
-                    console.print(f"[yellow]Warning: Could not synchronize glossary with SeaweedFS: {exc}[/yellow]")
+                if storage:
+                    status.update("[cyan]Sincronizando glossário com SeaweedFS S3...[/cyan]")
+                    try:
+                        storage.sync_glossary(update_cfg.annotationsPath, no_cache=is_no_cache)
+                    except Exception as exc:
+                        console.print(f"[yellow]Warning: Could not synchronize glossary with SeaweedFS: {exc}[/yellow]")
 
             # Refresh completer cache with any newly discovered objects
             if hasattr(self, "completer") and self.completer:
@@ -1906,6 +1948,22 @@ class InteractiveTUISession:
                     storage.ensure_bucket_exists()
                 except Exception:
                     storage = None
+
+            if (not self.schemas) and storage:
+                try:
+                    console.print("[cyan]✦ Conectando ao SeaweedFS S3 e sincronizando catálogo de schemas...[/cyan]")
+                    is_no_cache = getattr(self.config.storage.seaweedfs, "no_cache", False)
+                    target_schemas = self.config.schemas if not self.config.is_all_schemas else None
+                    loaded = load_raw_schemas(
+                        self.config.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache
+                    )
+                    if loaded:
+                        self.schemas = loaded
+                        from leai.tui.completer import LeaiCompleter
+
+                        self.completer = LeaiCompleter(self.schemas, config=self.config)
+                except Exception as e:
+                    console.print(f"[yellow]Aviso ao carregar schemas do SeaweedFS: {e}[/yellow]")
 
             self.web_server, self.web_url = start_server(
                 config=self.config,

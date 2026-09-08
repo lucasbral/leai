@@ -178,6 +178,7 @@ class SeaweedFSStorage:
         max_workers: int = 8,
         force: bool = False,
         is_delta: bool = False,
+        progress_callback: Any = None,
     ) -> SaveResult:
         """Uploads granular JSON objects and consolidated snapshot to SeaweedFS.
         When incremental=True and force=False, skips objects whose SHA-256 content
@@ -245,8 +246,10 @@ class SeaweedFSStorage:
         if tasks_to_upload:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = [executor.submit(_upload_item, t) for t in tasks_to_upload]
-                for f in as_completed(futures):
+                for idx, f in enumerate(as_completed(futures), 1):
                     uploaded_keys.append(f.result())
+                    if progress_callback:
+                        progress_callback(idx, len(tasks_to_upload))
 
         # If any object changed or force or first run with changes, update _schema.json snapshot and _manifest.json
         if tasks_to_upload or not existing_manifest or force:
@@ -319,16 +322,26 @@ class SeaweedFSStorage:
             except Exception:
                 return {}
 
-        for schema_name in sorted(detected_schemas):
+        def _fetch_schema(schema_name: str) -> tuple[str, SchemaMetadata | None]:
             snapshot_key = f"{prefix}{schema_name}/_schema.json"
             try:
                 resp = self.client.get_object(Bucket=bucket, Key=snapshot_key)
                 content = resp["Body"].read().decode("utf-8")
                 data = json.loads(content)
                 meta = _construct_schema_metadata(data, schema_name=schema_name)
-                results[schema_name] = meta
+                return schema_name, meta
             except Exception as exc:
                 logger.warning(f"Could not load snapshot '{snapshot_key}' from SeaweedFS: {exc}")
+                return schema_name, None
+
+        schemas_to_load = sorted(detected_schemas)
+        max_workers = min(12, max(2, len(schemas_to_load))) if schemas_to_load else 1
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(_fetch_schema, s_name) for s_name in schemas_to_load]
+            for f in as_completed(futures):
+                s_name, meta = f.result()
+                if meta:
+                    results[s_name] = meta
 
         return results
 
@@ -361,6 +374,12 @@ class SeaweedFSStorage:
             Body=yaml_content.encode("utf-8"),
             ContentType="text/yaml",
         )
+
+        # Update cache in memory if populated
+        if hasattr(self, "_cached_annotated_objects") and self._cached_annotated_objects is not None:
+            self._cached_annotated_objects.add((schema_name.upper(), obj_folder.lower(), obj_name.upper()))
+            self._cached_annotated_objects.add(("", obj_folder.lower(), obj_name.upper()))
+
         return key
 
     def load_annotation(self, schema_name: str, obj_folder: str, obj_name: str) -> ObjectAnnotation:
@@ -379,6 +398,52 @@ class SeaweedFSStorage:
         except Exception:
             pass
         return ObjectAnnotation()
+
+    def list_annotated_objects(self, force_refresh: bool = False) -> set[tuple[str, str, str]]:
+        """Lists all annotated objects from SeaweedFS S3 with local in-memory caching.
+
+        Returns a set of (schema_name, obj_folder, obj_name) in uppercase/normalized format.
+        """
+        if not force_refresh and hasattr(self, "_cached_annotated_objects") and self._cached_annotated_objects is not None:
+            return self._cached_annotated_objects
+
+        self.ensure_bucket_exists()
+        bucket = self.config.bucket
+        prefix = self.config.annotations_prefix.strip("/")
+        pfx = f"{prefix}/" if prefix else ""
+
+        paginator = self.client.get_paginator("list_objects_v2")
+        annotated: set[tuple[str, str, str]] = set()
+
+        try:
+            for page in paginator.paginate(Bucket=bucket, Prefix=pfx):
+                for item in page.get("Contents", []):
+                    key = item.get("Key", "")
+                    rel = key.removeprefix(pfx).strip("/")
+                    # Ignore glossary and other special files
+                    if rel.lower().endswith("glossary.yml") or rel.lower().endswith("glossary.yaml"):
+                        continue
+                    if not rel.lower().endswith((".yml", ".yaml")):
+                        continue
+
+                    parts = rel.split("/")
+                    if len(parts) >= 3:
+                        # schema_name / obj_folder / obj_name.yml
+                        s_name = parts[0].upper()
+                        folder = parts[1].lower()
+                        obj_name = parts[2].rsplit(".", 1)[0].upper()
+                        annotated.add((s_name, folder, obj_name))
+                        annotated.add(("", folder, obj_name))
+                    elif len(parts) == 2:
+                        # obj_folder / obj_name.yml
+                        folder = parts[0].lower()
+                        obj_name = parts[1].rsplit(".", 1)[0].upper()
+                        annotated.add(("", folder, obj_name))
+        except Exception as exc:
+            logger.warning(f"Failed to list annotated objects from SeaweedFS: {exc}")
+
+        self._cached_annotated_objects = annotated
+        return annotated
 
     # -------------------------------------------------------------------------
     # GLOSSARY MANAGEMENT

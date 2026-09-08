@@ -537,6 +537,15 @@
       font-weight: 700;
     }
 
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .spin-anim {
+      display: inline-block;
+      animation: spin 0.8s linear infinite;
+    }
+
     /* Doc Toolbar & Path Badge */
     .doc-toolbar {
       display: flex;
@@ -1765,8 +1774,8 @@ graph TD
             <button type="button" class="btn btn-primary" id="btn-new-rule" onclick="toggleGlossaryForm(true)">
               <span>➕</span> <span data-i18n="btn_new_rule">+ Nova Regra</span>
             </button>
-            <button type="button" class="btn btn-secondary" onclick="fetchGlossary()" title="Recarregar regras">
-              <span>🔄</span> <span data-i18n="btn_refresh">Atualizar</span>
+            <button type="button" class="btn btn-secondary" id="btn-refresh-glossary" onclick="fetchGlossary(true, true)" title="Recarregar regras">
+              <span id="btn-refresh-glossary-icon" style="display: inline-block;">🔄</span> <span id="btn-refresh-glossary-text" data-i18n="btn_refresh">Atualizar</span>
             </button>
           </div>
         </div>
@@ -2100,6 +2109,9 @@ graph TD
         tab_glossary_doc: "📄 Documentação Compilada (GLOSSARY.md)",
         btn_new_rule: "+ Nova Regra",
         btn_refresh: "Atualizar",
+        btn_refreshing: "Atualizando...",
+        toast_glossary_refreshed: "✓ Regras sincronizadas com sucesso!",
+        toast_glossary_refresh_error: "Falha ao sincronizar regras:",
         glossary_search_ph: "Filtrar por termo, tabela, SQL canônico, tags...",
         tag_filter_all: "Todas as Tags",
         glossary_count_singular: "regra",
@@ -2261,6 +2273,9 @@ graph TD
         tab_glossary_doc: "📄 Compiled Docs (GLOSSARY.md)",
         btn_new_rule: "+ New Rule",
         btn_refresh: "Refresh",
+        btn_refreshing: "Refreshing...",
+        toast_glossary_refreshed: "✓ Universal rules refreshed successfully!",
+        toast_glossary_refresh_error: "Failed to refresh universal rules:",
         glossary_search_ph: "Filter by term, table, canonical SQL, tags...",
         tag_filter_all: "All Tags",
         glossary_count_singular: "rule",
@@ -2502,6 +2517,16 @@ graph TD
     }
 
     async function loadCatalog() {
+      const treeContainer = document.getElementById('sidebar-tree');
+      if (treeContainer && (!currentCatalog || currentCatalog.length === 0)) {
+        treeContainer.innerHTML = `
+          <div style="padding: 40px 16px; text-align: center; color: var(--text-muted);">
+            <div style="display: inline-block; width: 22px; height: 22px; border: 2px solid var(--accent); border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px;"></div>
+            <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Sincronizando Catálogo...</div>
+            <div style="font-size: 11px; margin-top: 4px; color: var(--text-secondary);">Carregando metadados do SeaweedFS S3 / Local</div>
+          </div>
+        `;
+      }
       try {
         const res = await fetch('/api/catalog');
         const data = await res.json();
@@ -2518,6 +2543,16 @@ graph TD
         renderCatalogTree(currentCatalog, filterVal);
       } catch (e) {
         console.error('Failed to load catalog:', e);
+        if (treeContainer) {
+          treeContainer.innerHTML = `
+            <div style="padding: 30px 16px; text-align: center; color: var(--danger);">
+              <div style="font-size: 26px; margin-bottom: 8px;">⚠️</div>
+              <div style="font-size: 12px; font-weight: 600;">Falha ao carregar catálogo.</div>
+              <div style="font-size: 11px; margin-top: 4px; color: var(--text-muted);">${escapeHtml(e.message || String(e))}</div>
+              <button type="button" class="btn btn-secondary" style="margin-top: 12px; font-size: 11px; padding: 4px 10px;" onclick="loadCatalog()">Tentar novamente</button>
+            </div>
+          `;
+        }
       }
     }
 
@@ -2641,6 +2676,17 @@ graph TD
           container.appendChild(schemaEl);
         }
       });
+
+      if (catalog.length === 0) {
+        container.innerHTML = `
+          <div style="padding: 40px 16px; text-align: center; color: var(--text-muted);">
+            <div style="font-size: 32px; margin-bottom: 8px;">📭</div>
+            <div style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Nenhum schema encontrado</div>
+            <div style="font-size: 11px; line-height: 1.5; color: var(--text-secondary); max-width: 240px; margin: 0 auto;">Verifique se o snapshot existe no SeaweedFS ou execute <code>leai extract</code>.</div>
+            <button type="button" class="btn btn-secondary" style="margin-top: 14px; font-size: 11px; padding: 4px 10px;" onclick="loadCatalog()">Sincronizar novamente</button>
+          </div>
+        `;
+      }
 
       const objUnit = totalObjects === 1 ? dict.objects_singular : dict.objects_plural;
       document.getElementById('catalog-count').textContent = `${totalObjects} ${objUnit}`;
@@ -3853,7 +3899,22 @@ graph TD
       }
     }
 
-    async function fetchGlossary(render = true) {
+    async function fetchGlossary(render = true, userTriggered = false) {
+      const btn = document.getElementById('btn-refresh-glossary');
+      const icon = document.getElementById('btn-refresh-glossary-icon');
+      const text = document.getElementById('btn-refresh-glossary-text');
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
+
+      if (userTriggered) {
+        if (btn) {
+          btn.disabled = true;
+          btn.style.opacity = '0.75';
+          btn.style.cursor = 'wait';
+        }
+        if (icon) icon.classList.add('spin-anim');
+        if (text) text.textContent = dict.btn_refreshing || 'Atualizando...';
+      }
+
       try {
         const res = await fetch('/api/glossary');
         const data = await res.json();
@@ -3863,7 +3924,6 @@ graph TD
 
           // Update count badges
           const total = currentGlossaryTerms.length;
-          const dict = INDEX_I18N[currentLang] || INDEX_I18N.pt;
           const countUnit = total === 1 ? dict.glossary_count_singular : dict.glossary_count_plural;
           const countBadge = document.getElementById('glossary-count-badge');
           if (countBadge) countBadge.textContent = `${total} ${countUnit}`;
@@ -3876,9 +3936,28 @@ graph TD
             renderGlossaryCards();
             renderGlossaryMarkdownDoc();
           }
+
+          if (userTriggered) {
+            showToast(`${dict.toast_glossary_refreshed} (${total} ${countUnit})`);
+          }
+        } else if (userTriggered) {
+          showToast(`${dict.toast_glossary_refresh_error} ${data.error || 'Erro desconhecido'}`, true);
         }
       } catch (err) {
         console.error('Failed to fetch glossary:', err);
+        if (userTriggered) {
+          showToast(`${dict.toast_glossary_refresh_error} ${err.message}`, true);
+        }
+      } finally {
+        if (userTriggered) {
+          if (icon) icon.classList.remove('spin-anim');
+          if (btn) {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.cursor = 'pointer';
+          }
+          if (text) text.textContent = dict.btn_refresh || 'Atualizar';
+        }
       }
     }
 

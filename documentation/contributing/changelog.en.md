@@ -4,6 +4,20 @@ All notable changes to the **LEAI** project are documented here.
 
 ---
 
+## [0.2.20] — 2026
+
+### 🌟 Added
+* **Direct Universal Rules Sync with SeaweedFS in Web Studio:** The Web Studio interface (`leai serve` / `/serve`) now directly queries, creates, and removes business rules and glossary terms against the remote SeaweedFS S3 bucket (`annotations/glossary.yml`).
+* **Visual Sync Feedback in Web Studio:** Refresh button with dynamic rotation animation (`spin`) and instant toast notifications reporting synchronized rule counts.
+* **Real-time Progress & Execution Timing in `leai update` and `/update`:** Step-by-step progress tracking for tables, views, packages, and S3 uploads with `[current/total]` counters and elapsed duration metrics per schema and in aggregate.
+* **Native S3 Bucket Versioning on SeaweedFS:** Automated support and verification for S3 bucket versioning (`Status: Enabled`) ensuring revision history and rollback capabilities for annotations and metadata.
+
+### ⚡ Fixes
+* **Modified Objects Count Fix:** Resolved issue in `count_schema_objects` query that defaulted empty schemas to reporting 1 modified object (`max(1, total)` removed).
+* **Glossary Test Rules Cleanup:** Eliminated hardcoded fallback rules ("Estágio Probatório") on server startup, preserving a clean workspace when no terms exist.
+
+---
+
 ## [0.2.19] — 2026
 
 ### 🌟 Added

@@ -4,6 +4,20 @@ Todas as alterações notáveis no projeto **LEAI** são documentadas nesta pág
 
 ---
 
+## [0.2.20] — 2026
+
+### 🌟 Adicionado
+* **Sincronização Direta de Regras Universais com SeaweedFS no Web Studio:** O painel Web Studio (`leai serve` / `/serve`) agora carrega, salva e exclui regras de negócio diretamente no bucket SeaweedFS S3 (`annotations/glossary.yml`), eliminando arquivos sujos locais.
+* **Feedback Visual de Sincronização no Web Studio:** Botão "Atualizar" com animação de rotação (spin) durante o carregamento e notificação toast informativa com contagem de regras sincronizadas.
+* **Indicadores de Progresso em Tempo Real no `leai update` e `/update`:** Visualização dinâmica detalhada a cada etapa (extração de tabelas, views, pacotes e envio para S3) com contadores `[atual/total]` e medição precisa de tempo decorrido por schema e tempo total.
+* **Habilitação de Versionamento Nativo S3 no SeaweedFS:** Suporte a versionamento nativo (`Status: Enabled`) para retenção e auditoria contínua de histórico de alterações de metadados e anotações no bucket remoto.
+
+### ⚡ Correções
+* **Contagem de Objetos Modificados:** Correção no cálculo de `count_schema_objects` para não retornar 1 objeto quando o schema estiver vazio (`max(1, total)` removido).
+* **Limpeza de Regras Padrão:** Remoção de regras estáticas mockadas ("Estágio Probatório") na inicialização do Web Studio, garantindo que o catálogo permaneça limpo se não houver termos cadastrados.
+
+---
+
 ## [0.2.19] — 2026
 
 ### 🌟 Adicionado

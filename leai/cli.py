@@ -528,93 +528,133 @@ def update(
     try:
         connection = oracledb.connect(**_build_connect_kwargs(cfg.dsn))
         try:
-            target_schemas = fetch_available_schemas(connection, cfg)
-            console.print(
-                f"[cyan]Incremental Update:[/cyan] Searching objects modified in [bold yellow]{time_desc}[/bold yellow] across [bold]{len(target_schemas)} schema(s)[/bold]...\n"
-            )
+            with console.status(
+                f"[cyan]Querying Oracle for objects modified in [bold yellow]{time_desc}[/bold yellow]...[/cyan]",
+                spinner="dots",
+            ) as status:
+                target_schemas = fetch_available_schemas(connection, cfg)
+                total_schemas = len(target_schemas)
 
-            totals = {
-                "tables": 0,
-                "views": 0,
-                "mviews": 0,
-                "code_objects": 0,
-                "triggers": 0,
-                "sequences": 0,
-                "indexes": 0,
-                "synonyms": 0,
-            }
+                totals = {
+                    "tables": 0,
+                    "views": 0,
+                    "mviews": 0,
+                    "code_objects": 0,
+                    "triggers": 0,
+                    "sequences": 0,
+                    "indexes": 0,
+                    "synonyms": 0,
+                }
 
-            for s_idx, schema_name in enumerate(target_schemas, 1):
-                schema_meta = fetch_schema_metadata(
-                    cfg,
-                    schema_name=schema_name,
-                    days=effective_days,
-                    hours=effective_hours,
-                    connection=connection,
-                )
+                for s_idx, schema_name in enumerate(target_schemas, 1):
+                    schema_t0 = time.perf_counter()
 
-                num_objs = count_schema_objects(schema_meta, cfg.object_types)
-                totals["tables"] += len(schema_meta.tables)
-                totals["views"] += len(schema_meta.views)
-                totals["mviews"] += len(schema_meta.mviews)
-                totals["code_objects"] += len(schema_meta.code_objects)
-                totals["triggers"] += len(schema_meta.triggers)
-                totals["sequences"] += len(schema_meta.sequences)
-                totals["indexes"] += len(schema_meta.indexes)
-                totals["synonyms"] += len(schema_meta.synonyms)
+                    def _fmt_dur(secs: float) -> str:
+                        m = int(secs) // 60
+                        s = int(secs) % 60
+                        return f"{m:02d}:{s:02d}"
 
-                if num_objs == 0:
-                    console.print(f"  [dim]• Schema [bold]{schema_name}[/bold]: no modifications in {time_desc}.[/dim]")
-                    continue
+                    def _on_meta_progress(
+                        step_name: str, count: int, current_step: int, total_steps: int, s_name=schema_name, idx=s_idx
+                    ) -> None:
+                        elapsed_str = _fmt_dur(time.perf_counter() - schema_t0)
+                        status.update(f"[cyan][{s_name} ({idx}/{total_schemas})] [{elapsed_str}] Extraindo {step_name}...[/cyan]")
 
-                console.print(
-                    f"  [green]✓[/green] Schema [bold yellow]{schema_name}[/bold yellow]: [bold green]{num_objs} modified object(s)[/bold green] found."
-                )
+                    status.update(f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [00:00] Consultando alterações ({time_desc})...[/cyan]")
 
-                # 1. Save delta RAW and merge with existing snapshot
-                save_raw_schema(
-                    schema_meta,
-                    cfg.rawPath,
-                    multi_schema=True,
-                    storage=storage,
-                    local_cache=not is_no_cache,
-                    force_upload=force_upload,
-                    is_delta=True,
-                )
-                if storage and hasattr(storage, "last_save_result"):
-                    total_s3_uploaded += getattr(storage.last_save_result, "uploaded", 0)
-                    total_s3_skipped += getattr(storage.last_save_result, "skipped", 0)
+                    schema_meta = fetch_schema_metadata(
+                        cfg,
+                        schema_name=schema_name,
+                        callback=_on_meta_progress,
+                        days=effective_days,
+                        hours=effective_hours,
+                        connection=connection,
+                    )
 
-                # 2. Sync annotations ONLY for the modified objects (preserves all existing descriptions/comments)
-                gen_ann = sync_schema_annotations(
-                    schema_meta,
-                    annotations_path=cfg.annotationsPath,
-                    multi_schema=True,
-                    object_types=cfg.object_types,
-                    storage=storage,
-                )
-                total_ann += len(gen_ann)
+                    num_objs = count_schema_objects(schema_meta, cfg.object_types)
+                    schema_dur = time.perf_counter() - schema_t0
+                    totals["tables"] += len(schema_meta.tables)
+                    totals["views"] += len(schema_meta.views)
+                    totals["mviews"] += len(schema_meta.mviews)
+                    totals["code_objects"] += len(schema_meta.code_objects)
+                    totals["triggers"] += len(schema_meta.triggers)
+                    totals["sequences"] += len(schema_meta.sequences)
+                    totals["indexes"] += len(schema_meta.indexes)
+                    totals["synonyms"] += len(schema_meta.synonyms)
 
-                # 3. Optional compilation for modified objects
-                if compile_docs:
-                    gen_md, _ = write_schema_docs(
+                    if num_objs == 0:
+                        console.print(
+                            f"  [dim]• Schema [bold]{schema_name}[/bold]: no modifications in {time_desc} ({schema_dur:.1f}s).[/dim]"
+                        )
+                        continue
+
+                    console.print(
+                        f"  [green]✓[/green] Schema [bold yellow]{schema_name}[/bold yellow]: [bold green]{num_objs} modified object(s)[/bold green] found ({schema_dur:.1f}s)."
+                    )
+
+                    def _on_s3_progress(done: int, total: int, s_name=schema_name, idx=s_idx) -> None:
+                        elapsed_str = _fmt_dur(time.perf_counter() - schema_t0)
+                        status.update(
+                            f"[cyan][{s_name} ({idx}/{total_schemas})] [{elapsed_str}] Sincronizando SeaweedFS S3 ({done}/{total} arquivos)...[/cyan]"
+                        )
+
+                    status.update(
+                        f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] Salvando objetos RAW...[/cyan]"
+                    )
+
+                    # 1. Save delta RAW and merge with existing snapshot
+                    save_raw_schema(
                         schema_meta,
-                        doc_path=cfg.docPath,
+                        cfg.rawPath,
+                        multi_schema=True,
+                        storage=storage,
+                        local_cache=not is_no_cache,
+                        force_upload=force_upload,
+                        is_delta=True,
+                        progress_callback=_on_s3_progress,
+                    )
+                    if storage and hasattr(storage, "last_save_result"):
+                        total_s3_uploaded += getattr(storage.last_save_result, "uploaded", 0)
+                        total_s3_skipped += getattr(storage.last_save_result, "skipped", 0)
+
+                    status.update(
+                        f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] Sincronizando anotações...[/cyan]"
+                    )
+
+                    # 2. Sync annotations ONLY for the modified objects (preserves all existing descriptions/comments)
+                    gen_ann = sync_schema_annotations(
+                        schema_meta,
                         annotations_path=cfg.annotationsPath,
-                        docs_overrides=cfg.docs,
                         multi_schema=True,
                         object_types=cfg.object_types,
-                        with_traces=with_traces,
+                        storage=storage,
                     )
-                    total_md += len(gen_md)
+                    total_ann += len(gen_ann)
+
+                    # 3. Optional compilation for modified objects
+                    if compile_docs:
+                        status.update(
+                            f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] Compilando documentação Markdown...[/cyan]"
+                        )
+                        gen_md, _ = write_schema_docs(
+                            schema_meta,
+                            doc_path=cfg.docPath,
+                            annotations_path=cfg.annotationsPath,
+                            docs_overrides=cfg.docs,
+                            multi_schema=True,
+                            object_types=cfg.object_types,
+                            with_traces=with_traces,
+                        )
+                        total_md += len(gen_md)
+
+                if storage:
+                    status.update("[cyan]Sincronizando glossário com SeaweedFS S3...[/cyan]")
+                    try:
+                        storage.sync_glossary(cfg.annotationsPath, no_cache=is_no_cache)
+                    except Exception as exc:
+                        console.print(f"[yellow]Warning: Could not synchronize glossary with SeaweedFS: {exc}[/yellow]")
         finally:
             connection.close()
-
-        if storage:
-            try:
-                storage.sync_glossary(cfg.annotationsPath, no_cache=is_no_cache)
-            except Exception as exc:
-                console.print(f"[yellow]Warning: Could not synchronize glossary with SeaweedFS: {exc}[/yellow]")
 
         elapsed = time.perf_counter() - start_time
         out_paths: dict[str, Any] = {}
@@ -953,6 +993,8 @@ def default(
     model: str = typer.Option(None, "--model", "-m", help="AI model name"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
     schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to target (overrides leai.yml)"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load schema knowledge from SeaweedFS S3 storage"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local cache files, operate directly with SeaweedFS"),
 ) -> None:
     """LEAI: Autonomous Oracle Database Intelligence, Documentation Engine & Copilot."""
     if hasattr(config, "default") or not isinstance(config, (str, Path)):
@@ -965,6 +1007,10 @@ def default(
         provider = getattr(provider, "default", None)
     if hasattr(model, "default"):
         model = getattr(model, "default", None)
+    if hasattr(seaweed, "default"):
+        seaweed = getattr(seaweed, "default", False)
+    if hasattr(no_cache, "default"):
+        no_cache = getattr(no_cache, "default", False)
 
     if ctx.invoked_subcommand is None:
         try:
@@ -977,7 +1023,11 @@ def default(
             cfg = LeaiConfig()
 
         target_schemas = cfg.schemas if not cfg.is_all_schemas else None
-        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas)
+        storage = _resolve_storage(cfg, seaweed)
+        is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
+        if storage and not cfg.rawPath.exists():
+            console.print("[cyan]✦ Conectando ao SeaweedFS S3 e sincronizando catálogo de schemas...[/cyan]")
+        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
         try:
             client = get_llm_client(cfg, provider_override=provider, model_override=model)
         except Exception:
@@ -1742,6 +1792,8 @@ def serve(
     open_browser: bool = typer.Option(True, "--open/--no-open", help="Automatically open default browser"),
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
     provider: str = typer.Option(None, "--provider", help="AI provider override"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load schema and annotation catalog directly from SeaweedFS S3 storage"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local cache files, operate directly with SeaweedFS"),
 ) -> None:
     """Launch interactive LEAI Web Documentation & Annotation Studio in the browser."""
     try:
@@ -1751,13 +1803,23 @@ def serve(
             console.print(f"[bold yellow]⚠️ Aviso:[/bold yellow] Falha ao ler [cyan]{config}[/cyan]: {exc}")
         cfg = LeaiConfig()
 
-    schemas_meta = load_raw_schemas(cfg.rawPath)
+    storage = _resolve_storage(cfg, seaweed)
+    is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
+    target_schemas = cfg.schemas if not cfg.is_all_schemas else None
+    if storage and not cfg.rawPath.exists():
+        console.print("[cyan]✦ Conectando ao SeaweedFS S3 e sincronizando catálogo de schemas...[/cyan]")
+    schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
     try:
         client = get_llm_client(cfg, provider_override=provider)
     except Exception:
         client = None
 
     url = f"http://{host}:{port}"
+    sw_line = (
+        f"[bold white]SeaweedFS S3:[/bold white] [bold green]Active[/bold green] [dim]({cfg.storage.seaweedfs.bucket})[/dim]\n"
+        if storage
+        else ""
+    )
 
     console.print()
     console.print(
@@ -1765,6 +1827,7 @@ def serve(
             f"[bold cyan]⚡ LEAI Web Documentation & Annotation Studio[/bold cyan]\n\n"
             f"[bold white]URL:[/bold white] [bold yellow underline]{url}[/bold yellow underline]\n"
             f"[bold white]Schemas Loaded:[/bold white] [cyan]{len(schemas_meta)}[/cyan] schemas\n"
+            f"{sw_line}"
             f"[bold white]AI Model:[/bold white] [bold green]{client.model if client else 'Offline'}[/bold green]\n\n"
             f"[dim]Features: In-browser annotation editing, instant Markdown sync, AI auto-enrichment, lineage graphs.[/dim]\n"
             f"[dim]Press [bold red]Ctrl+C[/bold red] to stop server.[/dim]",
@@ -1787,6 +1850,9 @@ def serve(
         in_background=False,
         config_path=config,
         initial_path="/",
+        storage=storage,
+        seaweed=seaweed,
+        no_cache=is_no_cache,
     )
 
 

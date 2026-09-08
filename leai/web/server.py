@@ -492,8 +492,26 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_api_catalog(self) -> None:
-        schemas_data = []
         cfg = self.server.config
+
+        # Lazy schema reload if schemas are empty and storage is available
+        if (not self.server.schemas) and self.server.storage:
+            try:
+                remote_schemas = self.server.storage.load_raw_schemas()
+                if remote_schemas:
+                    self.server.schemas = list(remote_schemas.values())
+            except Exception:
+                pass
+
+        schemas_data = []
+
+        # Get annotated objects from SeaweedFS if storage is available
+        remote_annotated: set[tuple[str, str, str]] = set()
+        if self.server.storage and hasattr(self.server.storage, "list_annotated_objects"):
+            try:
+                remote_annotated = self.server.storage.list_annotated_objects()
+            except Exception:
+                remote_annotated = set()
 
         for s in self.server.schemas:
             s_name = s.schema_name or "DEFAULT"
@@ -503,7 +521,13 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                 p2 = cfg.annotationsPath / cat / f"{name}.yml"
                 p3 = cfg.annotationsPath / s_name / cat / f"{name}.yaml"
                 p4 = cfg.annotationsPath / cat / f"{name}.yaml"
-                return p1.exists() or p2.exists() or p3.exists() or p4.exists()
+                if p1.exists() or p2.exists() or p3.exists() or p4.exists():
+                    return True
+                if remote_annotated:
+                    target_key = (s_name.upper(), cat.lower(), name.upper())
+                    wildcard_key = ("", cat.lower(), name.upper())
+                    return (target_key in remote_annotated) or (wildcard_key in remote_annotated)
+                return False
 
             tables = [{"name": t.name, "comment": t.comment or "", "is_annotated": _check_ann("tables", t.name)} for t in s.tables]
             views = [{"name": v.name, "comment": v.comment or "", "is_annotated": _check_ann("views", v.name)} for v in s.views]
@@ -552,6 +576,15 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         if not obj_name:
             self._send_error("Parameter 'name' is required.")
             return
+
+        # Lazy schema reload if schemas are empty and storage is available
+        if (not self.server.schemas) and self.server.storage:
+            try:
+                remote_schemas = self.server.storage.load_raw_schemas()
+                if remote_schemas:
+                    self.server.schemas = list(remote_schemas.values())
+            except Exception:
+                pass
 
         cfg = self.server.config
         matched_obj = None
@@ -1140,11 +1173,28 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
     def _handle_api_get_glossary(self) -> None:
         """Retrieves global business glossary terms and compiled GLOSSARY.md."""
         from leai.docs import write_glossary_doc
-        from leai.glossary import load_glossary
+        from leai.glossary import load_glossary, merge_glossaries
 
         cfg = self.server.config
+        storage = self.server.storage
+        is_no_cache = getattr(self.server, "no_cache", False) or cfg.storage.seaweedfs.no_cache
         try:
-            glossary = load_glossary(cfg.annotationsPath)
+            remote_glossary = None
+            if storage and hasattr(storage, "load_glossary"):
+                try:
+                    remote_glossary = storage.load_glossary()
+                except Exception:
+                    remote_glossary = None
+
+            if is_no_cache and remote_glossary is not None:
+                glossary = remote_glossary
+            else:
+                local_glossary = load_glossary(cfg.annotationsPath)
+                if remote_glossary is not None and remote_glossary.terms:
+                    glossary = merge_glossaries(remote_glossary, local_glossary) if local_glossary.terms else remote_glossary
+                else:
+                    glossary = local_glossary
+
             compiled_md = ""
             glossary_file = cfg.docPath / "GLOSSARY.md"
             if not glossary.terms:
@@ -1155,10 +1205,13 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                         pass
                 compiled_md = ""
             else:
-                if not glossary_file.exists():
+                if not glossary_file.exists() and not is_no_cache:
                     write_glossary_doc(cfg.annotationsPath, cfg.docPath)
                 if glossary_file.exists():
-                    compiled_md = glossary_file.read_text(encoding="utf-8")
+                    try:
+                        compiled_md = glossary_file.read_text(encoding="utf-8")
+                    except Exception:
+                        compiled_md = ""
 
             self._send_json(
                 {
@@ -1183,6 +1236,7 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
             return
 
         cfg = self.server.config
+        is_no_cache = getattr(self.server, "no_cache", False) or cfg.storage.seaweedfs.no_cache
         try:
             term_obj = GlossaryTerm(
                 term=term_name,
@@ -1193,8 +1247,9 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                 tags=payload.get("tags", []),
                 examples=payload.get("examples", []),
             )
-            add_or_update_term(cfg.annotationsPath, term_obj)
-            write_glossary_doc(cfg.annotationsPath, cfg.docPath)
+            add_or_update_term(cfg.annotationsPath, term_obj, storage=self.server.storage)
+            if not is_no_cache:
+                write_glossary_doc(cfg.annotationsPath, cfg.docPath)
             self._send_json({"success": True, "term": term_obj.model_dump()})
         except Exception as exc:
             self._send_error(f"Failed to save glossary term: {exc}")
@@ -1216,10 +1271,12 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
             return
 
         cfg = self.server.config
+        is_no_cache = getattr(self.server, "no_cache", False) or cfg.storage.seaweedfs.no_cache
         try:
-            deleted = delete_term(cfg.annotationsPath, term_name)
+            deleted = delete_term(cfg.annotationsPath, term_name, storage=self.server.storage)
             if deleted:
-                write_glossary_doc(cfg.annotationsPath, cfg.docPath)
+                if not is_no_cache:
+                    write_glossary_doc(cfg.annotationsPath, cfg.docPath)
                 self._send_json({"success": True, "deleted": term_name})
             else:
                 self._send_error(f"Term '{term_name}' not found.", status=HTTPStatus.NOT_FOUND)
@@ -1263,6 +1320,24 @@ class LEAIStudioServer(ThreadingHTTPServer):
         else:
             self.storage = None
 
+        if (not self.schemas) and self.storage:
+            try:
+                target_schemas = config.schemas if not config.is_all_schemas else None
+                remote_schemas = self.storage.load_raw_schemas(target_schemas=target_schemas)
+                if remote_schemas:
+                    self.schemas = list(remote_schemas.values())
+                    is_no_cache = getattr(getattr(config, "storage", None), "seaweedfs", None) and config.storage.seaweedfs.no_cache
+                    if not is_no_cache:
+                        from leai.raw import save_raw_schema
+
+                        for meta in self.schemas:
+                            save_raw_schema(meta, config.rawPath, multi_schema=True)
+            except Exception:
+                pass
+
+        if self.storage and hasattr(self.storage, "list_annotated_objects"):
+            threading.Thread(target=self.storage.list_annotated_objects, daemon=True).start()
+
 
 def start_server(
     config: LeaiConfig,
@@ -1276,10 +1351,28 @@ def start_server(
     config_path: Path | None = None,
     initial_path: str = "/",
     storage: Any = None,
+    seaweed: bool = False,
+    no_cache: bool = False,
 ) -> tuple[LEAIStudioServer, str]:
     """Starts the LEAI Web Studio server, optionally in background thread."""
-    if schemas is None:
-        schemas = load_raw_schemas(config.rawPath)
+    if storage is None and (seaweed or (getattr(config, "storage", None) and config.storage.seaweedfs.enabled)):
+        from leai.storage import SeaweedFSStorage
+
+        try:
+            storage = SeaweedFSStorage(config.storage.seaweedfs)
+            storage.ensure_bucket_exists()
+        except Exception:
+            storage = None
+
+    is_no_cache = no_cache or (getattr(getattr(config, "storage", None), "seaweedfs", None) and config.storage.seaweedfs.no_cache)
+
+    if schemas is None or len(schemas) == 0:
+        target_schemas = config.schemas if not config.is_all_schemas else None
+        loaded = load_raw_schemas(config.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
+        if loaded:
+            schemas = loaded
+        elif schemas is None:
+            schemas = []
 
     if client is None:
         try:

@@ -177,7 +177,7 @@ class TestBusinessGlossary(unittest.TestCase):
 
     def test_cli_rule_commands(self):
         cfg_file = Path(self.temp_dir.name) / "leai.yml"
-        cfg_file.write_text(f"annotationsPath: '{self.ann_path}'\n", encoding="utf-8")
+        cfg_file.write_text(f"schemas:\n  - HR\nannotationsPath: '{self.ann_path}'\n", encoding="utf-8")
 
         # 1. Add rule via CLI
         res_add = self.runner.invoke(

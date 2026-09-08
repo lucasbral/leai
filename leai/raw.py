@@ -221,6 +221,7 @@ def save_raw_schema(
     local_cache: bool = True,
     force_upload: bool = False,
     is_delta: bool = False,
+    progress_callback: Any = None,
 ) -> list[Path]:
     saved_files: list[Path] = []
 
@@ -289,10 +290,15 @@ def save_raw_schema(
 
     if storage is not None:
         try:
+            kwargs: dict[str, Any] = {
+                "multi_schema": multi_schema,
+                "force": force_upload,
+            }
             if is_delta:
-                storage.save_raw_schema(schema, multi_schema=multi_schema, force=force_upload, is_delta=True)
-            else:
-                storage.save_raw_schema(schema, multi_schema=multi_schema, force=force_upload)
+                kwargs["is_delta"] = True
+            if progress_callback is not None:
+                kwargs["progress_callback"] = progress_callback
+            storage.save_raw_schema(schema, **kwargs)
         except Exception as exc:
             import sys
 

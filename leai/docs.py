@@ -790,7 +790,7 @@ def count_schema_objects(schema: SchemaMetadata, object_types: list[str] | None 
     for code_obj in schema.code_objects:
         if _is_code_obj_allowed(code_obj, allowed_types):
             total += 1 + len(code_obj.subprograms)
-    return max(1, total)
+    return total
 
 
 def write_schema_docs(
@@ -853,7 +853,7 @@ def write_schema_docs(
     trace_map: dict[str, ObjectTraceResult] = {}
     annotations_map: dict[str, ObjectAnnotation] = {}
 
-    total_objects = 1 if target_clean_obj else count_schema_objects(schema, object_types)
+    total_objects = 1 if target_clean_obj else max(1, count_schema_objects(schema, object_types))
     processed_count = 0
 
     # 1. Tables
@@ -1177,7 +1177,7 @@ def sync_schema_annotations(
     allowed_types = {t.lower() for t in object_types} if object_types else None
     generated_ann: list[Path] = []
 
-    total_objects = count_schema_objects(schema, object_types)
+    total_objects = max(1, count_schema_objects(schema, object_types))
     processed_count = 0
     s_name = schema.schema_name or ""
 
