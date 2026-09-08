@@ -213,6 +213,20 @@ DATABASE_TOOLS_DEFINITIONS = [
 ]
 
 
+def _resolve_storage_for_tools(config: LeaiConfig | None) -> Any:
+    """Lazily resolves SeaweedFSStorage instance if configured and enabled."""
+    if config and getattr(getattr(config, "storage", None), "seaweedfs", None):
+        sw = config.storage.seaweedfs
+        if getattr(sw, "enabled", False) or getattr(sw, "endpoint_url", None):
+            try:
+                from leai.storage import SeaweedFSStorage
+
+                return SeaweedFSStorage(sw)
+            except Exception:
+                return None
+    return None
+
+
 def resolve_synonym(schemas: list[SchemaMetadata], name: str) -> dict[str, Any] | None:
     """Resolves a synonym name to its target owner, target object name, db link, and target object type."""
     if not name:
@@ -373,12 +387,10 @@ def search_business_documentation(
     try:
         from leai.glossary import load_glossary, search_glossary
 
+        storage = _resolve_storage_for_tools(config)
         glossary = load_glossary(config.annotationsPath)
-        if not glossary.terms and (config.storage.seaweedfs.enabled or config.storage.seaweedfs.endpoint_url):
+        if not glossary.terms and storage and hasattr(storage, "load_glossary"):
             try:
-                from leai.storage import SeaweedFSStorage
-
-                storage = SeaweedFSStorage(config.storage.seaweedfs)
                 remote_glossary = storage.load_glossary()
                 if remote_glossary.terms:
                     glossary = remote_glossary
@@ -515,6 +527,65 @@ def search_business_documentation(
             except Exception:
                 continue
 
+    # 1b. If remote storage is configured, also search annotations in SeaweedFS
+    if storage and hasattr(storage, "list_annotated_objects"):
+        try:
+            remote_objects = storage.list_annotated_objects()
+            for s_name, cat_folder, obj_name in remote_objects:
+                if not s_name:
+                    s_name = (schemas[0].schema_name if schemas else config.schema_name or "DEFAULT").upper()
+                item_key = f"{s_name}.{obj_name.upper()}"
+                if item_key in seen_keys:
+                    continue
+                obj_type = cat_folder.rstrip("s").upper()
+                if obj_type in ("PACKAGE_BODY", "PACKAGE_BODYS"):
+                    obj_type = "PACKAGE"
+                if target_types and obj_type not in target_types and f"{obj_type}S" not in target_types:
+                    continue
+
+                norm_name = _normalize_text(obj_name)
+                # Quick filter: only fetch remote YAML if object name or tokens match
+                if any(t in norm_name for t in tokens):
+                    try:
+                        ann = storage.load_annotation(s_name, cat_folder, obj_name)
+                        if not (ann.description or ann.columns or ann.business_rules or ann.tags):
+                            continue
+                        score = 50
+                        matched_fields = ["name"]
+                        snippets = []
+                        if fields_filter in ("all", "descriptions", "description") and ann.description:
+                            norm_desc = _normalize_text(ann.description)
+                            if any(t in norm_desc for t in tokens):
+                                score += 45
+                                matched_fields.append("description")
+                                snippets.append(f"description: '{ann.description}'")
+                        if fields_filter in ("all", "rules", "business_rules") and ann.business_rules:
+                            for rule in ann.business_rules:
+                                if any(t in _normalize_text(rule) for t in tokens):
+                                    score += 35
+                                    if "business_rules" not in matched_fields:
+                                        matched_fields.append("business_rules")
+                                    snippets.append(f"rule: '{rule}'")
+                        if score > 0:
+                            seen_keys.add(item_key)
+                            results.append(
+                                {
+                                    "object_name": obj_name,
+                                    "object_type": obj_type,
+                                    "schema": s_name,
+                                    "relevance_score": score,
+                                    "matched_fields": matched_fields,
+                                    "description": ann.description or "",
+                                    "matched_snippets": snippets[:5],
+                                    "business_rules": ann.business_rules,
+                                    "tags": ann.tags,
+                                }
+                            )
+                    except Exception:
+                        continue
+        except Exception:
+            pass
+
     # 2. Also search SchemaMetadata dictionary comments & columns
     for s in schemas:
         s_name = (s.schema_name or "DEFAULT").upper()
@@ -602,6 +673,16 @@ def lookup_business_term(
     from leai.glossary import load_glossary, search_glossary
 
     glossary = load_glossary(config.annotationsPath)
+    if not glossary.terms:
+        storage = _resolve_storage_for_tools(config)
+        if storage and hasattr(storage, "load_glossary"):
+            try:
+                remote_glossary = storage.load_glossary()
+                if remote_glossary.terms:
+                    glossary = remote_glossary
+            except Exception:
+                pass
+
     matches = search_glossary(glossary, query)
 
     if tag:
@@ -641,6 +722,7 @@ def search_database_objects(
     tokens = _extract_search_tokens(query)
     target_types = _parse_target_types(object_type)
     results: list[dict[str, Any]] = []
+    storage = _resolve_storage_for_tools(config)
 
     def _matches_text(text: str) -> bool:
         norm = _normalize_text(text)
@@ -663,8 +745,14 @@ def search_database_objects(
                 if config and config.annotationsPath:
                     ann_dir = config.annotationsPath / s_name if is_multi else config.annotationsPath
                     ann_file = ann_dir / "tables" / f"{t.name}.yml"
-                    if ann_file.exists():
-                        ann = load_annotation(ann_file)
+                    if ann_file.exists() or storage:
+                        ann = load_annotation(
+                            ann_file,
+                            storage=storage,
+                            schema_name=s_name,
+                            obj_folder="tables",
+                            obj_name=t.name,
+                        )
                         ann_desc = ann.description or ""
 
                 cols_text = " ".join(f"{c.name} {c.comment or ''}" for c in t.columns)
@@ -804,6 +892,7 @@ def search_column_comments(
     tokens = _extract_search_tokens(query)
     target_types = _parse_target_types(object_type)
     target_table = table_name.strip().lstrip("@").upper() if table_name else None
+    storage = _resolve_storage_for_tools(config)
 
     matches: list[dict[str, Any]] = []
 
@@ -842,7 +931,14 @@ def search_column_comments(
                     is_multi = len(schemas) > 1 or config.is_all_schemas
                     ann_dir = config.annotationsPath / s_name if is_multi else config.annotationsPath
                     ann_file = ann_dir / "tables" / f"{t.name}.yml"
-                    ann = load_annotation(ann_file) if ann_file.exists() else None
+                    if ann_file.exists() or storage:
+                        ann = load_annotation(
+                            ann_file,
+                            storage=storage,
+                            schema_name=s_name,
+                            obj_folder="tables",
+                            obj_name=t.name,
+                        )
 
                 pk_cols = set(t.primary_keys) if t.primary_keys else set()
 
@@ -878,7 +974,14 @@ def search_column_comments(
                     is_multi = len(schemas) > 1 or config.is_all_schemas
                     ann_dir = config.annotationsPath / s_name if is_multi else config.annotationsPath
                     ann_file = ann_dir / "views" / f"{v.name}.yml"
-                    ann = load_annotation(ann_file) if ann_file.exists() else None
+                    if ann_file.exists() or storage:
+                        ann = load_annotation(
+                            ann_file,
+                            storage=storage,
+                            schema_name=s_name,
+                            obj_folder="views",
+                            obj_name=v.name,
+                        )
 
                 for c in v.columns:
                     comment = (ann and ann.columns.get(c.name)) or c.comment or ""
@@ -942,6 +1045,7 @@ def get_table_schema(
     raw_name = table_name.strip().lstrip("@").upper()
     target_schema: str | None = None
     target_name = raw_name
+    storage = _resolve_storage_for_tools(config)
     if "." in raw_name:
         parts = raw_name.split(".", 1)
         target_schema = parts[0].strip()
@@ -957,7 +1061,17 @@ def get_table_schema(
                 is_multi = len(schemas) > 1 or config.is_all_schemas
                 ann_dir = config.annotationsPath / s_name if is_multi else config.annotationsPath
                 ann_file = ann_dir / "tables" / f"{t.name}.yml"
-                ann = load_annotation(ann_file) if ann_file.exists() else None
+                ann = (
+                    load_annotation(
+                        ann_file,
+                        storage=storage,
+                        schema_name=s_name,
+                        obj_folder="tables",
+                        obj_name=t.name,
+                    )
+                    if (ann_file.exists() or storage)
+                    else None
+                )
 
                 pk_cols = set(t.primary_keys) if t.primary_keys else set()
 
@@ -1007,7 +1121,17 @@ def get_table_schema(
                 is_multi = len(schemas) > 1 or config.is_all_schemas
                 ann_dir = config.annotationsPath / s_name if is_multi else config.annotationsPath
                 ann_file = ann_dir / "views" / f"{v.name}.yml"
-                ann = load_annotation(ann_file) if ann_file.exists() else None
+                ann = (
+                    load_annotation(
+                        ann_file,
+                        storage=storage,
+                        schema_name=s_name,
+                        obj_folder="views",
+                        obj_name=v.name,
+                    )
+                    if (ann_file.exists() or storage)
+                    else None
+                )
 
                 cols_info = []
                 for c in v.columns:
@@ -1041,15 +1165,31 @@ def get_table_schema(
             continue
         for mv in s.mviews:
             if mv.name.upper() == target_name:
+                is_multi = len(schemas) > 1 or config.is_all_schemas
+                ann_dir = config.annotationsPath / s_name if is_multi else config.annotationsPath
+                ann_file = ann_dir / "mviews" / f"{mv.name}.yml"
+                ann = (
+                    load_annotation(
+                        ann_file,
+                        storage=storage,
+                        schema_name=s_name,
+                        obj_folder="mviews",
+                        obj_name=mv.name,
+                    )
+                    if (ann_file.exists() or storage)
+                    else None
+                )
+
                 cols_info = []
                 for c in mv.columns:
+                    col_doc = (ann and ann.columns.get(c.name)) or c.comment or ""
                     cols_info.append(
                         {
                             "name": c.name,
                             "type": c.data_type,
                             "nullable": c.nullable,
                             "is_pk": False,
-                            "description": c.comment or "",
+                            "description": col_doc,
                         }
                     )
 
@@ -1058,9 +1198,9 @@ def get_table_schema(
                     "type": "MATERIALIZED VIEW",
                     "schema": s_name,
                     "comment": mv.comment,
-                    "business_description": None,
-                    "business_rules": [],
-                    "tags": [],
+                    "business_description": ann.description if ann else None,
+                    "business_rules": ann.business_rules if ann else [],
+                    "tags": ann.tags if ann else [],
                     "columns": cols_info,
                     "foreign_keys": [],
                 }

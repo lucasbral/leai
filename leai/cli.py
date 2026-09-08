@@ -1902,6 +1902,8 @@ def run_agent_command(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
     provider: str = typer.Option(None, "--provider", help="AI provider override"),
     model: str = typer.Option(None, "--model", "-m", help="AI model override"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load database knowledge from SeaweedFS S3 storage"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local cache files, operate directly with SeaweedFS"),
 ) -> None:
     """Run a specialized subagent in clean, isolated context with real-time streaming."""
     from leai.ai.subagents import SUBAGENT_REGISTRY, execute_subagent
@@ -1918,9 +1920,14 @@ def run_agent_command(
     except Exception:
         cfg = LeaiConfig()
 
-    schemas_meta = load_raw_schemas(cfg.rawPath)
+    storage = _resolve_storage(cfg, seaweed)
+    is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
+    target_schemas = cfg.schemas if not cfg.is_all_schemas else None
+    schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
     if not schemas_meta:
-        console.print("[yellow]Warning:[/yellow] No offline schemas found in rawPath. Run [bold cyan]leai extract[/bold cyan] first.")
+        console.print(
+            "[yellow]Warning:[/yellow] No offline schemas found. Run [bold cyan]leai extract[/bold cyan] or configure SeaweedFS in [bold cyan]leai.yml[/bold cyan]."
+        )
 
     try:
         client = get_llm_client(cfg, provider_override=provider)
@@ -2010,6 +2017,8 @@ def run_workflow_command(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
     provider: str = typer.Option(None, "--provider", help="AI provider override"),
     output: Path = typer.Option(None, "--output", "-o", help="Optional path to export generated report Markdown"),
+    seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load database knowledge from SeaweedFS S3 storage"),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local cache files, operate directly with SeaweedFS"),
 ) -> None:
     """Run an autonomous multi-step workflow pipeline against a database object."""
     from leai.workflows import get_workflow
@@ -2019,9 +2028,14 @@ def run_workflow_command(
     except Exception:
         cfg = LeaiConfig()
 
-    schemas_meta = load_raw_schemas(cfg.rawPath)
+    storage = _resolve_storage(cfg, seaweed)
+    is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
+    target_schemas = cfg.schemas if not cfg.is_all_schemas else None
+    schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
     if not schemas_meta:
-        console.print("[yellow]Warning:[/yellow] No offline schemas found in rawPath. Run [bold cyan]leai extract[/bold cyan] first.")
+        console.print(
+            "[yellow]Warning:[/yellow] No offline schemas found. Run [bold cyan]leai extract[/bold cyan] or configure SeaweedFS in [bold cyan]leai.yml[/bold cyan]."
+        )
 
     try:
         client = get_llm_client(cfg, provider_override=provider)

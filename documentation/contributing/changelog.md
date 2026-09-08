@@ -4,6 +4,18 @@ Todas as alterações notáveis no projeto **LEAI** são documentadas nesta pág
 
 ---
 
+## [0.2.21] — 2026
+
+### 🌟 Adicionado
+* **Operação 100% Remota de IA e Agentes via SeaweedFS S3:** Todas as ferramentas de banco de dados (`DATABASE_TOOLS_DEFINITIONS`), subagentes e workflows agora operam diretamente com o SeaweedFS S3, dispensando a necessidade de metadados técnicos ou anotações locais em disco (`raw/`, `annotations/`, `docs/`).
+* **Fallback Remoto no `lookup_business_term`:** Acesso instantâneo a termos de negócio, regras organizacionais e filtros SQL canônicos diretamente do bucket (`annotations/glossary.yml`).
+* **Enriquecimento Remoto de Schemas e Colunas:** `get_table_schema`, `search_column_comments` e `search_database_objects` recuperam anotações de negócio, regras, tags e descrições humanas de colunas gravadas no S3 para Tabelas, Views e Materialized Views.
+* **Busca Semântica Remota:** `search_business_documentation` agora varre o catálogo de anotações persistido no S3 via `list_annotated_objects()` quando não há anotações locais.
+* **Dossiês e RAG Remotos:** `build_rag_context` consulta anotações remotas do SeaweedFS para montagem de dossiês focais.
+* **Comandos CLI Integrados ao Storage:** `leai agent run` e `leai workflow run` agora suportam `--seaweed` (`-W`) e `--no-cache`, carregando automaticamente metadados técnicos diretamente do SeaweedFS.
+
+---
+
 ## [0.2.20] — 2026
 
 ### 🌟 Adicionado

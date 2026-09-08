@@ -103,12 +103,45 @@ def build_rag_context(
                 if len(trace_res.related_code_objects) > 10:
                     trace_res.related_code_objects = trace_res.related_code_objects[:10]
 
-                # Try loading existing annotation
+                # Try loading existing annotation (local or SeaweedFS remote)
                 is_multi = len(schemas) > 1 or config.is_all_schemas
                 schema_name = getattr(trace_res.focal_object, "schema_name", None) or (schemas[0].schema_name if schemas else "")
+                storage = None
+                if getattr(getattr(config, "storage", None), "seaweedfs", None):
+                    sw = config.storage.seaweedfs
+                    if getattr(sw, "enabled", False) or getattr(sw, "endpoint_url", None):
+                        try:
+                            from leai.storage import SeaweedFSStorage
+
+                            storage = SeaweedFSStorage(sw)
+                        except Exception:
+                            storage = None
+
+                focal_folder = "tables"
+                focal_type = getattr(trace_res, "focal_type", "").upper()
+                if "VIEW" in focal_type:
+                    focal_folder = "views"
+                elif any(k in focal_type for k in ("PACKAGE", "PROCEDURE", "FUNCTION")):
+                    focal_folder = "packages"
+
                 ann_dir = config.annotationsPath / schema_name if is_multi else config.annotationsPath
-                ann_path = ann_dir / "dossiers" / f"{target_trace}.yml"
-                ann = load_annotation(ann_path) if ann_path.exists() else None
+                ann_path = ann_dir / focal_folder / f"{target_trace}.yml"
+                if not ann_path.exists():
+                    ann_path_dossier = ann_dir / "dossiers" / f"{target_trace}.yml"
+                    if ann_path_dossier.exists():
+                        ann_path = ann_path_dossier
+
+                ann = (
+                    load_annotation(
+                        ann_path,
+                        storage=storage,
+                        schema_name=schema_name,
+                        obj_folder=focal_folder,
+                        obj_name=target_trace,
+                    )
+                    if (ann_path.exists() or storage)
+                    else None
+                )
 
                 # Render dossier in Markdown with Mermaid and Frontmatter
                 dossier_text = render_dossier_markdown(trace_res, annotation=ann)

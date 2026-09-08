@@ -4,6 +4,18 @@ All notable changes to the **LEAI** project are documented here.
 
 ---
 
+## [0.2.21] — 2026
+
+### 🌟 Added
+* **100% Remote AI & Subagent Operations via SeaweedFS S3:** All database inspection tools (`DATABASE_TOOLS_DEFINITIONS`), subagents, and autonomous workflows now operate directly against SeaweedFS S3 storage without requiring local snapshots or YAML files on disk (`raw/`, `annotations/`, `docs/`).
+* **Remote Glossary Fallback in `lookup_business_term`:** Instant resolution of business rules, domain definitions, and canonical SQL filters directly from the remote S3 bucket (`annotations/glossary.yml`).
+* **Remote Annotation Enrichment for Schemas and Columns:** `get_table_schema`, `search_column_comments`, and `search_database_objects` fetch business descriptions, rules, tags, and human column comments persisted in SeaweedFS for Tables, Views, and Materialized Views.
+* **Remote Semantic Documentation Search:** `search_business_documentation` scans remote S3 annotation manifests via `list_annotated_objects()` when local files are absent.
+* **Remote Dossiers and RAG:** `build_rag_context` accesses remote SeaweedFS annotations to assemble focal entity context dossiers.
+* **Storage-Aware CLI Commands:** `leai agent run` and `leai workflow run` now support `--seaweed` (`-W`) and `--no-cache`, pulling technical snapshots seamlessly from SeaweedFS.
+
+---
+
 ## [0.2.20] — 2026
 
 ### 🌟 Added
