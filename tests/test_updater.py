@@ -201,6 +201,29 @@ class TestUpdater(unittest.TestCase):
                 loaded = load_config(p)
                 self.assertFalse(loaded.update_check)
 
+    @patch("subprocess.run")
+    def test_run_upgrade_windows_entrypoint_lock_handled(self, mock_run):
+        mock_fail = MagicMock()
+        mock_fail.returncode = 1
+        mock_fail.stdout = "Updated leai v0.2.28 -> v0.2.29\n - leai==0.2.28\n + leai==0.2.29"
+        mock_fail.stderr = (
+            "error: Failed to upgrade leai\n"
+            "  Caused by: Failed to install entrypoint\n"
+            "  Caused by: failed to copy file ... os error 32"
+        )
+
+        mock_chk = MagicMock()
+        mock_chk.returncode = 0
+        mock_chk.stdout = "0.2.29\n"
+
+        # First call is uv upgrade (fails on entrypoint), second call is version check (succeeds)
+        mock_run.side_effect = [mock_fail, mock_chk]
+
+        with patch("sys.platform", "win32"):
+            success, msg = run_upgrade(method="uv_tool", target_version="0.2.29")
+
+        self.assertTrue(success)
+
 
 if __name__ == "__main__":
     unittest.main()

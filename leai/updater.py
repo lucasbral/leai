@@ -134,7 +134,7 @@ def detect_install_method() -> str:
     return "pip"
 
 
-def run_upgrade(method: str | None = None) -> tuple[bool, str]:
+def run_upgrade(method: str | None = None, target_version: str | None = None) -> tuple[bool, str]:
     """Runs the upgrade command based on the detected install method.
 
     Returns (success, output_or_error_message).
@@ -157,6 +157,46 @@ def run_upgrade(method: str | None = None) -> tuple[bool, str]:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=120.0)
         if res.returncode == 0:
             return True, res.stdout or t("updater.success")
+
+        # Windows-specific entrypoint file lock handling:
+        # When running under uv tool or pip on Windows, the active leai.exe binary
+        # cannot be overwritten by uv/pip (WinError 32 / os error 32) because the caller
+        # process is currently executing it. However, the Python package itself is
+        # successfully upgraded in the tool environment!
+        output_str = (res.stderr or "") + "\n" + (res.stdout or "")
+        if sys.platform == "win32" and any(
+            hint in output_str
+            for hint in (
+                "Failed to install entrypoint",
+                "os error 32",
+                "used by another process",
+                "sendo usado por outro processo",
+            )
+        ):
+            # Verify if the upgrade actually succeeded in the environment
+            if target_version:
+                try:
+                    chk = subprocess.run(
+                        [sys.executable, "-c", "import leai; print(leai.__version__)"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5.0,
+                    )
+                    new_v = chk.stdout.strip()
+                    if new_v and parse_version(new_v) >= parse_version(target_version):
+                        return True, res.stdout or t("updater.success")
+                except Exception:
+                    pass
+
+            if method == "uv_tool":
+                try:
+                    uv_bin = shutil.which("uv") or "uv"
+                    uv_chk = subprocess.run([uv_bin, "tool", "list"], capture_output=True, text=True, timeout=5.0)
+                    if "leai" in uv_chk.stdout and (target_version is None or target_version in uv_chk.stdout or "Updated leai" in output_str):
+                        return True, res.stdout or t("updater.success")
+                except Exception:
+                    pass
+
         return False, res.stderr or res.stdout or t("updater.failed_code", code=res.returncode)
     except Exception as exc:
         return False, str(exc)
@@ -223,7 +263,7 @@ def prompt_and_update(current_version: str, console: Console | None = None) -> b
 
     console.print()
     with console.status(t("updater.downloading")):
-        success, output = run_upgrade(method)
+        success, output = run_upgrade(method, target_version=update_info.latest_version)
 
     if success:
         console.print(t("updater.updated_success", version=update_info.latest_version))
