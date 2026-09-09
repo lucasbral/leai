@@ -4,6 +4,17 @@ Todas as alterações notáveis no projeto **LEAI** são documentadas nesta pág
 
 ---
 
+## [0.2.22] — 2026
+
+### 🌟 Adicionado
+* **Mecanismo de Atualização Automática Interativa (Auto-Update PyPI):** O comando interativo raiz `leai` agora verifica automaticamente no PyPI (`https://pypi.org/pypi/leai/json`) se há uma versão mais recente disponível (com timeout rápido de 2s e modo não-bloqueante/fail-safe).
+* **Detecção Inteligente do Gerenciador de Instalação:** Identifica se o LEAI está rodando via `uv tool` (`uv tool upgrade leai`) ou `pip` tradicional (`pip install --upgrade leai`), além de proteger ambientes de desenvolvimento locais (`editable`).
+* **Interface de Atualização Amigável:** Painel Rich formatado exibindo versão atual, nova versão, destaques de lançamento e link do changelog, com prompt interativo `[Y/n]` e reinício automático do processo via `os.execv`.
+* **Controles de Desativação:** Opção `--no-update-check` na CLI, variável de ambiente `LEAI_NO_UPDATE_CHECK=1` e chave `update_check: false` no `leai.yml` para ambientes de CI/CD e automações.
+* **Script de Instalação Automatizado do Windows (`install.ps1`):** Instalador unificado com instalação do `uv`, Ollama, download do modelo `qwen2.5-coder`, instalação do LEAI CLI e geração automática de ambiente de trabalho e `leai.yml`.
+
+---
+
 ## [0.2.21] — 2026
 
 ### 🌟 Adicionado

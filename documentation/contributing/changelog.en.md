@@ -4,6 +4,17 @@ All notable changes to the **LEAI** project are documented here.
 
 ---
 
+## [0.2.22] — 2026
+
+### 🌟 Added
+* **Interactive Auto-Update via PyPI:** The root `leai` command now automatically checks PyPI (`https://pypi.org/pypi/leai/json`) for newer releases using a fail-safe, 2-second timeout check that never blocks execution when offline.
+* **Smart Installation Manager Detection:** Automatically distinguishes between `uv tool` (`uv tool upgrade leai`) and standard `pip` (`pip install --upgrade leai`), with protection for local git clones (`editable`).
+* **Friendly Interactive Terminal Prompt:** Formatted Rich panel showing current vs latest version, release highlights, changelog link, an interactive `[Y/n]` prompt, and seamless automatic restart via `os.execv`.
+* **Flexible Bypass Options:** `--no-update-check` CLI option, `LEAI_NO_UPDATE_CHECK=1` environment variable, and `update_check: false` configuration key in `leai.yml` for automated scripts and CI/CD pipelines.
+* **Unified Windows Installer Script (`install.ps1`):** Complete one-liner installation script covering Astral `uv`, Ollama, `qwen2.5-coder` model, LEAI CLI, and automated user workspace configuration.
+
+---
+
 ## [0.2.21] — 2026
 
 ### 🌟 Added

@@ -995,6 +995,7 @@ def default(
     schemas: list[str] = typer.Option(None, "--schema", "--schemas", "-s", help="Oracle schema name(s) to target (overrides leai.yml)"),
     seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load schema knowledge from SeaweedFS S3 storage"),
     no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local cache files, operate directly with SeaweedFS"),
+    no_update_check: bool = typer.Option(False, "--no-update-check", help="Disable remote update check on startup"),
 ) -> None:
     """LEAI: Autonomous Oracle Database Intelligence, Documentation Engine & Copilot."""
     if hasattr(config, "default") or not isinstance(config, (str, Path)):
@@ -1011,6 +1012,8 @@ def default(
         seaweed = getattr(seaweed, "default", False)
     if hasattr(no_cache, "default"):
         no_cache = getattr(no_cache, "default", False)
+    if hasattr(no_update_check, "default"):
+        no_update_check = getattr(no_update_check, "default", False)
 
     if ctx.invoked_subcommand is None:
         try:
@@ -1021,6 +1024,16 @@ def default(
             if config.exists():
                 console.print(f"[bold yellow]⚠️ Warning:[/bold yellow] Failed to load [cyan]{config}[/cyan]: {exc}")
             cfg = LeaiConfig()
+
+        if no_update_check:
+            cfg.update_check = False
+
+        if cfg.update_check:
+            from leai import __version__
+            from leai.updater import prompt_and_update
+
+            if prompt_and_update(__version__, console=console):
+                return
 
         target_schemas = cfg.schemas if not cfg.is_all_schemas else None
         storage = _resolve_storage(cfg, seaweed)
@@ -2522,3 +2535,7 @@ def seaweed_sync_command(
             border_style="green",
         )
     )
+
+
+if __name__ == "__main__":
+    app()

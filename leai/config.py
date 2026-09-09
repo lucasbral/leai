@@ -80,6 +80,7 @@ class LeaiConfig(BaseModel):
     ai: AIConfig = Field(default_factory=AIConfig)
     git: GitConfig = Field(default_factory=GitConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
+    update_check: bool = True
 
     @property
     def schema_name(self) -> str:
@@ -161,6 +162,9 @@ def load_config(config_path: Path) -> LeaiConfig:
                 sw_dict["no_cache"] = os.environ["LEAI_SEAWEED_NO_CACHE"].strip().lower() in ("true", "1", "yes")
             if os.environ.get("LEAI_SEAWEED_INCREMENTAL"):
                 sw_dict["incremental"] = os.environ["LEAI_SEAWEED_INCREMENTAL"].strip().lower() in ("true", "1", "yes")
+
+    if os.environ.get("LEAI_NO_UPDATE_CHECK"):
+        raw["update_check"] = os.environ["LEAI_NO_UPDATE_CHECK"].strip().lower() not in ("true", "1", "yes")
 
     try:
         config = LeaiConfig.model_validate(raw)
