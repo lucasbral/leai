@@ -53,6 +53,7 @@ graph TD
 4. **Enriquecimento com IA sob Demanda:** Botão para solicitar ao modelo de IA sugestões de descrições e regras para colunas vazias.
 5. **Console de Chat Web com Streaming:** Converse com o agente do banco via interface web moderna, com streaming de respostas (SSE) e formatação de blocos de código com cópia em 1 clique.
 6. **Sincronização em Nuvem com SeaweedFS S3:** Ao salvar qualquer anotação no navegador, o Web Studio persiste no disco local e envia simultaneamente para o Object Storage, além de buscar anotações remotas caso não existam no cache local.
+7. **Seletor Dinâmico de Idioma (`en-US` / `pt-BR`):** Alterne o idioma de toda a interface web, modais de configuração, telas de carregamento e mensagens em tempo real através do menu de configurações ou via API REST (`/api/config`).
 
 ---
 

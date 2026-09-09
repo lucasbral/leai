@@ -103,6 +103,12 @@ storage:
     auto_create_bucket: true                       # Cria o bucket caso não exista
     no_cache: false                                # Se true, opera em modo 100% remoto
     incremental: true                              # Deduplicação SHA-256
+
+# 9. Idioma da Interface & Localização
+language: "pt-BR"                                  # "en-US" (padrão canônico) ou "pt-BR"
+
+# 10. Checagem Automática de Atualizações
+update_check: true                                 # true (padrão) ou false
 ```
 
 ---
@@ -142,14 +148,21 @@ Você pode usar os filtros `include` e `exclude` para focar estritamente nas tab
 
 ## 🌐 Internacionalização e Idioma (`language`)
 
-O LEAI possui suporte nativo a múltiplos idiomas com fallback canônico e detecção transparente:
+O LEAI possui subsistema nativo de internacionalização (`leai/i18n`) com fallback canônico em inglês e catálogos bilíngues paritários:
 
 ```yaml
 language: "pt-BR" # ou "en-US" (padrão)
 ```
 
+### O que o idioma afeta:
+1. **Terminal & CLI:** Mensagens informativas, tabelas formatadas, spinners de progresso e resumos de pipeline.
+2. **Sessão TUI Interativa:** Respostas dos comandos de barra (`/git status`, `/help`, `/rule`, `/copy`, `/model`).
+3. **Prompts e Respostas de IA:** Quando configurado em `pt-BR`, o system prompt instrui o modelo LLM a preencher descrições de colunas e regras de negócio em Português (mantendo termos técnicos SQL intactos). Em `en-US`, a geração ocorre integralmente em Inglês.
+4. **Cabeçalhos de Documentação Markdown:** Os arquivos gerados em `docs/` utilizam seções no idioma configurado (`## Visão Geral`, `## Colunas`, `## Regras de Negócio` vs. `## Overview`, `## Columns`, `## Business Rules`).
+5. **Web Studio:** Textos da interface web, modais, mensagens de loading e seletor dinâmico em tempo de execução via API REST (`/api/config`).
+
 ### Precedência de Resolução
-O LEAI determina o idioma ativo seguindo a seguinte ordem de prioridade:
+O LEAI determina o idioma ativo seguindo a seguinte ordem de prioridade estrita:
 1. **Flag CLI:** `--lang <locale>` ou `-L <locale>` (ex: `leai --lang pt-BR ask "quais são as tabelas de vendas?"`)
 2. **Variável de Ambiente:** `LEAI_LANG` ou `LEAI_LANGUAGE` (ex: `export LEAI_LANG=pt-BR`)
 3. **Arquivo de Configuração:** Chave `language:` no `leai.yml`
@@ -160,4 +173,27 @@ Para gerar o arquivo `leai.yml` pré-configurado e documentado em Português:
 ```bash
 leai init --lang pt-BR
 ```
+Ou em Inglês:
+```bash
+leai init --lang en-US
+```
+
+---
+
+## 🔄 Checagem Automática de Atualizações (`update_check`)
+
+Por padrão, ao iniciar qualquer comando, o LEAI consulta o repositório PyPI em segundo plano de forma não bloqueante para verificar se existe uma versão mais recente disponível.
+
+```yaml
+update_check: true # true (padrão) ou false
+```
+
+### Como Desativar a Verificação:
+1. **No arquivo `leai.yml`:** Defina `update_check: false`.
+2. **Via Variável de Ambiente:** Exporte `LEAI_NO_UPDATE_CHECK=1` ou `LEAI_NO_UPDATE_CHECK=true`.
+3. **Via Linha de Comando (Flag Global):** Utilize `--no-update-check` em qualquer comando:
+   ```bash
+   leai --no-update-check extract
+   leai --no-update-check chat
+   ```
 

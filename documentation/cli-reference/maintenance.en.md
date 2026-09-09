@@ -9,18 +9,23 @@ This section covers commands for environment health diagnostics, repository init
 Initializes a workspace directory by generating a starter `leai.yml` configuration template.
 
 ```bash
+# Standard initialization (English default):
 leai init
-# Generate fully commented reference template:
-leai init --example
+
+# Initialize starter config with Portuguese comments and examples:
+leai init --lang pt-BR
+
+# Overwrite existing file:
+leai init -f --lang en-US
 ```
 
 ### Parameters and Flags:
 
 | Parameter / Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
+| `-L`, `--lang LOCALE` | Option | `en-US` | Template language for generated config (`en-US` or `pt-BR`). |
 | `-f`, `--force` | Flag | `False` | Overwrites existing `leai.yml` without prompt. |
-| `-e`, `--example` | Flag | `False` | Generates fully commented `leai.example.yml`. |
-| `-c`, `--config PATH` | Option | `leai.yml` | Target configuration path. |
+| `-o`, `--output PATH` | Option | `leai.yml` | Target configuration file path. |
 
 ---
 

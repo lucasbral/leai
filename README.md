@@ -138,6 +138,7 @@ Configure your `leai.yml`:
 
 ```yaml
 language: "en-US"                 # "en-US" (default) or "pt-BR"
+update_check: true                # true (default) or false (disable with --no-update-check)
 dsn: "oracle://${DB_USER}:${DB_PASS}@${DB_HOST}:1521/${DB_SERVICE}"
 
 schemas:
@@ -198,6 +199,8 @@ Executes the full automated pipeline: technical extraction, business annotation 
 
 | Flag / Option | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
+| `-L`, `--lang LOCALE` | Option | `en-US` | Interface language (`en-US` or `pt-BR`). |
+| `--no-update-check` | Flag | `False` | Disables remote PyPI check for newer versions on startup. |
 | `-c`, `--config PATH` | Option | `leai.yml` | Configuration file path. |
 | `-s`, `--schemas TEXT` | Option | From config | Specific schema(s) to process. |
 | `-t`, `--object-types TEXT` | Option | From config | Filter object types (e.g., `-t tables -t packages`). |
@@ -441,7 +444,7 @@ Collaborative metadata persistence using S3-compatible Object Storage:
 
 * **`leai changes`**: Audits database objects modified in the last N days via Oracle's `LAST_DDL_TIME` (`-d`, `--days`, `-u`, `--user`).
 * **`leai doctor`** (or `check`): Pre-flight verification of Oracle connectivity, catalog permissions, pipeline directories, and AI credentials.
-* **`leai init`**: Generates a starter `leai.yml` (`-f`, `--force`, `-e`, `--example`).
+* **`leai init`**: Generates a starter `leai.yml` (`-L`, `--lang` [`en-US`|`pt-BR`], `-f`, `--force`, `-o`, `--output`).
 
 ---
 

@@ -32,8 +32,13 @@ LEAI provides a comprehensive command-line interface built with Typer and styled
 
 ## ⚙️ Common Global Options
 
+* `-L`, `--lang LOCALE`: Sets the interface, AI prompt, and documentation language (`en-US` or `pt-BR`).
+* `--no-update-check`: Disables remote PyPI check for newer versions on startup.
 * `-c`, `--config PATH`: Targets a custom configuration file (Default: `leai.yml`).
-* `--seaweed`: Routes snapshot and annotation operations through SeaweedFS/S3 Object Storage.
-* `--no-cache`: Operates in 100% remote mode without saving snapshots to local disk.
+* `-s`, `--schema`, `--schemas TEXT`: Targets specific Oracle schema(s) (overrides `leai.yml`).
+* `-p`, `--provider TEXT`: Overrides the active AI provider (`openai`, `gemini`, `anthropic`, `ollama`, `local`, `deepseek`, etc.).
+* `-m`, `--model TEXT`: Specifies the AI model name to use.
+* `-W`, `--seaweed`: Routes snapshot and annotation operations through SeaweedFS/S3 Object Storage.
+* `--no-cache`: Operates in 100% remote mode without saving snapshots or files to local disk.
+* `-v`, `--version`: Displays the installed LEAI version and exits.
 * `--help`: Displays detailed usage instructions and flags for any command.
-* `--version`: Displays the installed LEAI version.

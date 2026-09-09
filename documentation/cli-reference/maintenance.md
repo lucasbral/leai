@@ -9,18 +9,23 @@ Esta seção cobre comandos essenciais para diagnóstico de ambiente, inicializa
 Inicializa um diretório de trabalho criando o arquivo de modelo `leai.yml`.
 
 ```bash
+# Inicialização padrão (em inglês):
 leai init
-# Gerar exemplo completo totalmente documentado:
-leai init --example
+
+# Inicializar modelo com comentários e exemplos em Português:
+leai init --lang pt-BR
+
+# Sobrescrever arquivo existente:
+leai init -f --lang pt-BR
 ```
 
 ### Parâmetros e Opções:
 
 | Parâmetro / Flag | Tipo | Padrão | Descrição |
 | :--- | :--- | :--- | :--- |
-| `-f`, `--force` | Flag | `False` | Sobrescreve `leai.yml` existente sem confirmação prévia. |
-| `-e`, `--example` | Flag | `False` | Gera o arquivo `leai.example.yml` com exemplos detalhados de todos os recursos. |
-| `-c`, `--config PATH` | Opção | `leai.yml` | Caminho do arquivo de configuração a ser gerado. |
+| `-L`, `--lang LOCALE` | Opção | `en-US` | Idioma do modelo de configuração gerado (`pt-BR` ou `en-US`). |
+| `-f`, `--force` | Flag | `False` | Sobrescreve o arquivo `leai.yml` existente sem confirmação prévia. |
+| `-o`, `--output PATH` | Opção | `leai.yml` | Caminho do arquivo de configuração a ser gerado. |
 
 ---
 

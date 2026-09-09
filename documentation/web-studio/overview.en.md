@@ -53,6 +53,7 @@ graph TD
 4. **On-Demand AI Auto-Enrichment:** Generate business descriptions for empty stubs with a single button click.
 5. **Streaming Web Chat Console:** Engage with the database copilot over real-time Server-Sent Events (SSE) with syntax highlighting and 1-click clipboard code copy.
 6. **Cloud Synchronization with SeaweedFS S3:** Saving annotations in the browser writes to local disk and instantly uploads to Object Storage, with automatic remote fallback if local files are absent.
+7. **Dynamic Language Switcher (`en-US` / `pt-BR`):** Switch the entire web UI, configuration modals, loading screens, and messages in real time through the settings menu or via REST API (`/api/config`).
 
 ---
 
