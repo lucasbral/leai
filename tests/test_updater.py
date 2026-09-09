@@ -116,6 +116,35 @@ class TestUpdater(unittest.TestCase):
             res = prompt_and_update(current_version="0.2.21", console=fake_console)
             self.assertFalse(res)
 
+    @patch("subprocess.call")
+    @patch("leai.updater.run_upgrade")
+    @patch("leai.updater.detect_install_method")
+    @patch("leai.updater.check_for_updates")
+    def test_prompt_and_update_user_accepts_restart(self, mock_check, mock_detect, mock_upgrade, mock_subproc_call):
+        mock_check.return_value = UpdateInfo(
+            latest_version="0.3.0",
+            current_version="0.2.21",
+            release_notes=None,
+            pypi_url="https://pypi.org/project/leai/0.3.0/",
+        )
+        mock_detect.return_value = "uv_tool"
+        mock_upgrade.return_value = (True, "Upgraded successfully")
+        mock_subproc_call.return_value = 0
+
+        fake_console = MagicMock()
+        fake_console.input.return_value = "y"
+
+        with patch.dict(os.environ, {}, clear=True):
+            with self.assertRaises(SystemExit) as ctx:
+                prompt_and_update(current_version="0.2.21", console=fake_console)
+            self.assertEqual(ctx.exception.code, 0)
+            mock_subproc_call.assert_called_once()
+            call_args, call_kwargs = mock_subproc_call.call_args
+            cmd = call_args[0]
+            self.assertIn("-m", cmd)
+            self.assertIn("leai", cmd)
+            self.assertEqual(call_kwargs.get("env", {}).get("LEAI_NO_UPDATE_CHECK"), "1")
+
     def test_config_update_check_field(self, tmp_path_factory=None):
         cfg = LeaiConfig()
         self.assertTrue(cfg.update_check)

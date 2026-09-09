@@ -224,11 +224,23 @@ def prompt_and_update(current_version: str, console: Console | None = None) -> b
     if success:
         console.print(f"[bold green][OK] LEAI atualizado com sucesso para v{update_info.latest_version}![/bold green]")
         console.print("[cyan]Reiniciando o LEAI com a nova versao...[/cyan]\n")
-        try:
-            os.execv(sys.executable, [sys.executable] + sys.argv)
-        except Exception:
-            subprocess.call([sys.executable] + sys.argv)
-            sys.exit(0)
+        cmd = [sys.executable, "-m", "leai"] + sys.argv[1:]
+        env = dict(os.environ, LEAI_NO_UPDATE_CHECK="1")
+        if sys.platform == "win32":
+            try:
+                ret = subprocess.call(cmd, env=env)
+                sys.exit(ret)
+            except KeyboardInterrupt:
+                sys.exit(0)
+            except Exception:
+                return True
+        else:
+            try:
+                os.environ["LEAI_NO_UPDATE_CHECK"] = "1"
+                os.execv(sys.executable, cmd)
+            except Exception:
+                ret = subprocess.call(cmd, env=env)
+                sys.exit(ret)
         return True
     else:
         console.print(f"[bold red][ERROR] Falha na atualizacao automatica:[/bold red] {output}")

@@ -4,6 +4,15 @@ Todas as alterações notáveis no projeto **LEAI** são documentadas nesta pág
 
 ---
 
+## [0.2.25] — 2026
+
+### 🛡️ Correções no Reinício do Auto-Update
+* **Resolução Robusta de Módulo no Reinício (`python -m leai`):** Substituição do comando de reinício baseado em `sys.argv` por `[sys.executable, "-m", "leai"] + sys.argv[1:]`. Isso elimina o erro `[Errno 2] No such file or directory` no Windows onde o launcher binário (`leai.exe` / `~/.local/bin/leai`) era passado como se fosse um arquivo de script `.py`.
+* **Execução Síncrona em Primeiro Plano no Windows:** Substituição de `os.execv` por `subprocess.call` no Windows para manter a sessão no console do terminal ativa em primeiro plano sem liberar precocemente o prompt do PowerShell.
+* **Prevenção de Loop de Checagem no Reinício:** Injeção de `LEAI_NO_UPDATE_CHECK=1` no ambiente do processo reiniciado para garantir que a sessão pós-atualização inicie imediatamente sem checagens redundantes.
+
+---
+
 ## [0.2.24] — 2026
 
 ### 🛡️ Correções & Estabilidade
