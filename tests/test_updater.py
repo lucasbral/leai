@@ -201,8 +201,9 @@ class TestUpdater(unittest.TestCase):
                 loaded = load_config(p)
                 self.assertFalse(loaded.update_check)
 
+    @patch("shutil.which", return_value="uv")
     @patch("subprocess.run")
-    def test_run_upgrade_windows_entrypoint_lock_handled(self, mock_run):
+    def test_run_upgrade_windows_entrypoint_lock_handled(self, mock_run, mock_which):
         mock_fail = MagicMock()
         mock_fail.returncode = 1
         mock_fail.stdout = "Updated leai v0.2.28 -> v0.2.29\n - leai==0.2.28\n + leai==0.2.29"
