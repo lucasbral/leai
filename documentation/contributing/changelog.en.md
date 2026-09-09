@@ -2,6 +2,24 @@
 
 All notable changes to the **LEAI** project are documented here.
 
+## [0.2.29] — 2026
+
+### 🌐 Complete TUI Interface & Interactive Banner Localization
+* **100% Dynamic TUI & Banner:** Welcome banner, database & AI status cards, quick action shortcuts, starter query suggestions, and bottom toolbar now instantly adapt to the active language (`pt-BR` or `en-US`).
+* **Bilingual `/help` Guide & Inspection:** The 28-command interactive reference guide (`/help`) and catalog inspection tables (`/tables` and `/schema`) now feature localized column titles, categories, and descriptions.
+* **Consistent Locale Propagation:** Locale initialization integrated directly into `InteractiveTUISession` and CLI root callback, guaranteeing proper inheritance in subcommands such as `leai chat` with `--lang` / `-L` flag support.
+* **Parity Assurance & Testing:** New automated test `test_tui_localization_and_session` verifying that language settings in `leai.yml` or environment variables correctly propagate to the TUI.
+
+---
+
+## [0.2.28] — 2026
+
+### 🛡️ Test Runner Execution & Cross-Platform Restart Fix
+* **Restart Argument Sanitization:** Filter test runner keywords and flags (`discover`, `run`, `pytest`, `unittest`, `.py` files, `-m`, `--cov`) when rebuilding the restart command in `leai/updater.py`, preventing spurious arguments from being passed to the LEAI CLI.
+* **`os.execv` Isolation in Unit Tests:** Mocked `os.execv` in `tests/test_updater.py`, eliminating accidental process replacement in Linux/CI (`ubuntu-latest`) environments and resolving `No such command 'discover'`.
+
+---
+
 ## [0.2.27] — 2026
 
 ### 🌐 Full Localization Completion & Canonical Standardization

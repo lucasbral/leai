@@ -2,6 +2,16 @@
 
 Todas as alterações notáveis no projeto **LEAI** são documentadas nesta página.
 
+## [0.2.29] — 2026
+
+### 🌐 Localização Integral da Interface TUI e Banner Interativo
+* **TUI e Banner 100% Dinâmicos:** O cabeçalho de boas-vindas, cartões de status do banco e motor de IA, painel de ações rápidas, sugestões de início e barra inferior de status agora se adaptam instantaneamente ao idioma ativo (`pt-BR` ou `en-US`).
+* **Guia `/help` e Inspeção Bilíngues:** O catálogo de 28 comandos interativos (`/help`) e as tabelas de inspeção (`/tables` e `/schema`) agora contam com títulos de colunas, categorias e descrições traduzidas.
+* **Propagação Consistente de Locale:** Inicialização de locale integrada diretamente à classe `InteractiveTUISession` e no callback raiz do CLI, garantindo herança em subcomandos como `leai chat` com suporte à flag `--lang` / `-L`.
+* **Garantia de Paridade e Testes:** Novo teste automatizado `test_tui_localization_and_session` validando que configurações de idioma em `leai.yml` ou variáveis de ambiente se refletem com precisão no TUI.
+
+---
+
 ## [0.2.28] — 2026
 
 ### 🛡️ Correção de Execução de Testes e Reinicialização Multiplataforma
