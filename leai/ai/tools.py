@@ -532,9 +532,8 @@ def search_business_documentation(
         try:
             remote_objects = storage.list_annotated_objects()
             for s_name, cat_folder, obj_name in remote_objects:
-                if not s_name:
-                    s_name = (schemas[0].schema_name if schemas else config.schema_name or "DEFAULT").upper()
-                item_key = f"{s_name}.{obj_name.upper()}"
+                target_s_name = (s_name or (schemas[0].schema_name if schemas else config.schema_name or "DEFAULT")).upper()
+                item_key = f"{target_s_name}.{obj_name.upper()}"
                 if item_key in seen_keys:
                     continue
                 obj_type = cat_folder.rstrip("s").upper()

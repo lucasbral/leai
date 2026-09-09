@@ -4,6 +4,16 @@ Todas as alterações notáveis no projeto **LEAI** são documentadas nesta pág
 
 ---
 
+## [0.2.24] — 2026
+
+### 🛡️ Correções & Estabilidade
+* **Prevenção de Vazamento de Cursores Oracle:** Adicionados blocos `finally: cursor.close()` explícitos em `fetch_schema_metadata`, `fetch_focal_trace` e `fetch_available_schemas` em `leai/oracle.py`, garantindo fechamento determinístico de cursores mesmo em caso de erro.
+* **Segurança na Área de Transferência (Clipboard):** Remoção de `shell=True` ao chamar `clip.exe` e substituição da interpolação de comandos no fallback do PowerShell por pipe direto via `stdin` (`$input | Set-Clipboard`), prevenindo potenciais falhas de escape de aspas ou injeção.
+* **Correção de Closures em Loops:** Corrigido binding tardio de variáveis de loop em callbacks de progresso assíncronos/UI em `leai/web/server.py`, `leai/cli.py` e `leai/tui/session.py`.
+* **Limpeza e Qualidade de Código:** Resolução de sobrescrita de variáveis de iteração em `leai/ai/tools.py` e simplificação da iteração de dicionários em `leai/workflows/__init__.py`.
+
+---
+
 ## [0.2.23] — 2026
 
 ### 🌟 Adicionado & Aprimorado

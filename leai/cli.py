@@ -394,15 +394,15 @@ def extract(
                     )
                     progress.refresh()
 
-                    def _cb(cat: str, count: int, step_idx: int, total_steps: int, s_name=schema_name) -> None:
+                    def _cb(cat: str, count: int, step_idx: int, total_steps: int, s_name=schema_name, obj_count=schema_obj_count) -> None:
                         if count > 0:
-                            schema_obj_count[0] += count
+                            obj_count[0] += count
                         pct = int((step_idx / total_steps) * 100) if total_steps else 100
                         progress.update(
                             schema_task,
                             completed=pct,
                             total=100,
-                            description=f"Extracting [bold yellow]{s_name}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({schema_obj_count[0]:,} objects) [dim]│ {cat}[/dim]",
+                            description=f"Extracting [bold yellow]{s_name}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({obj_count[0]:,} objects) [dim]│ {cat}[/dim]",
                         )
                         progress.refresh()
 
@@ -555,9 +555,9 @@ def update(
                         return f"{m:02d}:{s:02d}"
 
                     def _on_meta_progress(
-                        step_name: str, count: int, current_step: int, total_steps: int, s_name=schema_name, idx=s_idx
+                        step_name: str, count: int, current_step: int, total_steps: int, s_name=schema_name, idx=s_idx, t0=schema_t0
                     ) -> None:
-                        elapsed_str = _fmt_dur(time.perf_counter() - schema_t0)
+                        elapsed_str = _fmt_dur(time.perf_counter() - t0)
                         status.update(f"[cyan][{s_name} ({idx}/{total_schemas})] [{elapsed_str}] Extraindo {step_name}...[/cyan]")
 
                     status.update(f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [00:00] Consultando alterações ({time_desc})...[/cyan]")
@@ -592,8 +592,8 @@ def update(
                         f"  [green]✓[/green] Schema [bold yellow]{schema_name}[/bold yellow]: [bold green]{num_objs} modified object(s)[/bold green] found ({schema_dur:.1f}s)."
                     )
 
-                    def _on_s3_progress(done: int, total: int, s_name=schema_name, idx=s_idx) -> None:
-                        elapsed_str = _fmt_dur(time.perf_counter() - schema_t0)
+                    def _on_s3_progress(done: int, total: int, s_name=schema_name, idx=s_idx, t0=schema_t0) -> None:
+                        elapsed_str = _fmt_dur(time.perf_counter() - t0)
                         status.update(
                             f"[cyan][{s_name} ({idx}/{total_schemas})] [{elapsed_str}] Sincronizando SeaweedFS S3 ({done}/{total} arquivos)...[/cyan]"
                         )
@@ -1378,15 +1378,15 @@ def generate(
                     )
                     progress.refresh()
 
-                    def _cb(cat: str, count: int, step_idx: int, total_steps: int, s_name=schema_name) -> None:
+                    def _cb(cat: str, count: int, step_idx: int, total_steps: int, s_name=schema_name, obj_count=schema_obj_count) -> None:
                         if count > 0:
-                            schema_obj_count[0] += count
+                            obj_count[0] += count
                         pct = int((step_idx / total_steps) * 100) if total_steps else 100
                         progress.update(
                             schema_task,
                             completed=pct,
                             total=100,
-                            description=f"Extracting [bold yellow]{s_name}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({schema_obj_count[0]:,} objects) [dim]│ {cat}[/dim]",
+                            description=f"Extracting [bold yellow]{s_name}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] ({obj_count[0]:,} objects) [dim]│ {cat}[/dim]",
                         )
                         progress.refresh()
 

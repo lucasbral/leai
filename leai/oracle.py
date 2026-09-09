@@ -784,10 +784,16 @@ ORACLE_SYSTEM_SCHEMAS = {
 def fetch_available_schemas(connection: oracledb.Connection, config: LeaiConfig) -> list[str]:
     if config.is_all_schemas or "ALL" in config.schemas:
         cursor = connection.cursor()
-        prefix = _detect_catalog_prefix(cursor)
-        cursor.execute(f"SELECT username FROM {prefix}_users ORDER BY username")
-        all_users = [row[0].upper() for row in cursor.fetchall()]
-        return [u for u in all_users if u not in ORACLE_SYSTEM_SCHEMAS]
+        try:
+            prefix = _detect_catalog_prefix(cursor)
+            cursor.execute(f"SELECT username FROM {prefix}_users ORDER BY username")
+            all_users = [row[0].upper() for row in cursor.fetchall()]
+            return [u for u in all_users if u not in ORACLE_SYSTEM_SCHEMAS]
+        finally:
+            try:
+                cursor.close()
+            except Exception:
+                pass
     return config.schemas
 
 
@@ -1013,6 +1019,10 @@ def fetch_schema_metadata(
 
         return schema_meta
     finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
         if should_close:
             connection.close()
 
@@ -1239,5 +1249,9 @@ def fetch_focal_trace(
 
         return result
     finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
         if should_close:
             connection.close()

@@ -32,7 +32,7 @@ def list_workflows() -> list[dict[str, Any]]:
     """Returns a list of all registered workflows with descriptions."""
     seen = set()
     result = []
-    for name, cls in WORKFLOW_REGISTRY.items():
+    for cls in WORKFLOW_REGISTRY.values():
         if cls not in seen:
             seen.add(cls)
             # Create a mock instance to read name & description

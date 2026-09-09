@@ -57,8 +57,8 @@ def copy_to_clipboard(text: str) -> tuple[bool, str]:
     # 2. Windows (clip.exe or PowerShell)
     if sys.platform == "win32" or os.name == "nt":
         try:
-            # clip.exe expects Windows-1252 or UTF-16
-            proc = subprocess.Popen(["clip.exe"], stdin=subprocess.PIPE, shell=True)
+            # clip.exe expects UTF-16
+            proc = subprocess.Popen(["clip"], stdin=subprocess.PIPE)
             proc.communicate(input=text.encode("utf-16le"))
             if proc.returncode == 0:
                 return True, f"Copied {len(text)} characters to clipboard (via clip.exe)."
@@ -66,9 +66,14 @@ def copy_to_clipboard(text: str) -> tuple[bool, str]:
             pass
 
         try:
-            # Fallback to PowerShell Set-Clipboard
-            ps_cmd = f"Set-Clipboard -Value @'\n{text}\n'@"
-            proc = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True)
+            # Fallback to PowerShell Set-Clipboard via standard input (safe against quotes/injection)
+            proc = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", "$input | Set-Clipboard"],
+                input=text,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
             if proc.returncode == 0:
                 return True, f"Copied {len(text)} characters to clipboard (via PowerShell)."
         except Exception as exc:

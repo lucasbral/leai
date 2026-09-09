@@ -516,15 +516,15 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         for s in self.server.schemas:
             s_name = s.schema_name or "DEFAULT"
 
-            def _check_ann(cat: str, name: str) -> bool:
-                p1 = cfg.annotationsPath / s_name / cat / f"{name}.yml"
+            def _check_ann(cat: str, name: str, cur_s_name: str = s_name) -> bool:
+                p1 = cfg.annotationsPath / cur_s_name / cat / f"{name}.yml"
                 p2 = cfg.annotationsPath / cat / f"{name}.yml"
-                p3 = cfg.annotationsPath / s_name / cat / f"{name}.yaml"
+                p3 = cfg.annotationsPath / cur_s_name / cat / f"{name}.yaml"
                 p4 = cfg.annotationsPath / cat / f"{name}.yaml"
                 if p1.exists() or p2.exists() or p3.exists() or p4.exists():
                     return True
                 if remote_annotated:
-                    target_key = (s_name.upper(), cat.lower(), name.upper())
+                    target_key = (cur_s_name.upper(), cat.lower(), name.upper())
                     wildcard_key = ("", cat.lower(), name.upper())
                     return (target_key in remote_annotated) or (wildcard_key in remote_annotated)
                 return False
