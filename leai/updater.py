@@ -228,7 +228,14 @@ def prompt_and_update(current_version: str, console: Console | None = None) -> b
     if success:
         console.print(t("updater.updated_success", version=update_info.latest_version))
         console.print(t("updater.restarting"))
-        cmd = [sys.executable, "-m", "leai"] + sys.argv[1:]
+        # Filter sys.argv to preserve user CLI arguments while stripping test runner artifacts
+        runner_keywords = {"discover", "run", "pytest", "unittest"}
+        clean_args = [
+            arg
+            for arg in sys.argv[1:]
+            if arg not in runner_keywords and not arg.endswith(".py") and not arg.startswith(("-m", "--cov"))
+        ]
+        cmd = [sys.executable, "-m", "leai"] + clean_args
         if sys.platform == "win32":
             try:
                 ret = subprocess.call(cmd)
@@ -240,6 +247,7 @@ def prompt_and_update(current_version: str, console: Console | None = None) -> b
         else:
             try:
                 os.execv(sys.executable, cmd)
+                sys.exit(0)
             except Exception:
                 ret = subprocess.call(cmd)
                 sys.exit(ret)

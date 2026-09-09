@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -116,11 +117,14 @@ class TestUpdater(unittest.TestCase):
             res = prompt_and_update(current_version="0.2.21", console=fake_console)
             self.assertFalse(res)
 
+    @patch("os.execv")
     @patch("subprocess.call")
     @patch("leai.updater.run_upgrade")
     @patch("leai.updater.detect_install_method")
     @patch("leai.updater.check_for_updates")
-    def test_prompt_and_update_user_accepts_restart(self, mock_check, mock_detect, mock_upgrade, mock_subproc_call):
+    def test_prompt_and_update_user_accepts_restart_windows(
+        self, mock_check, mock_detect, mock_upgrade, mock_subproc_call, mock_execv
+    ):
         mock_check.return_value = UpdateInfo(
             latest_version="0.3.0",
             current_version="0.2.21",
@@ -134,15 +138,56 @@ class TestUpdater(unittest.TestCase):
         fake_console = MagicMock()
         fake_console.input.return_value = "y"
 
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, {}, clear=True), patch("sys.platform", "win32"), patch.object(
+            sys, "argv", ["leai", "discover", "tests", "--verbose"]
+        ):
             with self.assertRaises(SystemExit) as ctx:
                 prompt_and_update(current_version="0.2.21", console=fake_console)
             self.assertEqual(ctx.exception.code, 0)
             mock_subproc_call.assert_called_once()
-            call_args, call_kwargs = mock_subproc_call.call_args
+            call_args, _ = mock_subproc_call.call_args
             cmd = call_args[0]
             self.assertIn("-m", cmd)
             self.assertIn("leai", cmd)
+            self.assertNotIn("discover", cmd)
+            self.assertIn("--verbose", cmd)
+            mock_execv.assert_not_called()
+
+    @patch("os.execv")
+    @patch("subprocess.call")
+    @patch("leai.updater.run_upgrade")
+    @patch("leai.updater.detect_install_method")
+    @patch("leai.updater.check_for_updates")
+    def test_prompt_and_update_user_accepts_restart_unix(
+        self, mock_check, mock_detect, mock_upgrade, mock_subproc_call, mock_execv
+    ):
+        mock_check.return_value = UpdateInfo(
+            latest_version="0.3.0",
+            current_version="0.2.21",
+            release_notes=None,
+            pypi_url="https://pypi.org/project/leai/0.3.0/",
+        )
+        mock_detect.return_value = "uv_tool"
+        mock_upgrade.return_value = (True, "Upgraded successfully")
+
+        fake_console = MagicMock()
+        fake_console.input.return_value = "y"
+
+        with patch.dict(os.environ, {}, clear=True), patch("sys.platform", "linux"), patch.object(
+            sys, "argv", ["leai", "discover", "tests", "chat"]
+        ):
+            with self.assertRaises(SystemExit) as ctx:
+                prompt_and_update(current_version="0.2.21", console=fake_console)
+            self.assertEqual(ctx.exception.code, 0)
+            mock_execv.assert_called_once()
+            execv_args, _ = mock_execv.call_args
+            self.assertEqual(execv_args[0], sys.executable)
+            cmd = execv_args[1]
+            self.assertIn("-m", cmd)
+            self.assertIn("leai", cmd)
+            self.assertNotIn("discover", cmd)
+            self.assertIn("chat", cmd)
+            mock_subproc_call.assert_not_called()
 
     def test_config_update_check_field(self, tmp_path_factory=None):
         cfg = LeaiConfig()

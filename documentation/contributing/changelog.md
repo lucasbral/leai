@@ -2,6 +2,14 @@
 
 Todas as alterações notáveis no projeto **LEAI** são documentadas nesta página.
 
+## [0.2.28] — 2026
+
+### 🛡️ Correção de Execução de Testes e Reinicialização Multiplataforma
+* **Sanitização de Argumentos de Reinicialização:** Filtragem de palavras-chave e opções de executores de teste (`discover`, `run`, `pytest`, `unittest`, arquivos `.py`, `-m`, `--cov`) na reconstrução do comando de reinício em `leai/updater.py`, impedindo a passagem de argumentos espúrios ao CLI do LEAI.
+* **Isolamento de `os.execv` nos Testes Unitários:** Inclusão de mock para `os.execv` em `tests/test_updater.py`, eliminando a substituição acidental de processo em ambientes Linux/CI (`ubuntu-latest`) e resolvendo o erro `No such command 'discover'`.
+
+---
+
 ## [0.2.27] — 2026
 
 ### 🌐 Conclusão da Localização Integral e Padronização Canônica
