@@ -200,3 +200,34 @@ def test_bilingual_markdown_doc_rendering():
 
     # Reset
     set_locale("en-US")
+
+
+def test_tui_localization_and_session():
+    """Verify TUI session respects config.language and renders localized strings."""
+    from leai.config import LeaiConfig
+    from leai.tui.session import InteractiveTUISession
+
+    # Test PT-BR session initialization
+    cfg_pt = LeaiConfig(language="pt-BR")
+    sess_pt = InteractiveTUISession(schemas=[], config=cfg_pt, client=None)
+    assert get_locale() == "pt-BR"
+    assert t("tui.header_sub") == "Docs Oracle Database"
+    assert "Banco de Dados & Catálogo" in t("tui.col_db_catalog")
+    assert t("tui.action_autocomplete") == "Autocompletar objetos"
+    toolbar_pt = sess_pt._get_bottom_toolbar()
+    assert "Modelo" in str(toolbar_pt)
+    assert "Histórico" in str(toolbar_pt)
+
+    # Test EN-US session initialization
+    cfg_en = LeaiConfig(language="en-US")
+    sess_en = InteractiveTUISession(schemas=[], config=cfg_en, client=None)
+    assert get_locale() == "en-US"
+    assert t("tui.header_sub") == "Oracle Database Docs"
+    assert "Database & Catalog" in t("tui.col_db_catalog")
+    assert t("tui.action_autocomplete") == "Autocomplete objects"
+    toolbar_en = sess_en._get_bottom_toolbar()
+    assert "Model" in str(toolbar_en)
+    assert "History" in str(toolbar_en)
+
+    # Reset
+    set_locale("en-US")

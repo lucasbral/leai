@@ -896,6 +896,7 @@ def chat(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
     seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load schema knowledge from SeaweedFS S3 storage"),
     no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local cache files, operate directly with SeaweedFS"),
+    language: str = typer.Option(None, "--lang", "-L", help="Interface language ('en-US' or 'pt-BR')"),
 ) -> None:
     """Starts an interactive OpenCode-style TUI copilot with RAG, tools and @ mentions."""
     try:
@@ -903,6 +904,9 @@ def chat(
     except ConfigError as exc:
         console.print(f"[red]Config error:[/red] {exc}")
         raise typer.Exit(code=1)
+
+    from leai.i18n import resolve_locale, set_locale
+    set_locale(resolve_locale(language, getattr(cfg, "language", None)))
 
     storage = _resolve_storage(cfg, seaweed)
     is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
@@ -1019,19 +1023,20 @@ def default(
     if hasattr(language, "default"):
         language = getattr(language, "default", None)
 
+    try:
+        cfg = load_config(config)
+        if schemas:
+            cfg.schemas = [s.strip().upper() for s in schemas]
+    except Exception as exc:
+        if config.exists():
+            console.print(f"[bold yellow]⚠️ Warning:[/bold yellow] Failed to load [cyan]{config}[/cyan]: {exc}")
+        cfg = LeaiConfig()
+
+    from leai.i18n import resolve_locale, set_locale, t
+
+    set_locale(resolve_locale(language, getattr(cfg, "language", None)))
+
     if ctx.invoked_subcommand is None:
-        try:
-            cfg = load_config(config)
-            if schemas:
-                cfg.schemas = [s.strip().upper() for s in schemas]
-        except Exception as exc:
-            if config.exists():
-                console.print(f"[bold yellow]⚠️ Warning:[/bold yellow] Failed to load [cyan]{config}[/cyan]: {exc}")
-            cfg = LeaiConfig()
-
-        from leai.i18n import resolve_locale, set_locale, t
-
-        set_locale(resolve_locale(language, getattr(cfg, "language", None)))
 
         if no_update_check:
             cfg.update_check = False
