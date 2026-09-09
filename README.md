@@ -144,14 +144,26 @@ annotationsPath: "./annotations"
 docPath: "./docs"
 
 ai:
-  default_provider: "openai"      # openai, gemini, anthropic, deepseek, qwen, ollama
+  default_provider: "ollama"      # ollama, local, openai, gemini, anthropic, deepseek, qwen, kimi, grok
+  temperature: 0.2
+  timeout: 300.0
+  max_history_turns: 15           # Chat history turns retained in memory
+  max_agent_iterations: 10        # Maximum reasoning tool iterations per turn
+  max_subagent_iterations: 5      # Maximum iterations for specialized subagents
   providers:
+    ollama:
+      base_url: "http://localhost:11434/v1"
+      model: "qwen2.5-coder:latest"
+      temperature: 0.1
+    local:
+      base_url: "http://localhost:1234/v1" # LM Studio, vLLM, LocalAI
+      model: "qwen2.5"
     openai:
       api_key: "${OPENAI_API_KEY}"
       model: "gpt-4o-mini"
     gemini:
       api_key: "${GEMINI_API_KEY}"
-      model: "gemini-2.0-flash"
+      model: "gemini-2.5-flash"
 ```
 
 ### Step 3: Run the Full Pipeline

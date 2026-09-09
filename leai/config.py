@@ -25,6 +25,7 @@ class AIProviderConfig(BaseModel):
     api_key: str | None = None
     base_url: str | None = None
     model: str | None = None
+    temperature: float | None = None
     timeout: float | None = None
 
 
@@ -33,6 +34,9 @@ class AIConfig(BaseModel):
     default_provider: str = "openai"
     temperature: float = 0.2
     timeout: float = 300.0
+    max_history_turns: int = 15
+    max_agent_iterations: int = 10
+    max_subagent_iterations: int = 5
     providers: dict[str, AIProviderConfig] = Field(default_factory=dict)
 
 

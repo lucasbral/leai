@@ -47,21 +47,33 @@ object_types:
 
 # 6. Configurações de IA (LLMs para Auto-Enriquecimento, Chat e Subagentes)
 ai:
-  default_provider: "openai"      # openai | gemini | anthropic | deepseek | qwen | kimi | grok | ollama
-  temperature: 0.2
+  default_provider: "ollama"      # ollama | local | openai | gemini | anthropic | deepseek | qwen | kimi | grok
+  temperature: 0.2                # Temperatura padrão global (0.0 a 1.0)
+  timeout: 300.0                  # Timeout padrão global em segundos
+  max_history_turns: 15           # Janela de turnos mantidos na memória do chat
+  max_agent_iterations: 10        # Limite máximo de ferramentas executadas por turno do agente
+  max_subagent_iterations: 5      # Limite de iterações para subagentes especialistas
   providers:
-    openai:
-      api_key: "${OPENAI_API_KEY}"
-      model: "gpt-4o-mini"
-    gemini:
-      api_key: "${GEMINI_API_KEY}"
-      model: "gemini-2.0-flash"
-    anthropic:
-      api_key: "${ANTHROPIC_API_KEY}"
-      model: "claude-3-5-sonnet-20241022"
     ollama:
       base_url: "http://localhost:11434/v1"
       model: "qwen2.5-coder:latest"
+      temperature: 0.1
+      timeout: 300.0
+    local:
+      base_url: "http://localhost:1234/v1" # Exemplo: LM Studio, vLLM, LocalAI
+      model: "qwen2.5"
+      temperature: 0.1
+    openai:
+      api_key: "${OPENAI_API_KEY}"
+      model: "gpt-4o-mini"
+      temperature: 0.2
+      timeout: 120.0
+    gemini:
+      api_key: "${GEMINI_API_KEY}"
+      model: "gemini-2.5-flash"
+    anthropic:
+      api_key: "${ANTHROPIC_API_KEY}"
+      model: "claude-3-5-sonnet-20241022"
 
 # 7. Sincronização com Git / GitLab / GitHub (GitOps)
 git:

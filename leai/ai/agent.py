@@ -78,12 +78,17 @@ class AgentExecutionEngine:
         schemas: list[SchemaMetadata],
         config: LeaiConfig,
         client: BaseLLMClient,
-        max_iterations: int = MAX_AGENT_ITERATIONS,
+        max_iterations: int | None = None,
     ):
         self.schemas = schemas
         self.config = config
         self.client = client
-        self.max_iterations = max_iterations
+        if max_iterations is not None:
+            self.max_iterations = max_iterations
+        elif config and getattr(getattr(config, "ai", None), "max_agent_iterations", None):
+            self.max_iterations = config.ai.max_agent_iterations
+        else:
+            self.max_iterations = MAX_AGENT_ITERATIONS
         self.last_tool_audits: list[ToolExecutionAudit] = []
         self.last_working_messages: list[dict[str, Any]] = []
 

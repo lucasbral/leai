@@ -157,11 +157,18 @@ class SubagentRunner:
         schemas: list[SchemaMetadata],
         config: LeaiConfig,
         client: BaseLLMClient,
+        max_iterations: int | None = None,
     ):
         self.config_obj = config_obj
         self.schemas = schemas
         self.config = config
         self.client = client
+        if max_iterations is not None:
+            self.max_iterations = max_iterations
+        elif config and getattr(getattr(config, "ai", None), "max_subagent_iterations", None):
+            self.max_iterations = config.ai.max_subagent_iterations
+        else:
+            self.max_iterations = config_obj.max_iterations
         self.last_tool_audits: list[ToolExecutionAudit] = []
 
     def filter_tools(self) -> list[dict[str, Any]]:
@@ -183,7 +190,7 @@ class SubagentRunner:
         self.last_tool_audits = []
         tools_ran = False
 
-        for iteration in range(1, self.config_obj.max_iterations + 1):
+        for iteration in range(1, self.max_iterations + 1):
             tool_mode = "required" if iteration == 1 and tools else "auto"
 
             content, tool_calls = self.client.generate_chat_with_tools(
@@ -290,6 +297,7 @@ def execute_subagent(
     schemas: list[SchemaMetadata],
     config: LeaiConfig,
     client: BaseLLMClient,
+    max_iterations: int | None = None,
     on_token: Callable[[str], None] | None = None,
     on_tool_start: Callable[[str, dict[str, Any], int], None] | None = None,
     on_tool_end: Callable[[str, str, str, float], None] | None = None,
@@ -300,5 +308,11 @@ def execute_subagent(
         available = ", ".join(SUBAGENT_REGISTRY.keys())
         return f"Unknown subagent role '{role}'. Available specialists: {available}"
 
-    runner = SubagentRunner(config_obj=cfg, schemas=schemas, config=config, client=client)
+    runner = SubagentRunner(
+        config_obj=cfg,
+        schemas=schemas,
+        config=config,
+        client=client,
+        max_iterations=max_iterations,
+    )
     return runner.run(task=task, on_token=on_token, on_tool_start=on_tool_start, on_tool_end=on_tool_end)

@@ -122,6 +122,7 @@ class TestUpdater(unittest.TestCase):
 
         with patch.dict(os.environ, {"LEAI_NO_UPDATE_CHECK": "true"}, clear=False):
             from pathlib import Path
+
             p = Path("leai.yml")
             if p.exists():
                 loaded = load_config(p)

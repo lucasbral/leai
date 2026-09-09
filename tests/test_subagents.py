@@ -103,6 +103,20 @@ class TestSubagents(unittest.TestCase):
         )
         self.assertIn("Specialist analysis complete", res_str)
 
+    def test_subagent_runner_respects_config_max_iterations(self):
+        from leai.config import AIConfig
+
+        cfg_with_limits = LeaiConfig(ai=AIConfig(max_subagent_iterations=3))
+        cfg_researcher = SUBAGENT_REGISTRY["catalog_researcher"]
+        runner = SubagentRunner(config_obj=cfg_researcher, schemas=[self.schema], config=cfg_with_limits, client=self.client)
+        self.assertEqual(runner.max_iterations, 3)
+
+        # Se passado explicitamente, deve ter precedência
+        runner_explicit = SubagentRunner(
+            config_obj=cfg_researcher, schemas=[self.schema], config=cfg_with_limits, client=self.client, max_iterations=2
+        )
+        self.assertEqual(runner_explicit.max_iterations, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,6 +4,16 @@ Todas as alterações notáveis no projeto **LEAI** são documentadas nesta pág
 
 ---
 
+## [0.2.23] — 2026
+
+### 🌟 Adicionado & Aprimorado
+* **Configurações Granulares de IA no `leai.yml`:** Suporte a `temperature` e `timeout` configuráveis tanto globalmente quanto sobrescritos individualmente por provedor em `ai.providers.<nome>`.
+* **Controle de Limites Operacionais de Agentes:** Adicionados os parâmetros `max_history_turns` (janela de histórico do chat), `max_agent_iterations` (máximo de passos/tools do agente principal) e `max_subagent_iterations` (máximo de iterações para subagentes especialistas).
+* **Presets de Modelos Locais:** Adicionado suporte nativo aos provedores `local` (LM Studio, vLLM em `http://localhost:1234/v1` com `qwen2.5`) e `custom` (`http://localhost:8000/v1`), além de atualizar o modelo padrão do `ollama` para `qwen2.5-coder:latest`.
+* **Documentação Expandida:** Atualização completa do `leai.example.yml`, `README.md` e páginas de documentação MkDocs cobrindo todas as configurações de LLMs e modelos locais.
+
+---
+
 ## [0.2.22] — 2026
 
 ### 🌟 Adicionado

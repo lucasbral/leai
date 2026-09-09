@@ -131,6 +131,22 @@ class ChatSessionTests(unittest.TestCase):
         self.assertEqual(short_session.messages[-1]["role"], "assistant")
         self.assertEqual(short_session.messages[-1]["content"], "Asst msg 6")
 
+    def test_session_respects_yaml_limits(self):
+        from leai.config import AIConfig
+
+        custom_cfg = LeaiConfig(
+            dsn="",
+            schemas=["HR"],
+            ai=AIConfig(
+                max_history_turns=7,
+                max_agent_iterations=4,
+                max_subagent_iterations=3,
+            ),
+        )
+        session = ChatSession(schemas=[self.schema], config=custom_cfg, client=self.client)
+        self.assertEqual(session.max_history_turns, 7)
+        self.assertEqual(session.agent_engine.max_iterations, 4)
+
     def test_session_audit_context_and_structured_output(self):
         import json
 

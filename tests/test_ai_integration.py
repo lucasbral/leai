@@ -80,6 +80,40 @@ class AIIntegrationTests(unittest.TestCase):
         self.assertEqual(client_grok.base_url, "https://api.x.ai/v1")
         self.assertEqual(client_grok.model, "grok-2-latest")
 
+    def test_llm_factory_resolves_provider_temperature_and_timeout(self):
+        cfg = LeaiConfig(
+            dsn="",
+            schemas=["TEST"],
+            ai=AIConfig(
+                default_provider="openai",
+                temperature=0.2,
+                timeout=300.0,
+                providers={
+                    "openai": AIProviderConfig(api_key="sk-test", temperature=0.7, timeout=60.0),
+                    "gemini": AIProviderConfig(api_key="gem-test", temperature=0.0),
+                },
+            ),
+        )
+
+        client_openai = get_llm_client(cfg, provider_override="openai")
+        self.assertEqual(client_openai.temperature, 0.7)
+        self.assertEqual(client_openai.timeout, 60.0)
+
+        client_gemini = get_llm_client(cfg, provider_override="gemini")
+        self.assertEqual(client_gemini.temperature, 0.0)
+        self.assertEqual(client_gemini.timeout, 300.0)  # Herdou do global
+
+    def test_llm_factory_local_and_ollama_defaults(self):
+        cfg = LeaiConfig(dsn="", schemas=["TEST"], ai=AIConfig())
+
+        client_ollama = get_llm_client(cfg, provider_override="ollama")
+        self.assertEqual(client_ollama.model, "qwen2.5-coder:latest")
+        self.assertEqual(client_ollama.base_url, "http://localhost:11434/v1")
+
+        client_local = get_llm_client(cfg, provider_override="local")
+        self.assertEqual(client_local.model, "qwen2.5")
+        self.assertEqual(client_local.base_url, "http://localhost:1234/v1")
+
     def test_enrich_table_preserves_existing_when_not_overwrite(self):
         table = TableMeta(
             name="CLIENTES",

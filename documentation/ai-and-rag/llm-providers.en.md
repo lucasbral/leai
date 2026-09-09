@@ -8,51 +8,68 @@ LEAI features a native, lightweight REST HTTP client, eliminating heavy external
 
 | Provider | `provider` in `leai.yml` | Environment Variable | Recommended Models |
 | :--- | :--- | :--- | :--- |
+| **Ollama (Local / Free)** | `ollama` | None (requires local Ollama server) | `qwen2.5-coder:latest`, `llama3.1`, `mistral` |
+| **Local (LM Studio / vLLM)** | `local` or `custom` | None (requires local running server) | `qwen2.5`, `meta-llama-3.1-8b-instruct` |
+| **Google Gemini** | `gemini` | `GEMINI_API_KEY` | `gemini-2.5-flash`, `gemini-1.5-pro` |
 | **OpenAI** | `openai` | `OPENAI_API_KEY` | `gpt-4o`, `gpt-4o-mini`, `o3-mini` |
-| **Google Gemini** | `gemini` | `GEMINI_API_KEY` | `gemini-1.5-pro`, `gemini-1.5-flash`, `gemini-2.0-flash` |
-| **Anthropic Claude** | `claude` | `ANTHROPIC_API_KEY` | `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022` |
+| **Anthropic Claude** | `claude` / `anthropic` | `ANTHROPIC_API_KEY` | `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022` |
 | **DeepSeek** | `deepseek` | `DEEPSEEK_API_KEY` | `deepseek-chat`, `deepseek-reasoner` |
 | **Qwen (Alibaba)** | `qwen` | `DASHSCOPE_API_KEY` | `qwen-plus`, `qwen-max`, `qwen-turbo` |
 | **Moonshot Kimi** | `kimi` | `MOONSHOT_API_KEY` | `moonshot-v1-8k`, `moonshot-v1-32k` |
-| **Ollama (Local / Free)** | `ollama` | None (requires local Ollama server) | `qwen2.5-coder`, `llama3.1`, `mistral` |
-| **AWS Bedrock** | `bedrock` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` | `anthropic.claude-3-5-sonnet-20240620-v1:0` |
+| **Grok / xAI** | `grok` or `xai` | `GROK_API_KEY` / `XAI_API_KEY` | `grok-2-latest` |
 
 ---
 
 ## ⚙️ Configuration Examples in `leai.yml`
 
-### Using Google Gemini (High Speed & Value)
-```yaml
-ai:
-  provider: "gemini"
-  model: "gemini-2.0-flash"
-  temperature: 0.1
-```
-
-### Using OpenAI
-```yaml
-ai:
-  provider: "openai"
-  model: "gpt-4o-mini"
-  temperature: 0.2
-```
-
-### Using Local Ollama (100% Offline & Air-Gapped)
-Ideal for restricted enterprise environments where metadata must remain on premises:
+LEAI supports global defaults alongside granular per-provider overrides:
 
 ```yaml
 ai:
-  provider: "ollama"
-  model: "qwen2.5-coder:14b"
-  base_url: "http://localhost:11434"
+  default_provider: "ollama"      # Default active provider
+  temperature: 0.2                # Global temperature (0.0 to 1.0)
+  timeout: 300.0                  # Global timeout in seconds
+  max_history_turns: 15           # History context memory window (turns)
+  max_agent_iterations: 10        # Max tool calling steps per agent turn
+  max_subagent_iterations: 5      # Max iterations for specialist subagents
+
+  providers:
+    # 1. Local Ollama
+    ollama:
+      base_url: "http://localhost:11434/v1"
+      model: "qwen2.5-coder:latest"
+      temperature: 0.1
+      timeout: 300.0
+
+    # 2. Local OpenAI-compatible server (LM Studio, vLLM, LocalAI)
+    local:
+      base_url: "http://localhost:1234/v1"
+      model: "qwen2.5"
+      temperature: 0.1
+
+    # 3. Google Gemini
+    gemini:
+      api_key: "${GEMINI_API_KEY}"
+      model: "gemini-2.5-flash"
+
+    # 4. OpenAI
+    openai:
+      api_key: "${OPENAI_API_KEY}"
+      model: "gpt-4o-mini"
+      temperature: 0.2
+      timeout: 120.0
 ```
 
 ---
 
-## 🧪 Validating Connections with `leai models`
+## 🧪 Validating Models with `leai models`
 
-Run the diagnostic command to test API keys and verify roundtrip response latencies:
+Run the diagnostic command to test API connectivity and view available models:
 
 ```bash
+# List models for the default configured provider
 leai models
-```
+
+# List models for a specific provider
+leai models -p gemini
+leai models -p ollama

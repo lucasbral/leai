@@ -214,9 +214,7 @@ def prompt_and_update(current_version: str, console: Console | None = None) -> b
 
     method = detect_install_method()
     if method == "editable":
-        console.print(
-            "[yellow][!] Modo de desenvolvimento editavel detectado. Execute 'git pull' para atualizar o repositorio.[/yellow]\n"
-        )
+        console.print("[yellow][!] Modo de desenvolvimento editavel detectado. Execute 'git pull' para atualizar o repositorio.[/yellow]\n")
         return False
 
     console.print()

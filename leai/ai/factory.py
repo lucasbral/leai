@@ -52,7 +52,17 @@ PROVIDER_DEFAULTS = {
     "ollama": {
         "env_key": None,
         "base_url": "http://localhost:11434/v1",
-        "default_model": "llama3.1",
+        "default_model": "qwen2.5-coder:latest",
+    },
+    "local": {
+        "env_key": None,
+        "base_url": "http://localhost:1234/v1",
+        "default_model": "qwen2.5",
+    },
+    "custom": {
+        "env_key": None,
+        "base_url": "http://localhost:8000/v1",
+        "default_model": "default",
     },
 }
 
@@ -77,8 +87,8 @@ def get_llm_client(
     )
     base_url = (p_cfg and p_cfg.base_url) or defaults.get("base_url")
     model = model_override or (p_cfg and p_cfg.model) or defaults.get("default_model") or "gpt-4o-mini"
-    temp = config.ai.temperature
-    timeout = (p_cfg and p_cfg.timeout) or config.ai.timeout or 300.0
+    temp = p_cfg.temperature if (p_cfg and p_cfg.temperature is not None) else config.ai.temperature
+    timeout = p_cfg.timeout if (p_cfg and p_cfg.timeout is not None) else (config.ai.timeout or 300.0)
 
     if provider_name == "gemini":
         return GeminiClient(api_key=api_key, model=model, base_url=base_url, temperature=temp, timeout=timeout)

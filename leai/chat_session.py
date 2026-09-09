@@ -20,12 +20,17 @@ class ChatSession:
         schemas: list[SchemaMetadata],
         config: LeaiConfig,
         client: BaseLLMClient,
-        max_history_turns: int = 15,
+        max_history_turns: int | None = None,
     ):
         self.schemas = schemas
         self.config = config
         self._client = client
-        self.max_history_turns = max_history_turns
+        if max_history_turns is not None:
+            self.max_history_turns = max_history_turns
+        elif config and getattr(getattr(config, "ai", None), "max_history_turns", None):
+            self.max_history_turns = config.ai.max_history_turns
+        else:
+            self.max_history_turns = 15
         self.messages: list[dict[str, Any]] = []
         self.active_entities: set[str] = set()
         self.last_turn_tokens: int | None = None
@@ -38,6 +43,7 @@ class ChatSession:
             schemas=schemas,
             config=config,
             client=client,
+            max_iterations=config.ai.max_agent_iterations if (config and getattr(config, "ai", None)) else None,
         )
 
     @property

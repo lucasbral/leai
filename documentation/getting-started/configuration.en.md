@@ -47,21 +47,33 @@ object_types:
 
 # 6. AI Settings (LLMs for Auto-Enrichment, Chat, and Subagents)
 ai:
-  default_provider: "openai"      # openai | gemini | anthropic | deepseek | qwen | kimi | grok | ollama
-  temperature: 0.2
+  default_provider: "ollama"      # ollama | local | openai | gemini | anthropic | deepseek | qwen | kimi | grok
+  temperature: 0.2                # Global default temperature (0.0 to 1.0)
+  timeout: 300.0                  # Global default request timeout in seconds
+  max_history_turns: 15           # History context memory window in chat turns
+  max_agent_iterations: 10        # Maximum reasoning tool iterations per turn
+  max_subagent_iterations: 5      # Maximum iterations for specialized subagents
   providers:
-    openai:
-      api_key: "${OPENAI_API_KEY}"
-      model: "gpt-4o-mini"
-    gemini:
-      api_key: "${GEMINI_API_KEY}"
-      model: "gemini-2.0-flash"
-    anthropic:
-      api_key: "${ANTHROPIC_API_KEY}"
-      model: "claude-3-5-sonnet-20241022"
     ollama:
       base_url: "http://localhost:11434/v1"
       model: "qwen2.5-coder:latest"
+      temperature: 0.1
+      timeout: 300.0
+    local:
+      base_url: "http://localhost:1234/v1" # e.g. LM Studio, vLLM, LocalAI
+      model: "qwen2.5"
+      temperature: 0.1
+    openai:
+      api_key: "${OPENAI_API_KEY}"
+      model: "gpt-4o-mini"
+      temperature: 0.2
+      timeout: 120.0
+    gemini:
+      api_key: "${GEMINI_API_KEY}"
+      model: "gemini-2.5-flash"
+    anthropic:
+      api_key: "${ANTHROPIC_API_KEY}"
+      model: "claude-3-5-sonnet-20241022"
 
 # 7. Git / GitLab / GitHub Synchronization (GitOps)
 git:
