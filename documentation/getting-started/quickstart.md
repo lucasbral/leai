@@ -13,10 +13,14 @@ Crie um diretório de trabalho para sua documentação e execute o comando `init
 ```bash
 mkdir meu-banco-doc
 cd meu-banco-doc
-leai init
+# Para gerar a configuração documentada em Português:
+leai init --lang pt-BR
+
+# Ou em Inglês (padrão):
+# leai init
 ```
 
-Esse comando criará automaticamente um arquivo `leai.yml` com modelos de conexão e opções de filtros pré-configurados.
+Esse comando criará automaticamente um arquivo `leai.yml` com modelos de conexão, idioma e opções de filtros pré-configurados.
 
 ---
 

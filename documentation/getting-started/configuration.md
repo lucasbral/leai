@@ -137,3 +137,27 @@ Você pode usar os filtros `include` e `exclude` para focar estritamente nas tab
 
 > [!TIP]
 > Se a lista `include` estiver vazia, o LEAI processará **todos** os objetos do schema que correspondam aos `object_types`, exceto aqueles listados em `exclude`.
+
+---
+
+## 🌐 Internacionalização e Idioma (`language`)
+
+O LEAI possui suporte nativo a múltiplos idiomas com fallback canônico e detecção transparente:
+
+```yaml
+language: "pt-BR" # ou "en-US" (padrão)
+```
+
+### Precedência de Resolução
+O LEAI determina o idioma ativo seguindo a seguinte ordem de prioridade:
+1. **Flag CLI:** `--lang <locale>` ou `-L <locale>` (ex: `leai --lang pt-BR ask "quais são as tabelas de vendas?"`)
+2. **Variável de Ambiente:** `LEAI_LANG` ou `LEAI_LANGUAGE` (ex: `export LEAI_LANG=pt-BR`)
+3. **Arquivo de Configuração:** Chave `language:` no `leai.yml`
+4. **Padrão Canônico:** `en-US`
+
+### Inicialização Rápida com Idioma
+Para gerar o arquivo `leai.yml` pré-configurado e documentado em Português:
+```bash
+leai init --lang pt-BR
+```
+

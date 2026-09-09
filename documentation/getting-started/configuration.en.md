@@ -137,3 +137,31 @@ You can use the `include` and `exclude` filters to selectively target database e
 
 > [!TIP]
 > If `include` is left empty, LEAI will extract **all** objects matching `object_types` that are not explicitly matched by `exclude`.
+
+---
+
+## 🌐 Internationalization & Language (`language`)
+
+LEAI provides native multi-language support with canonical fallback and seamless detection:
+
+```yaml
+language: "en-US" # or "pt-BR" (default: "en-US")
+```
+
+### Resolution Precedence
+LEAI determines the active locale according to the following priority:
+1. **CLI Flag:** `--lang <locale>` or `-L <locale>` (e.g. `leai --lang en-US ask "what are the main sales tables?"`)
+2. **Environment Variable:** `LEAI_LANG` or `LEAI_LANGUAGE` (e.g. `export LEAI_LANG=en-US`)
+3. **Configuration File:** `language:` key in `leai.yml`
+4. **Canonical Fallback:** `en-US`
+
+### Quick Initialization with Language
+To generate a `leai.yml` pre-configured and documented in Portuguese:
+```bash
+leai init --lang pt-BR
+```
+Or in English (default):
+```bash
+leai init --lang en-US
+```
+

@@ -280,10 +280,12 @@ class WebServerTests(unittest.TestCase):
                 cfg_data = json.loads(req_cfg.read().decode("utf-8"))
                 self.assertIn("schemas", cfg_data)
                 self.assertIn("ai", cfg_data)
+                self.assertIn("language", cfg_data)
                 self.assertEqual(cfg_data["schemas"], ["HR"])
 
                 # 8. Test POST /api/config (save to leai.yml)
                 cfg_payload = {
+                    "language": "pt-BR",
                     "dsn": "scott/tiger@localhost:1521/XEPDB1",
                     "schemas": ["HR", "FINANCE"],
                     "include": ["TAB_*"],
@@ -310,6 +312,7 @@ class WebServerTests(unittest.TestCase):
                 self.assertTrue(save_cfg_res["success"])
                 self.assertEqual(server.config.ai.default_provider, "gemini")
                 self.assertEqual(server.config.schemas, ["HR", "FINANCE"])
+                self.assertEqual(server.config.language, "pt-BR")
 
                 # 9. Test POST & GET /api/glossary
                 req_post_glossary = urllib.request.Request(

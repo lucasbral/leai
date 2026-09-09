@@ -94,7 +94,7 @@ class TestUpdater(unittest.TestCase):
     def test_run_upgrade_editable(self):
         success, msg = run_upgrade(method="editable")
         self.assertFalse(success)
-        self.assertIn("editável", msg)
+        self.assertIn("Editable", msg)
 
     @patch.dict(os.environ, {"LEAI_NO_UPDATE_CHECK": "1"}, clear=False)
     def test_prompt_and_update_disabled_via_env(self):

@@ -142,8 +142,10 @@ def run_upgrade(method: str | None = None) -> tuple[bool, str]:
     if method is None:
         method = detect_install_method()
 
+    from leai.i18n import t
+
     if method == "editable":
-        return False, "Modo de desenvolvimento editável detectado. Para atualizar, execute 'git pull' no repositório."
+        return False, t("updater.editable_abort")
 
     if method == "uv_tool":
         uv_bin = shutil.which("uv") or "uv"
@@ -154,8 +156,8 @@ def run_upgrade(method: str | None = None) -> tuple[bool, str]:
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=120.0)
         if res.returncode == 0:
-            return True, res.stdout or "Atualização concluída com sucesso."
-        return False, res.stderr or res.stdout or f"Comando falhou com código {res.returncode}"
+            return True, res.stdout or t("updater.success")
+        return False, res.stderr or res.stdout or t("updater.failed_code", code=res.returncode)
     except Exception as exc:
         return False, str(exc)
 
@@ -165,6 +167,8 @@ def prompt_and_update(current_version: str, console: Console | None = None) -> b
 
     Returns True if an update was successfully applied and restarted, False otherwise.
     """
+    from leai.i18n import t
+
     if os.environ.get("LEAI_NO_UPDATE_CHECK", "").strip().lower() in ("1", "true", "yes"):
         return False
 
@@ -181,21 +185,21 @@ def prompt_and_update(current_version: str, console: Console | None = None) -> b
 
     notes_text = ""
     if update_info.release_notes:
-        notes_text = f"\n\n[bold yellow]Destaques da Versao:[/bold yellow]\n{update_info.release_notes}"
+        notes_text = f"\n\n[bold yellow]{t('updater.release_highlights')}[/bold yellow]\n{update_info.release_notes}"
 
     msg = (
-        f"[bold white]Uma nova versao do [cyan]LEAI[/cyan] esta disponivel![/bold white]\n\n"
-        f"  Versao Atual:   [bold red]{update_info.current_version}[/bold red]\n"
-        f"  Nova Versao:    [bold green]{update_info.latest_version}[/bold green]"
+        f"[bold white]{t('updater.available')}[/bold white]\n\n"
+        f"  {t('updater.current_version')}   [bold red]{update_info.current_version}[/bold red]\n"
+        f"  {t('updater.latest_version')}    [bold green]{update_info.latest_version}[/bold green]"
         f"{notes_text}\n\n"
-        f"[dim]Changelog: https://github.com/lucasbral/leai/releases[/dim]"
+        f"[dim]{t('updater.changelog')}[/dim]"
     )
 
     console.print()
     console.print(
         Panel(
             msg,
-            title="[bold yellow][UPDATE] Atualizacao Disponivel[/bold yellow]",
+            title=t("updater.title"),
             border_style="yellow",
             expand=False,
         )
@@ -203,27 +207,27 @@ def prompt_and_update(current_version: str, console: Console | None = None) -> b
 
     # Prompt user with Y/N (defaults to Yes)
     try:
-        response = console.input("[bold cyan]Deseja atualizar o LEAI agora? [Y/n]: [/bold cyan]").strip().lower()
+        response = console.input(t("updater.prompt")).strip().lower()
     except (KeyboardInterrupt, EOFError):
         console.print()
         return False
 
     if response not in ("", "y", "yes", "s", "sim"):
-        console.print("[dim]Atualizacao postergada. Prosseguindo...[/dim]\n")
+        console.print(t("updater.postponed"))
         return False
 
     method = detect_install_method()
     if method == "editable":
-        console.print("[yellow][!] Modo de desenvolvimento editavel detectado. Execute 'git pull' para atualizar o repositorio.[/yellow]\n")
+        console.print(t("updater.editable_warning"))
         return False
 
     console.print()
-    with console.status("[bold cyan]Baixando e instalando nova versao do LEAI...[/bold cyan]"):
+    with console.status(t("updater.downloading")):
         success, output = run_upgrade(method)
 
     if success:
-        console.print(f"[bold green][OK] LEAI atualizado com sucesso para v{update_info.latest_version}![/bold green]")
-        console.print("[cyan]Reiniciando o LEAI com a nova versao...[/cyan]\n")
+        console.print(t("updater.updated_success", version=update_info.latest_version))
+        console.print(t("updater.restarting"))
         cmd = [sys.executable, "-m", "leai"] + sys.argv[1:]
         if sys.platform == "win32":
             try:
@@ -241,6 +245,6 @@ def prompt_and_update(current_version: str, console: Console | None = None) -> b
                 sys.exit(ret)
         return True
     else:
-        console.print(f"[bold red][ERROR] Falha na atualizacao automatica:[/bold red] {output}")
-        console.print("[dim]Prosseguindo com a versao atual...[/dim]\n")
+        console.print(t("updater.auto_update_failed", error=output))
+        console.print(t("updater.continuing"))
         return False

@@ -127,12 +127,17 @@ uv add leai
 ### Step 2: Initialize Configuration
 
 ```bash
+# In English (default)
 leai init
+
+# Or in Brazilian Portuguese
+leai init --lang pt-BR
 ```
 
 Configure your `leai.yml`:
 
 ```yaml
+language: "en-US"                 # "en-US" (default) or "pt-BR"
 dsn: "oracle://${DB_USER}:${DB_PASS}@${DB_HOST}:1521/${DB_SERVICE}"
 
 schemas:

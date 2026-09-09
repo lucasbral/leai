@@ -240,6 +240,7 @@ def _print_final_summary_panel(
 def init(
     output: Path = typer.Option(Path("leai.yml"), "--output", "-o", help="Configuration file path to create"),
     force: bool = typer.Option(False, "--force", "-f", help="Overwrite if the file already exists"),
+    language: str = typer.Option(None, "--lang", "-L", help="Template language ('en-US' or 'pt-BR')"),
 ) -> None:
     """Creates an initial leai.yml configuration file in the current directory."""
     if output.exists() and not force:
@@ -248,7 +249,7 @@ def init(
 
     from leai.template import write_default_config
 
-    write_default_config(output, overwrite=True)
+    write_default_config(output, overwrite=True, lang=language)
     console.print(f"[green]✓ Configuration file created successfully at:[/green] [bold cyan]{output}[/bold cyan]")
     console.print("[dim]Edit the file with your Oracle credentials and AI keys before running 'leai extract'.[/dim]")
 
@@ -996,6 +997,7 @@ def default(
     seaweed: bool = typer.Option(False, "--seaweed", "-W", help="Load schema knowledge from SeaweedFS S3 storage"),
     no_cache: bool = typer.Option(False, "--no-cache", help="Do not write local cache files, operate directly with SeaweedFS"),
     no_update_check: bool = typer.Option(False, "--no-update-check", help="Disable remote update check on startup"),
+    language: str = typer.Option(None, "--lang", "-L", help="Interface language ('en-US' or 'pt-BR')"),
 ) -> None:
     """LEAI: Autonomous Oracle Database Intelligence, Documentation Engine & Copilot."""
     if hasattr(config, "default") or not isinstance(config, (str, Path)):
@@ -1014,6 +1016,8 @@ def default(
         no_cache = getattr(no_cache, "default", False)
     if hasattr(no_update_check, "default"):
         no_update_check = getattr(no_update_check, "default", False)
+    if hasattr(language, "default"):
+        language = getattr(language, "default", None)
 
     if ctx.invoked_subcommand is None:
         try:
@@ -1024,6 +1028,10 @@ def default(
             if config.exists():
                 console.print(f"[bold yellow]⚠️ Warning:[/bold yellow] Failed to load [cyan]{config}[/cyan]: {exc}")
             cfg = LeaiConfig()
+
+        from leai.i18n import resolve_locale, set_locale, t
+
+        set_locale(resolve_locale(language, getattr(cfg, "language", None)))
 
         if no_update_check:
             cfg.update_check = False
@@ -1039,7 +1047,7 @@ def default(
         storage = _resolve_storage(cfg, seaweed)
         is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
         if storage and not cfg.rawPath.exists():
-            console.print("[cyan]✦ Conectando ao SeaweedFS S3 e sincronizando catálogo de schemas...[/cyan]")
+            console.print(t("seaweedfs.sync_catalog"))
         schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
         try:
             client = get_llm_client(cfg, provider_override=provider, model_override=model)
@@ -1816,11 +1824,13 @@ def serve(
             console.print(f"[bold yellow]⚠️ Aviso:[/bold yellow] Falha ao ler [cyan]{config}[/cyan]: {exc}")
         cfg = LeaiConfig()
 
+    from leai.i18n import t
+
     storage = _resolve_storage(cfg, seaweed)
     is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
     target_schemas = cfg.schemas if not cfg.is_all_schemas else None
     if storage and not cfg.rawPath.exists():
-        console.print("[cyan]✦ Conectando ao SeaweedFS S3 e sincronizando catálogo de schemas...[/cyan]")
+        console.print(t("seaweedfs.sync_catalog"))
     schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
     try:
         client = get_llm_client(cfg, provider_override=provider)

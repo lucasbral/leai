@@ -1044,6 +1044,9 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                     "has_api_key": k,
                 }
 
+            # Language
+            lang_val = raw_yaml.get("language") or getattr(cfg, "language", "en-US")
+
             self._send_json(
                 {
                     "dsn": dsn_val,
@@ -1054,6 +1057,7 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                     "rawPath": raw_path_str,
                     "annotationsPath": ann_path_str,
                     "docPath": doc_path_str,
+                    "language": lang_val,
                     "ai": {
                         "default_provider": default_prov,
                         "temperature": temp,
@@ -1128,6 +1132,13 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         if "docPath" in payload and payload["docPath"]:
             existing_yaml["docPath"] = str(payload["docPath"])
             cfg.docPath = Path(payload["docPath"])
+
+        if "language" in payload and payload["language"]:
+            from leai.i18n import normalize_locale
+
+            norm_lang = normalize_locale(str(payload["language"]))
+            existing_yaml["language"] = norm_lang
+            cfg.language = norm_lang
 
         ai_payload = payload.get("ai", {})
         if ai_payload:

@@ -28,14 +28,18 @@ class MockLLMClient(BaseLLMClient):
         super().__init__(api_key="mock", model="mock-model")
         self.json_response = json_response or {}
         self.text_response = text_response
+        self.last_system_prompt: str | None = None
 
     def generate_text(self, prompt: str, system_prompt: str | None = None) -> str:
+        self.last_system_prompt = system_prompt
         return self.text_response
 
     def generate_json(self, prompt: str, system_prompt: str | None = None) -> dict:
+        self.last_system_prompt = system_prompt
         return self.json_response
 
     def generate_chat(self, messages: list[dict[str, str]], system_prompt: str | None = None) -> str:
+        self.last_system_prompt = system_prompt
         return self.text_response
 
 
@@ -174,6 +178,19 @@ class AIIntegrationTests(unittest.TestCase):
 
         self.assertEqual(enriched.description, "Nova descrição gerada por IA")
         self.assertEqual(enriched.columns["ID"], "Novo comentário IA")
+
+    def test_enrich_table_annotation_respects_language(self):
+        table = TableMeta(name="DEPARTMENTS", columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)])
+        ann = ObjectAnnotation(description="", columns={})
+        client = MockLLMClient(json_response={"description": "Tabela de departamentos", "columns": {"ID": "ID único"}})
+
+        enrich_table_annotation(table, ann, client, overwrite=True, lang="pt-BR")
+        self.assertIsNotNone(client.last_system_prompt)
+        self.assertIn("Engenheiro de Dados e DBA Oracle Especialista", client.last_system_prompt)
+
+        enrich_table_annotation(table, ann, client, overwrite=True, lang="en-US")
+        self.assertIsNotNone(client.last_system_prompt)
+        self.assertIn("You are an Expert Oracle Data Engineer", client.last_system_prompt)
 
     def test_enrich_schema_annotations_pipeline(self):
         with tempfile.TemporaryDirectory() as tmp:

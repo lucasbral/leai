@@ -2,6 +2,16 @@
 
 Todas as alterações notáveis no projeto **LEAI** são documentadas nesta página.
 
+## [0.2.26] — 2026
+
+### 🌐 Arquitetura de Internacionalização (i18n) Completa (en-US / pt-BR)
+* **Subsistema de i18n Nativo (`leai/i18n`):** Mecanismo de internacionalização tipado, leve e sem dependências externas, com catálogos completos para Inglês (`en-US`, padrão canônico) e Português do Brasil (`pt-BR`), suportando tags de estilização Rich e interpolação segura com fallback hierárquico.
+* **Resolução Flexível por Precedência:** O idioma ativo pode ser determinado por: Flag CLI (`--lang` / `-L`) > Variável de ambiente (`LEAI_LANG` / `LEAI_LANGUAGE`) > Configuração (`language:` em `leai.yml`) > Fallback canônico (`en-US`).
+* **Padronização do Terminal, TUI e Updater:** Migração de 100% das mensagens interativas do updater, avisos de sincronização do SeaweedFS/Git e comandos de barra do TUI (`/copy`, `/rule`, `/git`, `/init`) para o catálogo i18n, exibindo inglês por padrão ou português quando configurado.
+* **Templates Bilíngues de Inicialização:** O comando `leai init --lang pt-BR` gera um arquivo `leai.yml` com comentários e exemplos em Português, enquanto `leai init` gera a versão padrão em Inglês.
+* **Integração com o Studio Web:** Endpoints `/api/config` (GET e POST) sincronizam a preferência de idioma em tempo de execução, e o modal de configurações inclui um seletor visual com atualização dinâmica da UI.
+* **Prompts de IA Bilíngues:** Os system prompts de enriquecimento de tabelas, objetos de código (procedures/packages/triggers) e o Copilot de RAG/Chat agora adaptam suas instruções com base no idioma do projeto, gerando regras e explicações em Português quando `language: "pt-BR"` estiver ativo, mantendo identificadores SQL técnicos intactos.
+
 ---
 
 ## [0.2.25] — 2026

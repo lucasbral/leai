@@ -19,7 +19,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn, TimeElapsedColumn
-from rich.prompt import Prompt
+from rich.prompt import Confirm, Prompt
 from rich.rule import Rule
 from rich.syntax import Syntax
 from rich.table import Column, Table
@@ -788,18 +788,18 @@ class InteractiveTUISession:
             console.print("[dim]Para copiar: [bold cyan]/copy <número>[/bold cyan] (ex: /copy 1)[/dim]\n")
             return
 
+        from leai.i18n import t
+
         # Check if user specified a block number (e.g. /copy 1, /copy 2)
         if arg0.isdigit():
             idx = int(arg0) - 1
             if idx < 0 or idx >= len(self.last_code_blocks):
-                console.print(f"[red]Bloco #{arg0} não encontrado. Total de blocos disponíveis: {len(self.last_code_blocks)}[/red]\n")
+                console.print(t("tui.block_not_found", index=arg0, total=len(self.last_code_blocks)))
                 return
             block = self.last_code_blocks[idx]
             ok, msg = copy_to_clipboard(block["code"])
             if ok:
-                console.print(
-                    f"[green]✓ Bloco #{block['index']} [{block['language'].upper()}] ({block['lines']} linhas) copiado para a área de transferência![/green]\n"
-                )
+                console.print(t("tui.block_copied", index=block["index"], lang=block["language"].upper(), lines=block["lines"]))
             else:
                 console.print(f"[red]✕ {msg}[/red]\n")
             return
@@ -816,14 +816,12 @@ class InteractiveTUISession:
                 if self.last_code_blocks:
                     matching = [self.last_code_blocks[0]]
                 else:
-                    console.print("[yellow]! Nenhum bloco de código encontrado na última resposta.[/yellow]\n")
+                    console.print(t("tui.no_code_block"))
                     return
             block = matching[0]
             ok, msg = copy_to_clipboard(block["code"])
             if ok:
-                console.print(
-                    f"[green]✓ Bloco #{block['index']} [{block['language'].upper()}] ({block['lines']} linhas) copiado para a área de transferência![/green]\n"
-                )
+                console.print(t("tui.block_copied", index=block["index"], lang=block["language"].upper(), lines=block["lines"]))
             else:
                 console.print(f"[red]✕ {msg}[/red]\n")
             return
@@ -831,9 +829,7 @@ class InteractiveTUISession:
         # Default: copy entire text
         ok, msg = copy_to_clipboard(self.last_ai_reply)
         if ok:
-            console.print(
-                f"[green]✓ Resposta completa copiada para a área de transferência ({len(self.last_ai_reply)} caracteres)![/green]\n"
-            )
+            console.print(t("tui.reply_copied", chars=len(self.last_ai_reply)))
         else:
             console.print(f"[red]✕ {msg}[/red]\n")
 
@@ -875,48 +871,50 @@ class InteractiveTUISession:
             if glossary is None:
                 glossary = load_glossary(self.config.annotationsPath)
 
+            from leai.i18n import t
+
             if not glossary.terms:
-                console.print("\n[dim]Nenhuma regra de negócio cadastrada ainda em annotations/glossary.yml.[/dim]")
-                console.print("[dim]Use [bold cyan]/rule add[/bold cyan] para cadastrar uma nova regra.[/dim]\n")
+                console.print(t("rule.empty"))
+                console.print(t("rule.hint_add"))
                 return
 
-            tbl = Table(title="[bold cyan]📖 Glossário de Negócio & Regras Canônicas[/bold cyan]", box=box.ROUNDED)
-            tbl.add_column("Termo / Conceito", style="bold yellow", width=22)
-            tbl.add_column("Tabela Primária", style="bold cyan", width=16)
-            tbl.add_column("Filtro SQL Canônico", style="green", width=34)
-            tbl.add_column("Definição", style="white")
+            tbl = Table(title=t("rule.table_title"), box=box.ROUNDED)
+            tbl.add_column(t("rule.col_term"), style="bold yellow", width=22)
+            tbl.add_column(t("rule.col_table"), style="bold cyan", width=16)
+            tbl.add_column(t("rule.col_filter"), style="green", width=34)
+            tbl.add_column(t("rule.col_definition"), style="white")
 
-            for t in glossary.terms:
+            for t_item in glossary.terms:
                 tbl.add_row(
-                    t.term,
-                    t.primary_table or "-",
-                    t.canonical_filter or "-",
-                    t.definition,
+                    t_item.term,
+                    t_item.primary_table or "-",
+                    t_item.canonical_filter or "-",
+                    t_item.definition,
                 )
             console.print()
             console.print(tbl)
-            s3_tag = f" (sincronizado com SeaweedFS '[bold cyan]{self.config.storage.seaweedfs.bucket}[/bold cyan]')" if storage else ""
-            console.print(
-                f"[dim]Total: {len(glossary.terms)} termos definidos em {self.config.annotationsPath}/glossary.yml{s3_tag}[/dim]\n"
-            )
+            s3_tag = t("rule.synced_s3_tag", bucket=self.config.storage.seaweedfs.bucket) if storage else ""
+            console.print(t("rule.total_terms", count=len(glossary.terms), path=self.config.annotationsPath, tag=s3_tag))
             return
 
         if subcmd in ("find", "search"):
+            from leai.i18n import t
+
             if len(args) < 2:
-                console.print("[yellow]Uso: /rule find <termo ou palavra-chave>[/yellow]\n")
+                console.print(t("rule.search_usage"))
                 return
             query = " ".join(args[1:])
             glossary = load_glossary(self.config.annotationsPath)
             matches = search_glossary(glossary, query)
             if not matches:
-                console.print(f"[yellow]Nenhum termo encontrado para '{query}'.[/yellow]\n")
+                console.print(t("rule.not_found", query=query))
                 return
 
-            tbl = Table(title=f"[bold cyan]🔍 Resultados no Glossário para '{query}'[/bold cyan]", box=box.ROUNDED)
-            tbl.add_column("Termo", style="bold yellow")
-            tbl.add_column("Tabela", style="bold cyan")
-            tbl.add_column("Filtro SQL Canônico", style="green")
-            tbl.add_column("Definição", style="white")
+            tbl = Table(title=t("rule.search_title", query=query), box=box.ROUNDED)
+            tbl.add_column(t("rule.col_term"), style="bold yellow")
+            tbl.add_column(t("rule.col_table"), style="bold cyan")
+            tbl.add_column(t("rule.col_filter"), style="green")
+            tbl.add_column(t("rule.col_definition"), style="white")
             for term, score in matches:
                 tbl.add_row(term.term, term.primary_table or "-", term.canonical_filter or "-", term.definition)
             console.print()
@@ -925,22 +923,24 @@ class InteractiveTUISession:
             return
 
         if subcmd in ("add", "new"):
-            console.print("\n[bold cyan]➕ Cadastrar Nova Regra de Negócio / Termo no Glossário[/bold cyan]")
+            from leai.i18n import t
+
+            console.print(t("rule.add_header"))
             term_name = " ".join(args[1:]).strip() if len(args) > 1 else ""
             if not term_name:
-                term_name = Prompt.ask("[bold yellow]Nome do Termo / Conceito[/bold yellow] (ex: Usuário Ativo, Vacanciados no Ano)")
+                term_name = Prompt.ask(t("rule.prompt_term"))
             if not term_name.strip():
-                console.print("[red]Cancelado: Nome do termo é obrigatório.[/red]\n")
+                console.print(t("rule.cancelled_term_req"))
                 return
 
-            definition = Prompt.ask("[bold yellow]Definição de Negócio[/bold yellow]")
-            primary_table = Prompt.ask("[bold yellow]Tabela Primária[/bold yellow] (opcional, ex: USUARIOS, VINCULOS)", default="")
+            definition = Prompt.ask(t("rule.prompt_definition"))
+            primary_table = Prompt.ask(t("rule.prompt_table"), default="")
             canonical_filter = Prompt.ask(
-                "[bold yellow]Filtro SQL Canônico[/bold yellow] (opcional, ex: STATUS = 'A' AND DT_EXPIRACAO > SYSDATE)",
+                t("rule.prompt_filter"),
                 default="",
             )
-            tags_str = Prompt.ask("[bold yellow]Tags[/bold yellow] (opcional, separadas por vírgula)", default="")
-            tags = [t.strip() for t in tags_str.split(",") if t.strip()]
+            tags_str = Prompt.ask(t("rule.prompt_tags"), default="")
+            tags = [tag.strip() for tag in tags_str.split(",") if tag.strip()]
 
             new_term = GlossaryTerm(
                 term=term_name.strip(),
@@ -952,32 +952,30 @@ class InteractiveTUISession:
 
             storage = self._get_storage()
             add_or_update_term(self.config.annotationsPath, new_term, storage=storage)
-            s3_msg = f" e sincronizada com SeaweedFS bucket '[bold]{self.config.storage.seaweedfs.bucket}[/bold]'" if storage else ""
-            console.print(
-                f"\n[green]✓ Regra '[bold]{new_term.term}[/bold]' salva com sucesso em [bold cyan]{self.config.annotationsPath}/glossary.yml[/bold cyan]{s3_msg}![/green]"
-            )
-            console.print("[dim]A IA agora consultará essa regra automaticamente no chat e em comandos de SQL.[/dim]\n")
+            s3_msg = f" and synchronized with SeaweedFS bucket '[bold]{self.config.storage.seaweedfs.bucket}[/bold]'" if storage else ""
+            console.print(t("rule.saved", term=new_term.term, path=f"{self.config.annotationsPath}/glossary.yml", s3_msg=s3_msg))
+            console.print(t("rule.ai_hint"))
             return
 
         if subcmd in ("del", "delete", "rm"):
+            from leai.i18n import t
+
             if len(args) < 2:
-                console.print("[yellow]Uso: /rule del <nome do termo>[/yellow]\n")
+                console.print(t("rule.del_usage"))
                 return
             term_to_del = " ".join(args[1:]).strip()
             storage = self._get_storage()
             removed = delete_term(self.config.annotationsPath, term_to_del, storage=storage)
             if removed:
-                s3_msg = f" e do bucket SeaweedFS '{self.config.storage.seaweedfs.bucket}'" if storage else ""
-                console.print(
-                    f"\n[green]✓ Regra '[bold]{term_to_del}[/bold]' removida com sucesso de [bold cyan]{self.config.annotationsPath}/glossary.yml[/bold cyan]{s3_msg}![/green]\n"
-                )
+                s3_msg = f" and from SeaweedFS bucket '{self.config.storage.seaweedfs.bucket}'" if storage else ""
+                console.print(t("rule.deleted", term=term_to_del, path=f"{self.config.annotationsPath}/glossary.yml", s3_msg=s3_msg))
             else:
-                console.print(f"[yellow]Termo '{term_to_del}' não encontrado no glossário.[/yellow]\n")
+                console.print(t("rule.del_not_found", term=term_to_del))
             return
 
-        console.print(
-            "[yellow]Uso: [bold cyan]/rule list[/bold cyan] | [bold cyan]/rule add [termo][/bold cyan] | [bold cyan]/rule del <termo>[/bold cyan] | [bold cyan]/rule find <termo>[/bold cyan][/yellow]\n"
-        )
+        from leai.i18n import t
+
+        console.print(t("rule.general_usage"))
 
     def _run_git(self, args: list[str]) -> None:
         """Manages Git and GitLab repository synchronization for database metadata."""
@@ -1025,19 +1023,23 @@ class InteractiveTUISession:
             console.print()
             console.print(tbl)
 
+            from leai.i18n import t
+
             if info.modified_files or info.untracked_files:
-                console.print("[dim]Arquivos alterados no catálogo/documentação:[/dim]")
+                console.print(t("git.changed_files"))
                 for f in (info.modified_files + info.untracked_files)[:8]:
                     console.print(f"  [dim yellow]• {f}[/dim yellow]")
                 if len(info.modified_files + info.untracked_files) > 8:
-                    console.print(f"  [dim]... e mais {len(info.modified_files + info.untracked_files) - 8} arquivo(s)[/dim]")
-                console.print("\n[dim]Para commitar e enviar ao GitLab: [bold cyan]/git sync[/bold cyan][/dim]\n")
+                    console.print(t("git.and_more_files", count=len(info.modified_files + info.untracked_files) - 8))
+                console.print(t("git.hint_sync"))
             else:
                 console.print()
             return
 
         if subcmd in ("pull", "update", "fetch"):
-            console.print("[cyan]⤓ Puxando atualizações do GitLab/remoto...[/cyan]")
+            from leai.i18n import t
+
+            console.print(t("git.pulling"))
             ok, msg = git_pull()
             if ok:
                 console.print(f"[green]✓ {msg}[/green]")
@@ -1045,24 +1047,26 @@ class InteractiveTUISession:
                 self.schemas = load_raw_schemas(self.config.rawPath, target_schemas=target_schemas_filter)
                 self.completer.update_schemas(self.schemas)
                 self.session.update_schemas(self.schemas)
-                console.print("[green]✓ Metadados e glossário recarregados em memória com sucesso![/green]\n")
+                console.print(t("git.reloaded_memory"))
             else:
-                console.print(f"[red]✕ Erro ao atualizar do remoto:[/red] {msg}\n")
+                console.print(t("git.pull_error", error=msg))
             return
 
         if subcmd in ("sync", "push", "commit"):
+            from leai.i18n import t
+
             commit_msg = " ".join(args[1:]).strip() if len(args) > 1 else None
-            console.print("[cyan]⤒ Sincronizando metadados com GitLab/remoto (add + commit + push)...[/cyan]")
+            console.print(t("git.syncing"))
             ok, msg = git_sync(message=commit_msg)
             if ok:
                 console.print(f"[green]✓ {msg}[/green]\n")
             else:
-                console.print(f"[red]✕ Falha na sincronização:[/red] {msg}\n")
+                console.print(t("git.sync_error", error=msg))
             return
 
-        console.print(
-            "[yellow]Uso: [bold cyan]/git status[/bold cyan] | [bold cyan]/git pull[/bold cyan] | [bold cyan]/git sync [mensagem][/bold cyan][/yellow]\n"
-        )
+        from leai.i18n import t
+
+        console.print(t("git.usage"))
 
     def _run_doc(self, object_name: str | None = None) -> None:
         """Launches the in-terminal interactive documentation editor."""
@@ -1951,7 +1955,9 @@ class InteractiveTUISession:
 
             if (not self.schemas) and storage:
                 try:
-                    console.print("[cyan]✦ Conectando ao SeaweedFS S3 e sincronizando catálogo de schemas...[/cyan]")
+                    from leai.i18n import t
+
+                    console.print(t("seaweedfs.sync_catalog"))
                     is_no_cache = getattr(self.config.storage.seaweedfs, "no_cache", False)
                     target_schemas = self.config.schemas if not self.config.is_all_schemas else None
                     loaded = load_raw_schemas(
@@ -2084,25 +2090,24 @@ class InteractiveTUISession:
 
     def _run_init(self, force: bool = False) -> None:
         """Informs or initializes leai.yml with interactive overwrite confirmation."""
-        from rich.prompt import Confirm
-
+        from leai.i18n import get_locale, t
         from leai.template import write_default_config
 
         out_file = Path("leai.yml")
         if out_file.exists() and not force:
-            console.print(f"[yellow]O arquivo de configuração já existe em:[/yellow] [bold cyan]{out_file.resolve()}[/bold cyan]")
+            console.print(t("tui.config_exists", path=out_file.resolve()))
             try:
-                overwrite = Confirm.ask("[bold yellow]Deseja sobrescrever com o template padrão atualizado?[/bold yellow]", default=False)
+                overwrite = Confirm.ask(t("tui.overwrite_prompt"), default=False)
             except (EOFError, KeyboardInterrupt, OSError):
-                console.print("\n[dim]Operação cancelada.[/dim]\n")
+                console.print(t("tui.operation_cancelled"))
                 return
             if not overwrite:
-                console.print("[dim]Operação cancelada. O arquivo atual foi mantido.[/dim]\n")
+                console.print(t("tui.operation_cancelled_kept"))
                 return
 
-        write_default_config(out_file, overwrite=True)
-        console.print(f"[green]✓ Arquivo de configuração criado/atualizado em:[/green] [bold cyan]{out_file.resolve()}[/bold cyan]")
-        console.print("[dim]Layout atualizado com suporte a Ollama, SeaweedFS, Git e Oracle DSN.[/dim]\n")
+        write_default_config(out_file, overwrite=True, lang=get_locale())
+        console.print(t("tui.config_created", path=out_file.resolve()))
+        console.print(t("tui.config_created_hint"))
 
     def _render_help(self) -> None:
         table = Table(show_header=True, header_style="bold #74c7ec", box=box.ROUNDED)

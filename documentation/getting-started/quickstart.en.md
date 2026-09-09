@@ -13,10 +13,14 @@ Create a working directory for your project documentation and run `init`:
 ```bash
 mkdir my-database-doc
 cd my-database-doc
+# Generate configuration in English (default):
 leai init
+
+# Or in Brazilian Portuguese:
+# leai init --lang pt-BR
 ```
 
-This generates a starter `leai.yml` configuration file with documented connection strings and filter options.
+This generates a starter `leai.yml` configuration file with documented connection strings, language settings, and filter options.
 
 ---
 

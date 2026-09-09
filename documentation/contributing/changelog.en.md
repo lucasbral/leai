@@ -2,6 +2,16 @@
 
 All notable changes to the **LEAI** project are documented here.
 
+## [0.2.26] — 2026
+
+### 🌐 Complete Internationalization (i18n) Architecture (en-US / pt-BR)
+* **Native i18n Subsystem (`leai/i18n`):** Lightweight, typed internationalization engine with zero external dependencies, featuring complete message catalogs for English (`en-US`, canonical default) and Brazilian Portuguese (`pt-BR`), with support for Rich markup styling and hierarchical fallback.
+* **Flexible Resolution Precedence:** Active locale resolution follows: CLI flag (`--lang` / `-L`) > Environment variable (`LEAI_LANG` / `LEAI_LANGUAGE`) > Config file (`language:` in `leai.yml`) > Canonical default (`en-US`).
+* **Standardized Terminal, TUI & Updater:** 100% migration of interactive updater messages, SeaweedFS/Git synchronization alerts, and TUI slash commands (`/copy`, `/rule`, `/git`, `/init`) to the i18n catalog, displaying English by default or Portuguese when configured.
+* **Bilingual Configuration Templates:** `leai init --lang pt-BR` generates starter `leai.yml` with Brazilian Portuguese comments and examples, while `leai init` generates the default English version.
+* **Studio Web Integration:** `/api/config` endpoints (GET & POST) synchronize the language setting in real time, and the Settings modal features a visual language selector with live UI re-rendering.
+* **Bilingual AI System Prompts:** Table enrichment, code object enrichment (procedures/packages/triggers), and Copilot RAG/chat prompts dynamically adapt based on project language, generating business descriptions and rules in Portuguese when `language: "pt-BR"` is active while strictly preserving technical Oracle SQL identifiers.
+
 ---
 
 ## [0.2.25] — 2026

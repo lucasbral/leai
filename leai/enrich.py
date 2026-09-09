@@ -6,7 +6,7 @@ from collections.abc import Callable
 from rich.console import Console
 
 from leai.ai.base import BaseLLMClient
-from leai.ai.prompts import CODE_OBJECT_ENRICHMENT_SYSTEM_PROMPT, TABLE_ENRICHMENT_SYSTEM_PROMPT
+from leai.ai.prompts import get_code_enrichment_prompt, get_table_enrichment_prompt
 from leai.annotations import ensure_annotation_stub, save_annotation
 from leai.config import LeaiConfig
 from leai.models import CodeObjectMeta, ObjectAnnotation, SchemaMetadata, TableMeta
@@ -19,6 +19,7 @@ def enrich_table_annotation(
     annotation: ObjectAnnotation,
     client: BaseLLMClient,
     overwrite: bool = False,
+    lang: str = "en-US",
 ) -> ObjectAnnotation:
     """Enriches a table annotation using the LLM client."""
     # Check if enrichment is needed
@@ -43,7 +44,7 @@ def enrich_table_annotation(
     user_prompt = f"Analyze the following Oracle table and return the business documentation:\n```json\n{json.dumps(payload, indent=2, ensure_ascii=False)}\n```"
 
     try:
-        ai_data = client.generate_json(user_prompt, system_prompt=TABLE_ENRICHMENT_SYSTEM_PROMPT)
+        ai_data = client.generate_json(user_prompt, system_prompt=get_table_enrichment_prompt(lang))
     except Exception as exc:
         console.print(f"[yellow]Warning: Failed to enrich table {table.name} with AI: {exc}[/yellow]")
         return annotation
@@ -124,6 +125,7 @@ def enrich_code_object_annotation(
     annotation: ObjectAnnotation,
     client: BaseLLMClient,
     overwrite: bool = False,
+    lang: str = "en-US",
 ) -> ObjectAnnotation:
     """Enriches a Procedure, Function, Package or Trigger annotation using LLM."""
     has_desc = bool(annotation.description and annotation.description.strip())
@@ -143,7 +145,7 @@ def enrich_code_object_annotation(
     user_prompt = f"Analyze the following Oracle PL/SQL code and return the business documentation:\n```json\n{json.dumps(payload, indent=2, ensure_ascii=False)}\n```"
 
     try:
-        ai_data = client.generate_json(user_prompt, system_prompt=CODE_OBJECT_ENRICHMENT_SYSTEM_PROMPT)
+        ai_data = client.generate_json(user_prompt, system_prompt=get_code_enrichment_prompt(lang))
     except Exception as exc:
         console.print(f"[yellow]Warning: Failed to enrich {co.object_type} {co.name} with AI: {exc}[/yellow]")
         return annotation
@@ -223,6 +225,8 @@ def enrich_schema_annotations(
     types_filter = [t.lower().rstrip("s") for t in (target_object_types or config.object_types)]
     target_upper = target_object_name.strip().upper() if target_object_name else None
 
+    lang = getattr(config, "language", "en-US")
+
     for schema in schemas:
         base_dir = config.annotationsPath / schema.schema_name if is_multi else config.annotationsPath
 
@@ -235,7 +239,7 @@ def enrich_schema_annotations(
                     progress_callback("TABLE", t.name)
                 ann_path = base_dir / "tables" / f"{t.name}.yml"
                 ann = ensure_annotation_stub(ann_path)
-                enriched = enrich_table_annotation(t, ann, client, overwrite=overwrite)
+                enriched = enrich_table_annotation(t, ann, client, overwrite=overwrite, lang=lang)
                 save_annotation(ann_path, enriched)
                 tables_count += 1
 
@@ -248,7 +252,7 @@ def enrich_schema_annotations(
                     progress_callback(co.object_type, co.name)
                 ann_path = base_dir / "code_objects" / f"{co.name}.yml"
                 ann = ensure_annotation_stub(ann_path)
-                enriched = enrich_code_object_annotation(co, ann, client, overwrite=overwrite)
+                enriched = enrich_code_object_annotation(co, ann, client, overwrite=overwrite, lang=lang)
                 save_annotation(ann_path, enriched)
                 code_count += 1
 

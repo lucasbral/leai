@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 from leai.ai.agent import AGENT_SYSTEM_PROMPT, AgentExecutionEngine
 from leai.ai.base import BaseLLMClient
-from leai.ai.prompts import ASK_SYSTEM_PROMPT
+from leai.ai.prompts import get_ask_system_prompt
 from leai.ask_rag import build_rag_context
 from leai.config import LeaiConfig
 from leai.models import SchemaMetadata
@@ -134,9 +134,11 @@ class ChatSession:
 
         # 2. Assemble System Prompt with tools instruction + lightweight schema scope
         schema_names = [s.schema_name for s in self.schemas] if self.schemas else []
+        lang = getattr(self.config, "language", "en-US") if self.config else "en-US"
+        ask_prompt = get_ask_system_prompt(lang)
         combined_sys = (
             f"{AGENT_SYSTEM_PROMPT}\n\n"
-            f"{ASK_SYSTEM_PROMPT}\n\n"
+            f"{ask_prompt}\n\n"
             f"### [CONVERSATION MEMORY & DATABASE SCOPE]\n"
             f"Available Schemas: {', '.join(schema_names)}\n"
             f"Active entities in conversation: {', '.join(sorted(self.active_entities)) if self.active_entities else 'None'}\n"

@@ -1934,6 +1934,14 @@ graph TD
         <!-- Tab 1: Connection & Schemas -->
         <div id="settings-tab-conn">
           <div class="form-group">
+            <label class="form-label" data-i18n="lbl_language">🌐 Interface & Config Language</label>
+            <select id="cfg-language" class="form-control">
+              <option value="en-US">English (en-US)</option>
+              <option value="pt-BR">Português (pt-BR)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
             <label class="form-label" data-i18n="lbl_dsn">🔗 Oracle Connection String (DSN)</label>
             <div style="position: relative; display: flex; align-items: center;">
               <input type="password" id="cfg-dsn" class="form-control" style="padding-right: 42px;" placeholder="user/password@host:1521/service or ${ORACLE_DSN}">
@@ -2097,6 +2105,7 @@ graph TD
         page_title: "LEAI Docs — Oracle Database Documentation & Annotation Studio",
         search_placeholder: "Pesquisar tabela, view, package, procedure ou regra de negócio...",
         settings_title: "Configurações (leai.yml)",
+        lbl_language: "🌐 Idioma da Interface & Configuração",
         object_catalog: "Catálogo de Objetos",
         loading_catalog: "Carregando catálogo...",
         empty_title: "Selecione um Objeto no Catálogo",
@@ -2261,6 +2270,7 @@ graph TD
         page_title: "LEAI Docs — Oracle Database Documentation & Annotation Studio",
         search_placeholder: "Search table, view, package, procedure, or business rule...",
         settings_title: "Settings (leai.yml)",
+        lbl_language: "🌐 Interface & Config Language",
         object_catalog: "Object Catalog",
         loading_catalog: "Loading catalog...",
         empty_title: "Select an Object in Catalog",
@@ -2423,7 +2433,7 @@ graph TD
       }
     };
 
-    let currentLang = localStorage.getItem('leai_language') || 'pt';
+    let currentLang = localStorage.getItem('leai_language') || '';
 
     function setLanguage(lang) {
       currentLang = (lang === 'en') ? 'en' : 'pt';
@@ -2488,6 +2498,22 @@ graph TD
     }
 
     async function init() {
+      if (!currentLang) {
+        try {
+          const cfgRes = await fetch('/api/config');
+          if (cfgRes.ok) {
+            const cfgData = await cfgRes.json();
+            if (cfgData.language && cfgData.language.toLowerCase().startsWith('pt')) {
+              currentLang = 'pt';
+            } else {
+              currentLang = 'en';
+            }
+          }
+        } catch (e) {
+          currentLang = 'en';
+        }
+      }
+      if (!currentLang) currentLang = 'en';
       setLanguage(currentLang);
       await checkStatus();
       await loadCatalog();
@@ -3552,6 +3578,11 @@ graph TD
         document.getElementById('cfg-include').value = (data.include || []).join(', ');
         document.getElementById('cfg-exclude').value = (data.exclude || []).join(', ');
 
+        const langEl = document.getElementById('cfg-language');
+        if (langEl) {
+          langEl.value = (data.language && data.language.toLowerCase().startsWith('pt')) ? 'pt-BR' : 'en-US';
+        }
+
         const objTypes = new Set(data.object_types || []);
         document.querySelectorAll('input[name="cfg-obj-type"]').forEach(cb => {
           cb.checked = objTypes.has(cb.value);
@@ -3797,6 +3828,7 @@ graph TD
       const rawPath = document.getElementById('cfg-raw-path').value.trim();
       const annPath = document.getElementById('cfg-ann-path').value.trim();
       const docPath = document.getElementById('cfg-doc-path').value.trim();
+      const language = document.getElementById('cfg-language')?.value || 'en-US';
 
       const defaultProv = document.getElementById('cfg-ai-provider').value;
       const model = document.getElementById('cfg-ai-model').value.trim();
@@ -3805,6 +3837,7 @@ graph TD
       const temp = parseFloat(document.getElementById('cfg-ai-temp').value) || 0.2;
 
       const payload = {
+        language: language,
         dsn: dsn,
         schemas: schemas,
         include: include,
@@ -3836,6 +3869,10 @@ graph TD
         if (data.success) {
           showToast(dict.toast_cfg_saved);
           closeSettingsModal();
+          const targetUiLang = language.toLowerCase().startsWith('pt') ? 'pt' : 'en';
+          if (typeof setLanguage === 'function' && currentLang !== targetUiLang) {
+            setLanguage(targetUiLang);
+          }
           await checkStatus();
           await loadCatalog();
         } else {

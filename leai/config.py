@@ -85,6 +85,7 @@ class LeaiConfig(BaseModel):
     git: GitConfig = Field(default_factory=GitConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     update_check: bool = True
+    language: str = Field(default="en-US", description="Interface language: 'en-US' or 'pt-BR'")
 
     @property
     def schema_name(self) -> str:

@@ -149,5 +149,10 @@ storage:
     no_cache: false                                # Se true, opera em modo 100% remoto: não grava arquivos locais em rawPath
     incremental: true                              # Se true, calcula hash SHA-256 e só cria novas versões no S3 para objetos modificados
 
-
-
+# ------------------------------------------------------------------------------
+# 9. IDIOMA DA INTERFACE, TERMINAL E PROMPTS DE IA (i18n)
+# ------------------------------------------------------------------------------
+# Define o idioma do terminal CLI, TUI interativa, Web Studio e prompts de enriquecimento por IA.
+# Valores suportados: "en-US" (padrão) ou "pt-BR"
+# Pode ser sobrescrito via flag de comando (--lang pt-BR / -L pt-BR) ou pela variável de ambiente LEAI_LANG=pt-BR
+language: "en-US"
