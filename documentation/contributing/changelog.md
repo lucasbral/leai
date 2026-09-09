@@ -2,6 +2,14 @@
 
 Todas as alterações notáveis no projeto **LEAI** são documentadas nesta página.
 
+## [0.2.30] — 2026
+
+### 🛡️ Tratamento de Bloqueio de Entrypoint no Windows & Compatibilidade Multiplataforma
+* **Tolerância a Bloqueio de Arquivo em Execução no Windows (`os error 32`):** Durante a autoatualização interativa via `uv tool` ou `pip` no Windows, o executável lançador ativo `leai.exe` não pode ser sobrescrito pelo instalador. O módulo `leai/updater.py` agora detecta essa condição e valida se o pacote Python no ambiente virtual já foi atualizado com sucesso (`sys.executable` ou `uv tool list`), permitindo que a atualização conclua normalmente e reinicie sem falsos erros para o usuário.
+* **Isolamento de Chamadas de Sistema em Runners de CI:** Aplicação de mock para `shutil.which` nos testes unitários simulando Windows, prevenindo que runners Linux/Ubuntu no GitHub Actions invoquem indevidamente o módulo C `_winapi` e garantindo que todos os jobs da matriz de testes passem com 100% de sucesso.
+
+---
+
 ## [0.2.29] — 2026
 
 ### 🌐 Localização Integral da Interface TUI e Banner Interativo

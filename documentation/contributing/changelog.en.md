@@ -2,6 +2,14 @@
 
 All notable changes to the **LEAI** project are documented here.
 
+## [0.2.30] — 2026
+
+### 🛡️ Windows Entrypoint File Lock Handling & CI Cross-Platform Compatibility
+* **Graceful Windows Active Process Lock Handling (`os error 32`):** During interactive auto-updates via `uv tool` or `pip` on Windows, the active launcher `leai.exe` cannot be overwritten while executing. `leai/updater.py` now detects this file lock condition and verifies whether the Python package was successfully installed in the virtual environment (`sys.executable` or `uv tool list`), allowing the update to complete smoothly and restart without spurious errors.
+* **CI Test Runner Isolation:** Mocked `shutil.which` in Windows entrypoint lock unit tests, preventing Linux/Ubuntu runners on GitHub Actions from erroneously attempting to invoke the Windows-only `_winapi` C module.
+
+---
+
 ## [0.2.29] — 2026
 
 ### 🌐 Complete TUI Interface & Interactive Banner Localization
