@@ -9,7 +9,6 @@ All notable changes to the **LEAI** project are documented here.
 ### 🛡️ Auto-Update Restart Fixes
 * **Robust Module-Based Process Restart (`python -m leai`):** Replaced direct `sys.argv` script invocation with `[sys.executable, "-m", "leai"] + sys.argv[1:]`. This completely resolves Windows `[Errno 2] No such file or directory` where the binary executable launcher (`leai.exe` / `~/.local/bin/leai`) was erroneously passed to Python as a script path.
 * **Synchronous Foreground Execution on Windows:** Used `subprocess.call` instead of `os.execv` on Windows so the terminal console session remains in the foreground without prematurely handing control back to PowerShell.
-* **Restart Update Check Suppression:** Automatically sets `LEAI_NO_UPDATE_CHECK=1` in the restarted process environment so the refreshed instance boots directly into the user session without redundant checks.
 
 ---
 

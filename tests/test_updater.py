@@ -143,7 +143,6 @@ class TestUpdater(unittest.TestCase):
             cmd = call_args[0]
             self.assertIn("-m", cmd)
             self.assertIn("leai", cmd)
-            self.assertEqual(call_kwargs.get("env", {}).get("LEAI_NO_UPDATE_CHECK"), "1")
 
     def test_config_update_check_field(self, tmp_path_factory=None):
         cfg = LeaiConfig()
