@@ -31,6 +31,7 @@ from rich.panel import Panel
 from rich.table import Column, Table
 
 from leai.config import ConfigError, LeaiConfig, load_config
+from leai.i18n import t
 from leai.models import SchemaMetadata
 from leai.raw import load_raw_schemas
 
@@ -446,7 +447,7 @@ def extract(
         if storage:
             bucket_str = f"{cfg.storage.seaweedfs.bucket}/{cfg.storage.seaweedfs.raw_prefix}"
             if total_s3_skipped > 0 or total_s3_uploaded > 0:
-                bucket_str += f" ([bold green]{total_s3_uploaded} versionados[/bold green], [dim]{total_s3_skipped} inalterados/skip[/dim])"
+                bucket_str += f" ([bold green]{total_s3_uploaded} {t('cli.s3_versioned')}[/bold green], [dim]{total_s3_skipped} {t('cli.s3_unchanged')}[/dim])"
             output_paths["SeaweedFS S3"] = bucket_str
         if is_no_cache:
             output_paths["Local Disk Cache"] = "[yellow]Disabled (Remote-only)[/yellow]"
@@ -595,12 +596,11 @@ def update(
 
                     def _on_s3_progress(done: int, total: int, s_name=schema_name, idx=s_idx, t0=schema_t0) -> None:
                         elapsed_str = _fmt_dur(time.perf_counter() - t0)
-                        status.update(
-                            f"[cyan][{s_name} ({idx}/{total_schemas})] [{elapsed_str}] Sincronizando SeaweedFS S3 ({done}/{total} arquivos)...[/cyan]"
-                        )
+                        msg = t("cli.syncing_seaweedfs", done=done, total=total)
+                        status.update(f"[cyan][{s_name} ({idx}/{total_schemas})] [{elapsed_str}] {msg}[/cyan]")
 
                     status.update(
-                        f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] Salvando objetos RAW...[/cyan]"
+                        f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] {t('cli.saving_raw')}[/cyan]"
                     )
 
                     # 1. Save delta RAW and merge with existing snapshot
@@ -619,7 +619,7 @@ def update(
                         total_s3_skipped += getattr(storage.last_save_result, "skipped", 0)
 
                     status.update(
-                        f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] Sincronizando anotações...[/cyan]"
+                        f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] {t('cli.syncing_annotations')}[/cyan]"
                     )
 
                     # 2. Sync annotations ONLY for the modified objects (preserves all existing descriptions/comments)
@@ -635,7 +635,7 @@ def update(
                     # 3. Optional compilation for modified objects
                     if compile_docs:
                         status.update(
-                            f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] Compilando documentação Markdown...[/cyan]"
+                            f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] {t('cli.compiling_docs')}[/cyan]"
                         )
                         gen_md, _ = write_schema_docs(
                             schema_meta,
@@ -649,7 +649,7 @@ def update(
                         total_md += len(gen_md)
 
                 if storage:
-                    status.update("[cyan]Sincronizando glossário com SeaweedFS S3...[/cyan]")
+                    status.update(f"[cyan]{t('cli.syncing_glossary')}[/cyan]")
                     try:
                         storage.sync_glossary(cfg.annotationsPath, no_cache=is_no_cache)
                     except Exception as exc:
@@ -667,7 +667,7 @@ def update(
         if storage:
             bucket_str = f"{cfg.storage.seaweedfs.bucket}"
             if total_s3_skipped > 0 or total_s3_uploaded > 0:
-                bucket_str += f" ([bold green]{total_s3_uploaded} versionados[/bold green], [dim]{total_s3_skipped} skip[/dim])"
+                bucket_str += f" ([bold green]{total_s3_uploaded} {t('cli.s3_versioned')}[/bold green], [dim]{total_s3_skipped} {t('cli.s3_unchanged')}[/dim])"
             out_paths["SeaweedFS S3"] = bucket_str
 
         _print_final_summary_panel(
@@ -1821,10 +1821,8 @@ def serve(
         cfg = load_config(config)
     except Exception as exc:
         if config.exists():
-            console.print(f"[bold yellow]⚠️ Aviso:[/bold yellow] Falha ao ler [cyan]{config}[/cyan]: {exc}")
+            console.print(t("cli.config_warn_read", path=config, error=exc))
         cfg = LeaiConfig()
-
-    from leai.i18n import t
 
     storage = _resolve_storage(cfg, seaweed)
     is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
@@ -2170,12 +2168,12 @@ def list_rules_command(
     table.add_column("Canonical SQL Filter", style="green")
     table.add_column("Definition", style="white")
 
-    for t in glossary.terms:
+    for term_item in glossary.terms:
         table.add_row(
-            t.term,
-            t.primary_table or "-",
-            t.canonical_filter or "-",
-            t.definition,
+            term_item.term,
+            term_item.primary_table or "-",
+            term_item.canonical_filter or "-",
+            term_item.definition,
         )
 
     console.print()

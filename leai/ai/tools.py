@@ -498,7 +498,7 @@ def search_business_documentation(
                         if any(t in norm_col for t in tokens):
                             score += 40
                             matched_fields.append(f"column: {col_name}")
-                            snippets.append(f"coluna {col_name}: '{desc_str}'")
+                            snippets.append(f"column {col_name}: '{desc_str}'")
 
                 # Tags check
                 if fields_filter in ("all", "tags") and ann.tags:
@@ -641,7 +641,7 @@ def search_business_documentation(
 
                 if matched_sub:
                     matched_fields.append(f"column/routine: {sname}")
-                    snippets.append(f"coluna {sname}: '{scomment}'" if scomment else f"coluna {sname}")
+                    snippets.append(f"column {sname}: '{scomment}'" if scomment else f"column {sname}")
 
             if score > 0:
                 seen_keys.add(item_key)

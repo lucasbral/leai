@@ -162,3 +162,41 @@ def test_bilingual_ai_prompts():
     pt_ask_prompt = get_ask_system_prompt("pt-BR")
     assert "You are the LEAI Expert Assistant" in en_ask_prompt
     assert "Você é o Assistente Especialista LEAI" in pt_ask_prompt
+
+
+def test_bilingual_markdown_doc_rendering():
+    """Verify Markdown documentation headers localize according to active locale."""
+    from leai.docs import render_table_markdown
+    from leai.models import ColumnMeta, ForeignKeyMeta, ObjectAnnotation, TableMeta
+
+    table = TableMeta(
+        name="CUSTOMERS",
+        columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)],
+        primary_keys=["ID"],
+        foreign_keys=[ForeignKeyMeta(name="FK_CUST_GROUP", column="GROUP_ID", referenced_table="GROUPS", referenced_column="ID")],
+    )
+    annotation = ObjectAnnotation(
+        description="Customer profile records",
+        business_rules=["Only active customers can place orders"],
+    )
+
+    # 1. English (default)
+    set_locale("en-US")
+    md_en = render_table_markdown(table, annotation=annotation)
+    assert "## Overview" in md_en
+    assert "## Columns" in md_en
+    assert "## Primary Key" in md_en
+    assert "## Foreign Keys" in md_en
+    assert "## Business Rules" in md_en
+
+    # 2. Portuguese
+    set_locale("pt-BR")
+    md_pt = render_table_markdown(table, annotation=annotation)
+    assert "## Visão Geral" in md_pt
+    assert "## Colunas" in md_pt
+    assert "## Chave Primária" in md_pt
+    assert "## Chaves Estrangeiras" in md_pt
+    assert "## Regras de Negócio" in md_pt
+
+    # Reset
+    set_locale("en-US")

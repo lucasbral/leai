@@ -2,6 +2,17 @@
 
 Todas as alterações notáveis no projeto **LEAI** são documentadas nesta página.
 
+## [0.2.27] — 2026
+
+### 🌐 Conclusão da Localização Integral e Padronização Canônica
+* **Terminal Canônico 100% em Inglês por Padrão:** Varredura exaustiva e migração completa de todas as mensagens residuais em Português no CLI e TUI para o catálogo de internacionalização (`leai/i18n`), garantindo saída limpa em Inglês canônico por padrão e tradução instantânea em Português quando `language: "pt-BR"` estiver ativo.
+* **Tabelas de Status Git e Indicadores do TUI:** A tabela `/git status` (propriedades, colunas, status de sincronização e avisos de commits à frente/atrás), mensagens de cópia inteligente e dicas de atalhos de clipboard foram 100% integradas ao motor i18n com suporte bilíngue.
+* **Cabeçalhos de Documentação Markdown Bilíngues:** Geradores de documentação (`leai/docs.py`) agora produzem seções e títulos de Markdown (`## Overview`, `## Columns`, `## Primary Key`, `## Foreign Keys`, `## Business Rules`) de forma dinâmica no idioma ativo (`## Visão Geral`, `## Colunas`, `## Chave Primária`, etc. em `pt-BR`).
+* **Web Studio Fallbacks e Telas de Carga:** As telas de carregamento do catálogo, mensagens de erro do SeaweedFS e botões de alternância da visualização de linhagem/Mermaid foram integrados ao dicionário i18n da interface Web.
+* **Prevenção de Colisão e Limpeza de Imports:** Remoção de importações locais redundantes de `t` que causavam `UnboundLocalError` e renomeação de variáveis de iteração que colidiam com o símbolo de tradução.
+
+---
+
 ## [0.2.26] — 2026
 
 ### 🌐 Arquitetura de Internacionalização (i18n) Completa (en-US / pt-BR)

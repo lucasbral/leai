@@ -2,6 +2,17 @@
 
 All notable changes to the **LEAI** project are documented here.
 
+## [0.2.27] — 2026
+
+### 🌐 Full Localization Completion & Canonical Standardization
+* **100% Canonical English Terminal by Default:** Comprehensive codebase scan and migration of all residual Portuguese terminal messages in CLI and TUI to the `leai/i18n` catalog, ensuring clean English output by default and seamless Portuguese when `language: "pt-BR"` is active.
+* **Git Status Tables & TUI Indicators:** The `/git status` table (properties, columns, synchronization states, ahead/behind commit indicators), smart clipboard copy messages, and footer latency hints are 100% localized.
+* **Bilingual Markdown Documentation Headers:** Documentation generators (`leai/docs.py`) now dynamically render sections and Markdown headings (`## Overview`, `## Columns`, `## Primary Key`, `## Foreign Keys`, `## Business Rules`) according to active locale (`## Visão Geral`, `## Colunas`, etc. in `pt-BR`).
+* **Web Studio Fallbacks & Loading Screens:** Catalog synchronization loaders, SeaweedFS error messages, and Mermaid lineage rendering fallback controls are now fully integrated into the Web UI i18n dictionary.
+* **Import Hygiene & Scope Collision Fixes:** Cleaned up redundant local `t` imports that could trigger `UnboundLocalError` and renamed iteration variables shadowing the `t` translator function.
+
+---
+
 ## [0.2.26] — 2026
 
 ### 🌐 Complete Internationalization (i18n) Architecture (en-US / pt-BR)

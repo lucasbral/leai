@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from leai.annotations import ensure_annotation_stub
+from leai.i18n import t
 from leai.models import (
     CodeObjectMeta,
     DependencyLink,
@@ -68,12 +69,12 @@ def _render_annotation_details(annotation: ObjectAnnotation | None) -> list[str]
         lines.extend(["", f"**Tags / Business Domain:** `{tags_str}`"])
 
     if annotation.warnings:
-        lines.extend(["", "## Technical Alerts & Warnings", ""])
+        lines.extend(["", t("doc.warnings_header"), ""])
         for warn in annotation.warnings:
             lines.append(f"> [!WARNING]\n> {warn}")
 
     if annotation.related_objects:
-        lines.extend(["", "## Business Relationships", ""])
+        lines.extend(["", t("doc.related_objects_header"), ""])
         for rel in annotation.related_objects:
             lines.append(f"- {rel}")
 
@@ -83,7 +84,7 @@ def _render_annotation_details(annotation: ObjectAnnotation | None) -> list[str]
 def _render_use_cases(annotation: ObjectAnnotation | None) -> list[str]:
     if not annotation or not annotation.use_cases:
         return []
-    lines = ["", "## Use Cases & Sample Queries", ""]
+    lines = ["", t("doc.use_cases_header"), ""]
     for uc in annotation.use_cases:
         uc_clean = uc.strip()
         if "SELECT " in uc_clean.upper() and not uc_clean.startswith("```"):
@@ -96,7 +97,7 @@ def _render_use_cases(annotation: ObjectAnnotation | None) -> list[str]:
 def _render_business_rules(annotation: ObjectAnnotation | None) -> list[str]:
     lines = _render_annotation_details(annotation)
     if annotation and annotation.business_rules:
-        lines.extend(["", "## Business Rules", ""])
+        lines.extend(["", t("doc.business_rules_header"), ""])
         for rule in annotation.business_rules:
             lines.append(f"- {rule}")
     lines.extend(_render_use_cases(annotation))
@@ -365,13 +366,13 @@ def render_table_markdown(
     ann_cols = annotation.columns if annotation else {}
     lines = []
     lines.extend(_build_rag_frontmatter(trace_result, annotation))
-    lines.extend([f"# TABLE: {table.name}", "", "## Overview", ""])
+    lines.extend([f"# TABLE: {table.name}", "", t("doc.overview_header"), ""])
     lines.extend(_render_audit_meta(table))
     table_desc = (annotation and annotation.description) or table.comment or table_doc or "No technical description in Oracle dictionary."
     lines.append(table_desc.replace("\r\n", " ").replace("\n", " "))
     lines.extend(_render_business_rules(annotation))
 
-    lines.extend(["", "## Columns", "", "| Column | Type | Nullable | Default | Comment |", "|---|---|---|---|---|"])
+    lines.extend(["", t("doc.columns_header"), "", "| Column | Type | Nullable | Default | Comment |", "|---|---|---|---|---|"])
 
     for column in table.columns:
         raw_comment = ann_cols.get(column.name) or column_docs.get(column.name) or column.comment or ""
@@ -379,10 +380,10 @@ def render_table_markdown(
         default_clean = (column.default or "").replace("\r\n", " ").replace("\n", " ").replace("|", "\\|")
         lines.append(f"| {column.name} | {column.data_type} | {'YES' if column.nullable else 'NO'} | {default_clean} | {comment_clean} |")
 
-    lines.extend(["", "## Primary Key", ""])
+    lines.extend(["", t("doc.primary_keys_header"), ""])
     lines.append(", ".join(table.primary_keys) if table.primary_keys else "Not defined")
 
-    lines.extend(["", "## Foreign Keys", ""])
+    lines.extend(["", t("doc.foreign_keys_header"), ""])
     if table.foreign_keys:
         lines.append("| Constraint | Column | Reference |")
         lines.append("|---|---|---|")
@@ -407,12 +408,12 @@ def render_view_markdown(
     ann_cols = annotation.columns if annotation else {}
     lines = []
     lines.extend(_build_rag_frontmatter(trace_result, annotation))
-    lines.extend([f"# VIEW: {view.name}", "", "## Overview", ""])
+    lines.extend([f"# VIEW: {view.name}", "", t("doc.overview_header"), ""])
     desc = (annotation and annotation.description) or view.comment or view_doc or "Oracle database View."
     lines.append(desc.replace("\r\n", " ").replace("\n", " "))
     lines.extend(_render_business_rules(annotation))
 
-    lines.extend(["", "## Columns", "", "| Column | Type | Nullable | Default | Comment |", "|---|---|---|---|---|"])
+    lines.extend(["", t("doc.columns_header"), "", "| Column | Type | Nullable | Default | Comment |", "|---|---|---|---|---|"])
 
     for column in view.columns:
         raw_comment = ann_cols.get(column.name) or column_docs.get(column.name) or column.comment or ""
@@ -421,7 +422,7 @@ def render_view_markdown(
         lines.append(f"| {column.name} | {column.data_type} | {'YES' if column.nullable else 'NO'} | {default_clean} | {comment_clean} |")
 
     if view.text:
-        lines.extend(["", "## SQL Definition", "", "```sql", view.text.strip(), "```"])
+        lines.extend(["", t("doc.sql_definition_header"), "", "```sql", view.text.strip(), "```"])
 
     lines.extend(_render_trace_xray_and_graph(trace_result, annotation))
     lines.extend(_render_manual_section(view_doc))
@@ -436,7 +437,7 @@ def render_mview_markdown(
 ) -> str:
     lines = []
     lines.extend(_build_rag_frontmatter(trace_result, annotation))
-    lines.extend([f"# MATERIALIZED VIEW: {mview.name}", "", "## Overview", ""])
+    lines.extend([f"# MATERIALIZED VIEW: {mview.name}", "", t("doc.overview_header"), ""])
     desc = (annotation and annotation.description) or mview.comment or mview_doc or "Oracle Materialized View."
     lines.append(desc.replace("\r\n", " ").replace("\n", " "))
     lines.extend(_render_business_rules(annotation))
@@ -444,7 +445,7 @@ def render_mview_markdown(
     lines.extend(
         [
             "",
-            "## Properties",
+            t("doc.properties_header"),
             "",
             "| Property | Value |",
             "|---|---|",
@@ -456,14 +457,14 @@ def render_mview_markdown(
 
     if mview.columns:
         ann_cols = annotation.columns if annotation else {}
-        lines.extend(["", "## Columns", "", "| Column | Type | Nullable | Comment |", "|---|---|---|---|"])
+        lines.extend(["", t("doc.columns_header"), "", "| Column | Type | Nullable | Comment |", "|---|---|---|---|"])
         for column in mview.columns:
             raw_comment = ann_cols.get(column.name) or column.comment or ""
             comment_clean = raw_comment.replace("\r\n", " ").replace("\n", " ").replace("|", "\\|")
             lines.append(f"| {column.name} | {column.data_type} | {'YES' if column.nullable else 'NO'} | {comment_clean} |")
 
     if mview.query:
-        lines.extend(["", "## SQL Query", "", "```sql", mview.query.strip(), "```"])
+        lines.extend(["", t("doc.sql_query_header"), "", "```sql", mview.query.strip(), "```"])
 
     lines.extend(_render_trace_xray_and_graph(trace_result, annotation))
     lines.extend(_render_manual_section(mview_doc))
@@ -478,7 +479,7 @@ def render_subprogram_markdown(
 ) -> str:
     lines = []
     lines.extend(_build_rag_frontmatter(trace_result, annotation))
-    lines.extend([f"# {sub.subprogram_type.upper()}: {sub.package_name}.{sub.name}", "", "## Overview", ""])
+    lines.extend([f"# {sub.subprogram_type.upper()}: {sub.package_name}.{sub.name}", "", t("doc.overview_header"), ""])
     desc = (
         (annotation and annotation.description)
         or sub.comment
@@ -489,7 +490,7 @@ def render_subprogram_markdown(
     lines.extend(_render_business_rules(annotation))
 
     if sub.source:
-        lines.extend(["", "## PL/SQL Source Code", "", "```sql", sub.source.strip(), "```"])
+        lines.extend(["", t("doc.sources_header"), "", "```sql", sub.source.strip(), "```"])
 
     lines.extend(_render_trace_xray_and_graph(trace_result, annotation))
     lines.extend(_render_manual_section(sub_doc))
@@ -504,7 +505,7 @@ def render_code_object_markdown(
 ) -> str:
     lines = []
     lines.extend(_build_rag_frontmatter(trace_result, annotation))
-    lines.extend([f"# {code_obj.object_type.upper()}: {code_obj.name}", "", "## Overview", ""])
+    lines.extend([f"# {code_obj.object_type.upper()}: {code_obj.name}", "", t("doc.overview_header"), ""])
     desc = (
         (annotation and annotation.description)
         or code_obj.comment
@@ -515,7 +516,7 @@ def render_code_object_markdown(
     lines.extend(_render_business_rules(annotation))
 
     if code_obj.subprograms:
-        lines.extend(["", "## Disassembled Subprograms", "", "| Type | Name | File |", "|---|---|---|"])
+        lines.extend(["", t("doc.subprograms_header"), "", "| Type | Name | File |", "|---|---|---|"])
         for sub in code_obj.subprograms:
             lines.append(f"| {sub.subprogram_type} | {sub.name} | `{code_obj.name}/{sub.name}.md` |")
 
@@ -539,7 +540,7 @@ def render_trigger_markdown(
         [
             f"# TRIGGER: {trigger.name}",
             "",
-            "## Overview",
+            t("doc.overview_header"),
             "",
             (annotation and annotation.description) or f"Trigger associated with table `{trigger.table_name or 'N/A'}`.",
         ]
@@ -548,7 +549,7 @@ def render_trigger_markdown(
     lines.extend(
         [
             "",
-            "## Properties",
+            t("doc.properties_header"),
             "",
             "| Property | Value |",
             "|---|---|",
@@ -575,7 +576,7 @@ def render_sequence_markdown(
     lines = [
         f"# SEQUENCE: {sequence.name}",
         "",
-        "## Overview",
+        t("doc.overview_header"),
         "",
         (annotation and annotation.description) or "Oracle numeric sequence.",
     ]
@@ -583,7 +584,7 @@ def render_sequence_markdown(
     lines.extend(
         [
             "",
-            "## Properties",
+            t("doc.properties_header"),
             "",
             "| Property | Value |",
             "|---|---|",
@@ -606,7 +607,7 @@ def render_index_markdown(
     lines = [
         f"# INDEX: {index.name}",
         "",
-        "## Overview",
+        t("doc.overview_header"),
         "",
         (annotation and annotation.description) or f"Index created on table `{index.table_name}` ({index.uniqueness}).",
     ]
@@ -614,7 +615,7 @@ def render_index_markdown(
     lines.extend(
         [
             "",
-            "## Properties",
+            t("doc.properties_header"),
             "",
             "| Property | Value |",
             "|---|---|",
@@ -635,7 +636,7 @@ def render_synonym_markdown(
     lines = [
         f"# SYNONYM: {synonym.name}",
         "",
-        "## Overview",
+        t("doc.overview_header"),
         "",
         (annotation and annotation.description) or f"Synonym pointing to `{synonym.table_owner or ''}.{synonym.table_name or ''}`.",
     ]
@@ -643,7 +644,7 @@ def render_synonym_markdown(
     lines.extend(
         [
             "",
-            "## Properties",
+            t("doc.properties_header"),
             "",
             "| Property | Value |",
             "|---|---|",
@@ -717,17 +718,17 @@ def render_schema_index_markdown(
         "|---|---|---|---|---|---|---|",
     ]
 
-    for t in sorted(schema.tables, key=lambda x: x.name):
-        tr = trace_map.get(t.name.upper())
-        ann = annotations_map.get(t.name.upper())
+    for tbl in sorted(schema.tables, key=lambda x: x.name):
+        tr = trace_map.get(tbl.name.upper())
+        ann = annotations_map.get(tbl.name.upper())
         dep_count = len(tr.dependencies) if tr else 0
         risk = _calculate_risk_level(dep_count)
         risk_emoji = "🔴" if risk in ("CRITICAL", "HIGH") else ("🟡" if risk == "MEDIUM" else "🟢")
-        pk_str = f"PK: {', '.join(t.primary_keys)}" if t.primary_keys else "No PK"
-        cols_str = f"{len(t.columns)} cols ({pk_str})"
+        pk_str = f"PK: {', '.join(tbl.primary_keys)}" if tbl.primary_keys else "No PK"
+        cols_str = f"{len(tbl.columns)} cols ({pk_str})"
         tags_str = f"`{', '.join(ann.tags)}`" if (ann and ann.tags) else "-"
         lines.append(
-            f"| `{t.name}` | Table | {risk_emoji} `{risk}` | {dep_count} | {cols_str} | {tags_str} | [View Details](tables/{t.name}.md) |"
+            f"| `{tbl.name}` | Table | {risk_emoji} `{risk}` | {dep_count} | {cols_str} | {tags_str} | [View Details](tables/{tbl.name}.md) |"
         )
 
     for v in sorted(schema.views, key=lambda x: x.name):

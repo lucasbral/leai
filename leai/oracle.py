@@ -1138,7 +1138,7 @@ def fetch_focal_trace(
                                     target_name=r_upper,
                                     target_type=r_type,
                                     relation_type="DEPENDS_ON",
-                                    details=f"{s_upper} referencia {r_type} {r_upper}",
+                                    details=f"{s_upper} references {r_type} {r_upper}",
                                     depth=current_depth,
                                 )
                             )
@@ -1157,7 +1157,7 @@ def fetch_focal_trace(
                                     target_name=r_upper,
                                     target_type=r_type,
                                     relation_type="REFERENCED_BY",
-                                    details=f"{s_type} {s_upper} depende de {r_upper}",
+                                    details=f"{s_type} {s_upper} depends on {r_upper}",
                                     depth=current_depth,
                                 )
                             )
@@ -1194,7 +1194,7 @@ def fetch_focal_trace(
                                 target_name=curr_name,
                                 target_type="TABLE",
                                 relation_type="FK_REFERENCED_BY",
-                                details=f"Tabela filha {child_upper}.{child_col} -> {curr_name}.{parent_col} ({c_name})",
+                                details=f"Child table {child_upper}.{child_col} -> {curr_name}.{parent_col} ({c_name})",
                                 depth=current_depth,
                             )
                         )

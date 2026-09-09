@@ -62,13 +62,14 @@ def resolve_locale(
     return DEFAULT_LOCALE
 
 
-def t(key: str, **kwargs: Any) -> str:
+def t(key: str, locale: str | None = None, **kwargs: Any) -> str:
     """Translates a key into the active locale with safe fallback and interpolation."""
-    catalog = CATALOGS.get(_CURRENT_LOCALE, EN_MESSAGES)
+    target_locale = normalize_locale(locale) if locale else _CURRENT_LOCALE
+    catalog = CATALOGS.get(target_locale, EN_MESSAGES)
     template = catalog.get(key)
 
     # Fallback to English if missing in target locale
-    if template is None and _CURRENT_LOCALE != "en-US":
+    if template is None and target_locale != "en-US":
         template = EN_MESSAGES.get(key)
 
     # If still not found, return key

@@ -39,6 +39,7 @@ from leai.docs import (
     write_schema_docs,
 )
 from leai.enrich import enrich_schema_annotations
+from leai.i18n import t
 from leai.models import SchemaMetadata
 from leai.oracle import _build_connect_kwargs, fetch_available_schemas, fetch_schema_metadata
 from leai.raw import load_raw_schemas, save_raw_schema, trace_raw_dependencies
@@ -403,18 +404,15 @@ class InteractiveTUISession:
                     plat = git_info.platform_name
                     branch = git_info.branch or "main"
                     if git_info.behind > 0:
-                        console.print(
-                            f"[bold yellow]⤓ Atenção: Existem {git_info.behind} novo(s) commit(s) no {plat}! "
-                            f"Digite [bold cyan]/git pull[/bold cyan] para sincronizar.[/bold yellow]\n"
-                        )
+                        console.print(t("tui.git_behind_warning", behind=git_info.behind, platform=plat))
                     elif git_info.has_uncommitted:
                         total_mod = len(git_info.modified_files) + len(git_info.untracked_files)
                         console.print(
-                            f"[dim]◈ {plat}: branch [bold]{branch}[/bold] • {total_mod} arquivo(s) modificado(s) localmente "
-                            f"(use [bold cyan]/git sync[/bold cyan] para sincronizar)[/dim]\n"
+                            t("tui.git_status_branch", platform=plat, branch=branch, count=total_mod)
+                            + " (use [bold cyan]/git sync[/bold cyan])\n"
                         )
                     else:
-                        console.print(f"[dim]◈ {plat}: branch [bold]{branch}[/bold] (repositório sincronizado)[/dim]\n")
+                        console.print(t("tui.git_synced", platform=plat, branch=branch))
             except Exception:
                 pass
 
@@ -764,20 +762,20 @@ class InteractiveTUISession:
     def _run_copy(self, args: list[str]) -> None:
         """Copies the last AI assistant response or specific code block to OS clipboard."""
         if not self.last_ai_reply:
-            console.print("[yellow]! Nenhuma resposta da IA para copiar nesta sessão.[/yellow]\n")
+            console.print(t("tui.copy_no_ai_response"))
             return
 
         arg0 = args[0].strip().lower() if args else "all"
 
         if arg0 == "list":
             if not self.last_code_blocks:
-                console.print("[dim]Nenhum bloco de código encontrado na última resposta.[/dim]\n")
+                console.print(t("tui.copy_no_code_block"))
                 return
-            tbl = Table(title="[bold cyan]📋 Blocos de Código na Última Resposta[/bold cyan]", box=box.ROUNDED)
+            tbl = Table(title=t("tui.copy_blocks_title"), box=box.ROUNDED)
             tbl.add_column("#", style="bold yellow", justify="center", width=4)
-            tbl.add_column("Linguagem", style="bold cyan", width=12)
-            tbl.add_column("Linhas", justify="right", width=8)
-            tbl.add_column("Prévia", style="dim")
+            tbl.add_column(t("tui.copy_col_lang"), style="bold cyan", width=12)
+            tbl.add_column(t("tui.copy_col_lines"), justify="right", width=8)
+            tbl.add_column(t("tui.copy_col_preview"), style="dim")
             for b in self.last_code_blocks:
                 preview = b["code"].splitlines()[0] if b["code"] else ""
                 if len(preview) > 60:
@@ -785,10 +783,8 @@ class InteractiveTUISession:
                 tbl.add_row(str(b["index"]), b["language"].upper(), str(b["lines"]), preview)
             console.print()
             console.print(tbl)
-            console.print("[dim]Para copiar: [bold cyan]/copy <número>[/bold cyan] (ex: /copy 1)[/dim]\n")
+            console.print(t("tui.copy_how_to"))
             return
-
-        from leai.i18n import t
 
         # Check if user specified a block number (e.g. /copy 1, /copy 2)
         if arg0.isdigit():
@@ -871,8 +867,6 @@ class InteractiveTUISession:
             if glossary is None:
                 glossary = load_glossary(self.config.annotationsPath)
 
-            from leai.i18n import t
-
             if not glossary.terms:
                 console.print(t("rule.empty"))
                 console.print(t("rule.hint_add"))
@@ -898,8 +892,6 @@ class InteractiveTUISession:
             return
 
         if subcmd in ("find", "search"):
-            from leai.i18n import t
-
             if len(args) < 2:
                 console.print(t("rule.search_usage"))
                 return
@@ -923,8 +915,6 @@ class InteractiveTUISession:
             return
 
         if subcmd in ("add", "new"):
-            from leai.i18n import t
-
             console.print(t("rule.add_header"))
             term_name = " ".join(args[1:]).strip() if len(args) > 1 else ""
             if not term_name:
@@ -958,8 +948,6 @@ class InteractiveTUISession:
             return
 
         if subcmd in ("del", "delete", "rm"):
-            from leai.i18n import t
-
             if len(args) < 2:
                 console.print(t("rule.del_usage"))
                 return
@@ -973,8 +961,6 @@ class InteractiveTUISession:
                 console.print(t("rule.del_not_found", term=term_to_del))
             return
 
-        from leai.i18n import t
-
         console.print(t("rule.general_usage"))
 
     def _run_git(self, args: list[str]) -> None:
@@ -984,46 +970,44 @@ class InteractiveTUISession:
         subcmd = args[0].lower() if args else "status"
 
         if subcmd in ("status", "st", "info"):
-            with console.status("[cyan]Verificando status do repositório Git/GitLab...[/cyan]", spinner="dots"):
+            with console.status(t("git.checking_status"), spinner="dots"):
                 info = get_git_status(fetch=True)
 
             if not info.is_repo:
-                console.print("\n[yellow]! O diretório atual não é um repositório Git.[/yellow]")
-                console.print("[dim]Para inicializar: git init && git remote add origin <URL_DO_GITLAB>[/dim]\n")
+                console.print(t("git.not_repo"))
+                console.print(t("git.init_hint"))
                 return
 
-            tbl = Table(title=f"[bold cyan]🌿 Status do Repositório ({info.platform_name})[/bold cyan]", box=box.ROUNDED)
-            tbl.add_column("Propriedade", style="bold yellow", width=22)
-            tbl.add_column("Valor", style="white")
+            tbl = Table(title=t("tui.git_tbl_title", platform=info.platform_name), box=box.ROUNDED)
+            tbl.add_column(t("tui.git_col_prop"), style="bold yellow", width=22)
+            tbl.add_column(t("tui.git_col_val"), style="white")
 
-            tbl.add_row("Plataforma", f"[bold green]{info.platform_name}[/bold green]")
-            tbl.add_row("Branch Atual", f"[bold cyan]{info.branch}[/bold cyan]")
-            tbl.add_row("Remoto (origin)", info.remote_url or "[dim]Nenhum remoto configurado[/dim]")
+            tbl.add_row(t("tui.git_row_platform"), f"[bold green]{info.platform_name}[/bold green]")
+            tbl.add_row(t("tui.git_row_branch"), f"[bold cyan]{info.branch}[/bold cyan]")
+            tbl.add_row(t("tui.git_row_remote"), info.remote_url or t("tui.git_no_remote"))
 
             sync_status = []
             if info.behind > 0:
-                sync_status.append(f"[bold yellow]⤓ {info.behind} commit(s) atrás do remoto (use /git pull)[/bold yellow]")
+                sync_status.append(t("tui.git_behind_commits", count=info.behind))
             if info.ahead > 0:
-                sync_status.append(f"[bold green]⤒ {info.ahead} commit(s) à frente do remoto[/bold green]")
+                sync_status.append(t("tui.git_ahead_commits", count=info.ahead))
             if not sync_status:
-                sync_status.append("[bold green]● Sincronizado com remoto[/bold green]")
-            tbl.add_row("Sincronização", ", ".join(sync_status))
+                sync_status.append(t("tui.git_synced_status"))
+            tbl.add_row(t("tui.git_row_sync"), ", ".join(sync_status))
 
             mod_count = len(info.modified_files)
             untr_count = len(info.untracked_files)
             changes_desc = []
             if mod_count > 0:
-                changes_desc.append(f"{mod_count} arquivo(s) modificado(s)")
+                changes_desc.append(t("tui.git_files_modified", count=mod_count))
             if untr_count > 0:
-                changes_desc.append(f"{untr_count} arquivo(s) não rastreado(s)")
+                changes_desc.append(t("tui.git_files_untracked", count=untr_count))
             if not changes_desc:
-                changes_desc.append("[green]Nenhuma alteração pendente (working tree clean)[/green]")
-            tbl.add_row("Alterações Locais", ", ".join(changes_desc))
+                changes_desc.append(t("tui.git_clean_working_tree"))
+            tbl.add_row(t("tui.git_row_changes"), ", ".join(changes_desc))
 
             console.print()
             console.print(tbl)
-
-            from leai.i18n import t
 
             if info.modified_files or info.untracked_files:
                 console.print(t("git.changed_files"))
@@ -1037,8 +1021,6 @@ class InteractiveTUISession:
             return
 
         if subcmd in ("pull", "update", "fetch"):
-            from leai.i18n import t
-
             console.print(t("git.pulling"))
             ok, msg = git_pull()
             if ok:
@@ -1053,8 +1035,6 @@ class InteractiveTUISession:
             return
 
         if subcmd in ("sync", "push", "commit"):
-            from leai.i18n import t
-
             commit_msg = " ".join(args[1:]).strip() if len(args) > 1 else None
             console.print(t("git.syncing"))
             ok, msg = git_sync(message=commit_msg)
@@ -1063,8 +1043,6 @@ class InteractiveTUISession:
             else:
                 console.print(t("git.sync_error", error=msg))
             return
-
-        from leai.i18n import t
 
         console.print(t("git.usage"))
 
@@ -1425,12 +1403,11 @@ class InteractiveTUISession:
 
                         def _on_s3_progress(done: int, total: int, s_name=schema_name, idx=s_idx, t0=schema_t0) -> None:
                             elapsed_str = _fmt_dur(time.perf_counter() - t0)
-                            status.update(
-                                f"[cyan][{s_name} ({idx}/{total_schemas})] [{elapsed_str}] Sincronizando SeaweedFS S3 ({done}/{total} arquivos)...[/cyan]"
-                            )
+                            msg = t("cli.syncing_seaweedfs", done=done, total=total)
+                            status.update(f"[cyan][{s_name} ({idx}/{total_schemas})] [{elapsed_str}] {msg}[/cyan]")
 
                         status.update(
-                            f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] Salvando objetos RAW...[/cyan]"
+                            f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] {t('cli.saving_raw')}[/cyan]"
                         )
 
                         # 1. Save delta RAW and merge with existing snapshot
@@ -1449,7 +1426,7 @@ class InteractiveTUISession:
                             total_s3_skipped += getattr(storage.last_save_result, "skipped", 0)
 
                         status.update(
-                            f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] Sincronizando anotações...[/cyan]"
+                            f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] {t('cli.syncing_annotations')}[/cyan]"
                         )
 
                         # 2. Sync annotations ONLY for modified objects (preserves existing comments)
@@ -1465,7 +1442,7 @@ class InteractiveTUISession:
                         # 3. Optional compilation for modified objects
                         if compile_flag:
                             status.update(
-                                f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] Compilando documentação Markdown...[/cyan]"
+                                f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] {t('cli.compiling_docs')}[/cyan]"
                             )
                             gen_md, _ = write_schema_docs(
                                 schema_meta,
@@ -1491,7 +1468,7 @@ class InteractiveTUISession:
                     connection.close()
 
                 if storage:
-                    status.update("[cyan]Sincronizando glossário com SeaweedFS S3...[/cyan]")
+                    status.update(f"[cyan]{t('cli.syncing_glossary')}[/cyan]")
                     try:
                         storage.sync_glossary(update_cfg.annotationsPath, no_cache=is_no_cache)
                     except Exception as exc:
@@ -1862,8 +1839,8 @@ class InteractiveTUISession:
         # Count total eligible objects
         total_eligible = 0
         for s in self.schemas:
-            for t in s.tables:
-                if not target_upper or t.name.upper() == target_upper:
+            for tbl in s.tables:
+                if not target_upper or tbl.name.upper() == target_upper:
                     total_eligible += 1
             for co in s.code_objects:
                 if not target_upper or co.name.upper() == target_upper:
@@ -1955,8 +1932,6 @@ class InteractiveTUISession:
 
             if (not self.schemas) and storage:
                 try:
-                    from leai.i18n import t
-
                     console.print(t("seaweedfs.sync_catalog"))
                     is_no_cache = getattr(self.config.storage.seaweedfs, "no_cache", False)
                     target_schemas = self.config.schemas if not self.config.is_all_schemas else None
@@ -1969,7 +1944,7 @@ class InteractiveTUISession:
 
                         self.completer = LeaiCompleter(self.schemas, config=self.config)
                 except Exception as e:
-                    console.print(f"[yellow]Aviso ao carregar schemas do SeaweedFS: {e}[/yellow]")
+                    console.print(f"[yellow]Warning loading schemas from SeaweedFS: {e}[/yellow]")
 
             self.web_server, self.web_url = start_server(
                 config=self.config,
@@ -2249,13 +2224,13 @@ class InteractiveTUISession:
         total = 0
         for s in self.schemas:
             s_name = s.schema_name or "DEFAULT"
-            for t in s.tables:
+            for tbl in s.tables:
                 total += 1
-                pks = ", ".join(t.primary_keys) if t.primary_keys else "-"
-                comm = (t.comment or "").strip()
+                pks = ", ".join(tbl.primary_keys) if tbl.primary_keys else "-"
+                comm = (tbl.comment or "").strip()
                 if len(comm) > 60:
                     comm = comm[:57] + "..."
-                table.add_row(s_name, t.name, str(len(t.columns)), pks, comm)
+                table.add_row(s_name, tbl.name, str(len(tbl.columns)), pks, comm)
 
         console.print()
         console.print(
@@ -2476,16 +2451,18 @@ class InteractiveTUISession:
         if self.last_code_blocks:
             c_count = len(self.last_code_blocks)
             first_lang = self.last_code_blocks[0]["language"].upper()
-            code_hint = (
-                f" ou [bold #74c7ec]/copy 1[/bold #74c7ec] (código {first_lang})"
-                if c_count == 1
-                else f" ou [bold #74c7ec]/copy 1..{c_count}[/bold #74c7ec] (blocos de código)"
-            )
+            code_hint = t("tui.copy_code_single", lang=first_lang) if c_count == 1 else t("tui.copy_code_multi", count=c_count)
         else:
             code_hint = ""
 
         console.print(
-            f"[dim #9399b2]⚡ {self.last_latency:.2f}s{turn_tok_str}{tool_badge} • 💡 Dica: digite [bold #74c7ec]/copy[/bold #74c7ec]{code_hint} para copiar para o Clipboard[/dim #9399b2]\n"
+            t(
+                "tui.copy_tip",
+                latency=self.last_latency,
+                turn_tokens=turn_tok_str,
+                tool_badge=tool_badge,
+                code_hint=code_hint,
+            )
         )
 
     def _run_audit(self, sub_cmd: str | None = None, arg: str | None = None) -> None:

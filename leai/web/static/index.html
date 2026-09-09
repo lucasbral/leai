@@ -2264,7 +2264,17 @@ graph TD
         lineage_fullscreen: "Alternar Tela Cheia",
         lineage_dense_warning: "Esta entidade possui muitas referências. Use os filtros de categoria acima ou alterne para a Matriz de Impacto para examinar em detalhes.",
         lineage_no_connections: "Nenhuma conexão encontrada para este objeto.",
-        lineage_obj_not_in_catalog: "Objeto não encontrado no catálogo dos schemas carregados."
+        lineage_obj_not_in_catalog: "Objeto não encontrado no catálogo dos schemas carregados.",
+        syncing_catalog: "Sincronizando Catálogo...",
+        loading_metadata: "Carregando metadados do SeaweedFS S3 / Local...",
+        failed_load_catalog: "Falha ao carregar catálogo.",
+        try_again: "Tentar novamente",
+        no_schemas_found: "Nenhum schema encontrado",
+        check_snapshot_hint: "Verifique se o snapshot existe no SeaweedFS ou execute <code>leai extract</code>.",
+        sync_again: "Sincronizar novamente",
+        lineage_complex_layout: "Layout complexo para renderizar em grafo único.",
+        lineage_complex_hint: "Use os chips de filtro acima para isolar conexões ou alterne para a Matriz de Impacto.",
+        lineage_view_in_table: "Ver em Tabela"
       },
       en: {
         page_title: "LEAI Docs — Oracle Database Documentation & Annotation Studio",
@@ -2429,7 +2439,17 @@ graph TD
         lineage_fullscreen: "Toggle Fullscreen",
         lineage_dense_warning: "This entity has many connections. Use the filter chips above or switch to Impact Matrix for detailed inspection.",
         lineage_no_connections: "No connections found for this object.",
-        lineage_obj_not_in_catalog: "Object not found in currently loaded schemas catalog."
+        lineage_obj_not_in_catalog: "Object not found in currently loaded schemas catalog.",
+        syncing_catalog: "Synchronizing Catalog...",
+        loading_metadata: "Loading metadata from SeaweedFS S3 / Local...",
+        failed_load_catalog: "Failed to load catalog.",
+        try_again: "Try again",
+        no_schemas_found: "No schemas found",
+        check_snapshot_hint: "Check if metadata snapshot exists in SeaweedFS or run <code>leai extract</code>.",
+        sync_again: "Sync again",
+        lineage_complex_layout: "Graph layout too complex for single-view rendering.",
+        lineage_complex_hint: "Use the filter chips above to isolate connections or switch to the Impact Matrix.",
+        lineage_view_in_table: "View in Table"
       }
     };
 
@@ -2543,13 +2563,14 @@ graph TD
     }
 
     async function loadCatalog() {
+      const dict = INDEX_I18N[currentLang] || INDEX_I18N.en || INDEX_I18N.pt;
       const treeContainer = document.getElementById('sidebar-tree');
       if (treeContainer && (!currentCatalog || currentCatalog.length === 0)) {
         treeContainer.innerHTML = `
           <div style="padding: 40px 16px; text-align: center; color: var(--text-muted);">
             <div style="display: inline-block; width: 22px; height: 22px; border: 2px solid var(--accent); border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px;"></div>
-            <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Sincronizando Catálogo...</div>
-            <div style="font-size: 11px; margin-top: 4px; color: var(--text-secondary);">Carregando metadados do SeaweedFS S3 / Local</div>
+            <div style="font-size: 13px; font-weight: 600; color: var(--text-primary);">${dict.syncing_catalog || "Synchronizing Catalog..."}</div>
+            <div style="font-size: 11px; margin-top: 4px; color: var(--text-secondary);">${dict.loading_metadata || "Loading metadata from SeaweedFS S3 / Local..."}</div>
           </div>
         `;
       }
@@ -2573,9 +2594,9 @@ graph TD
           treeContainer.innerHTML = `
             <div style="padding: 30px 16px; text-align: center; color: var(--danger);">
               <div style="font-size: 26px; margin-bottom: 8px;">⚠️</div>
-              <div style="font-size: 12px; font-weight: 600;">Falha ao carregar catálogo.</div>
+              <div style="font-size: 12px; font-weight: 600;">${dict.failed_load_catalog || "Failed to load catalog."}</div>
               <div style="font-size: 11px; margin-top: 4px; color: var(--text-muted);">${escapeHtml(e.message || String(e))}</div>
-              <button type="button" class="btn btn-secondary" style="margin-top: 12px; font-size: 11px; padding: 4px 10px;" onclick="loadCatalog()">Tentar novamente</button>
+              <button type="button" class="btn btn-secondary" style="margin-top: 12px; font-size: 11px; padding: 4px 10px;" onclick="loadCatalog()">${dict.try_again || "Try again"}</button>
             </div>
           `;
         }
@@ -2707,9 +2728,9 @@ graph TD
         container.innerHTML = `
           <div style="padding: 40px 16px; text-align: center; color: var(--text-muted);">
             <div style="font-size: 32px; margin-bottom: 8px;">📭</div>
-            <div style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Nenhum schema encontrado</div>
-            <div style="font-size: 11px; line-height: 1.5; color: var(--text-secondary); max-width: 240px; margin: 0 auto;">Verifique se o snapshot existe no SeaweedFS ou execute <code>leai extract</code>.</div>
-            <button type="button" class="btn btn-secondary" style="margin-top: 14px; font-size: 11px; padding: 4px 10px;" onclick="loadCatalog()">Sincronizar novamente</button>
+            <div style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">${dict.no_schemas_found || "No schemas found"}</div>
+            <div style="font-size: 11px; line-height: 1.5; color: var(--text-secondary); max-width: 240px; margin: 0 auto;">${dict.check_snapshot_hint || "Check if metadata snapshot exists in SeaweedFS or run <code>leai extract</code>."}</div>
+            <button type="button" class="btn btn-secondary" style="margin-top: 14px; font-size: 11px; padding: 4px 10px;" onclick="loadCatalog()">${dict.sync_again || "Sync again"}</button>
           </div>
         `;
       }
@@ -3355,11 +3376,12 @@ graph TD
         attachNodeClickHandlers(container);
       } catch (e) {
         console.warn('Mermaid rendering error:', e);
+        const dict = INDEX_I18N[currentLang] || INDEX_I18N.en || INDEX_I18N.pt;
         container.innerHTML = `
           <div style="text-align: center; color: var(--warning); padding: 24px; font-size: 13px;">
-            <p>⚠️ Layout complexo para renderizar em grafo único.</p>
-            <p style="margin-top: 6px; color: var(--text-muted);">Use os chips de filtro acima para isolar conexões ou alterne para a Matriz de Impacto.</p>
-            <button type="button" class="btn btn-secondary" style="margin-top: 12px;" onclick="switchLineageView('table')">Ver em Tabela</button>
+            <p>⚠️ ${dict.lineage_complex_layout || "Graph layout too complex for single-view rendering."}</p>
+            <p style="margin-top: 6px; color: var(--text-muted);">${dict.lineage_complex_hint || "Use filter chips above to isolate connections or switch to Impact Matrix."}</p>
+            <button type="button" class="btn btn-secondary" style="margin-top: 12px;" onclick="switchLineageView('table')">${dict.lineage_view_in_table || "View in Table"}</button>
           </div>
         `;
       }
