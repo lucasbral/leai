@@ -34,6 +34,7 @@ from leai.config import ConfigError, LeaiConfig, load_config
 from leai.i18n import t
 from leai.models import SchemaMetadata
 from leai.raw import load_raw_schemas
+from leai.status import LiveStatusTicker
 
 
 def _build_connect_kwargs(*args, **kwargs):
@@ -553,107 +554,98 @@ def update(
 
                 for s_idx, schema_name in enumerate(target_schemas, 1):
                     schema_t0 = time.perf_counter()
+                    prefix = f"[{schema_name} ({s_idx}/{total_schemas})]"
 
-                    def _fmt_dur(secs: float) -> str:
-                        m = int(secs) // 60
-                        s = int(secs) % 60
-                        return f"{m:02d}:{s:02d}"
+                    with LiveStatusTicker(
+                        status,
+                        prefix=prefix,
+                        t0=schema_t0,
+                        initial_msg=f"Consultando alterações ({time_desc})...",
+                    ) as ticker:
 
-                    def _on_meta_progress(
-                        step_name: str, count: int, current_step: int, total_steps: int, s_name=schema_name, idx=s_idx, t0=schema_t0
-                    ) -> None:
-                        elapsed_str = _fmt_dur(time.perf_counter() - t0)
-                        status.update(f"[cyan][{s_name} ({idx}/{total_schemas})] [{elapsed_str}] Extraindo {step_name}...[/cyan]")
+                        def _on_meta_progress(step_name: str, count: int, current_step: int, total_steps: int) -> None:
+                            ticker.update(f"Extraindo {step_name}...")
 
-                    status.update(f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [00:00] Consultando alterações ({time_desc})...[/cyan]")
+                        schema_meta = fetch_schema_metadata(
+                            cfg,
+                            schema_name=schema_name,
+                            callback=_on_meta_progress,
+                            days=effective_days,
+                            hours=effective_hours,
+                            connection=connection,
+                        )
 
-                    schema_meta = fetch_schema_metadata(
-                        cfg,
-                        schema_name=schema_name,
-                        callback=_on_meta_progress,
-                        days=effective_days,
-                        hours=effective_hours,
-                        connection=connection,
-                    )
+                        from leai.updates_log import collect_modified_objects
 
-                    from leai.updates_log import collect_modified_objects
+                        schemas_modified_objects[schema_name] = collect_modified_objects(schema_meta)
 
-                    schemas_modified_objects[schema_name] = collect_modified_objects(schema_meta)
+                        num_objs = count_schema_objects(schema_meta, cfg.object_types)
+                        schema_dur = time.perf_counter() - schema_t0
+                        totals["tables"] += len(schema_meta.tables)
+                        totals["views"] += len(schema_meta.views)
+                        totals["mviews"] += len(schema_meta.mviews)
+                        totals["code_objects"] += len(schema_meta.code_objects)
+                        totals["triggers"] += len(schema_meta.triggers)
+                        totals["sequences"] += len(schema_meta.sequences)
+                        totals["indexes"] += len(schema_meta.indexes)
+                        totals["synonyms"] += len(schema_meta.synonyms)
 
-                    num_objs = count_schema_objects(schema_meta, cfg.object_types)
-                    schema_dur = time.perf_counter() - schema_t0
-                    totals["tables"] += len(schema_meta.tables)
-                    totals["views"] += len(schema_meta.views)
-                    totals["mviews"] += len(schema_meta.mviews)
-                    totals["code_objects"] += len(schema_meta.code_objects)
-                    totals["triggers"] += len(schema_meta.triggers)
-                    totals["sequences"] += len(schema_meta.sequences)
-                    totals["indexes"] += len(schema_meta.indexes)
-                    totals["synonyms"] += len(schema_meta.synonyms)
+                        if num_objs == 0:
+                            console.print(
+                                f"  [dim]• Schema [bold]{schema_name}[/bold]: no modifications in {time_desc} ({schema_dur:.1f}s).[/dim]"
+                            )
+                            continue
 
-                    if num_objs == 0:
                         console.print(
-                            f"  [dim]• Schema [bold]{schema_name}[/bold]: no modifications in {time_desc} ({schema_dur:.1f}s).[/dim]"
+                            f"  [green]✓[/green] Schema [bold yellow]{schema_name}[/bold yellow]: [bold green]{num_objs} modified object(s)[/bold green] found ({schema_dur:.1f}s)."
                         )
-                        continue
 
-                    console.print(
-                        f"  [green]✓[/green] Schema [bold yellow]{schema_name}[/bold yellow]: [bold green]{num_objs} modified object(s)[/bold green] found ({schema_dur:.1f}s)."
-                    )
+                        def _on_s3_progress(done: int, total: int) -> None:
+                            msg = t("cli.syncing_seaweedfs", done=done, total=total)
+                            ticker.update(msg)
 
-                    def _on_s3_progress(done: int, total: int, s_name=schema_name, idx=s_idx, t0=schema_t0) -> None:
-                        elapsed_str = _fmt_dur(time.perf_counter() - t0)
-                        msg = t("cli.syncing_seaweedfs", done=done, total=total)
-                        status.update(f"[cyan][{s_name} ({idx}/{total_schemas})] [{elapsed_str}] {msg}[/cyan]")
+                        ticker.update(t("cli.saving_raw"))
 
-                    status.update(
-                        f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] {t('cli.saving_raw')}[/cyan]"
-                    )
-
-                    # 1. Save delta RAW and merge with existing snapshot
-                    save_raw_schema(
-                        schema_meta,
-                        cfg.rawPath,
-                        multi_schema=True,
-                        storage=storage,
-                        local_cache=not is_no_cache,
-                        force_upload=force_upload,
-                        is_delta=True,
-                        progress_callback=_on_s3_progress,
-                    )
-                    if storage and hasattr(storage, "last_save_result"):
-                        total_s3_uploaded += getattr(storage.last_save_result, "uploaded", 0)
-                        total_s3_skipped += getattr(storage.last_save_result, "skipped", 0)
-
-                    status.update(
-                        f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] {t('cli.syncing_annotations')}[/cyan]"
-                    )
-
-                    # 2. Sync annotations ONLY for the modified objects (preserves all existing descriptions/comments)
-                    gen_ann = sync_schema_annotations(
-                        schema_meta,
-                        annotations_path=cfg.annotationsPath,
-                        multi_schema=True,
-                        object_types=cfg.object_types,
-                        storage=storage,
-                    )
-                    total_ann += len(gen_ann)
-
-                    # 3. Optional compilation for modified objects
-                    if compile_docs:
-                        status.update(
-                            f"[cyan][{schema_name} ({s_idx}/{total_schemas})] [{_fmt_dur(time.perf_counter() - schema_t0)}] {t('cli.compiling_docs')}[/cyan]"
-                        )
-                        gen_md, _ = write_schema_docs(
+                        # 1. Save delta RAW and merge with existing snapshot
+                        save_raw_schema(
                             schema_meta,
-                            doc_path=cfg.docPath,
+                            cfg.rawPath,
+                            multi_schema=True,
+                            storage=storage,
+                            local_cache=not is_no_cache,
+                            force_upload=force_upload,
+                            is_delta=True,
+                            progress_callback=_on_s3_progress,
+                        )
+                        if storage and hasattr(storage, "last_save_result"):
+                            total_s3_uploaded += getattr(storage.last_save_result, "uploaded", 0)
+                            total_s3_skipped += getattr(storage.last_save_result, "skipped", 0)
+
+                        ticker.update(t("cli.syncing_annotations"))
+
+                        # 2. Sync annotations ONLY for the modified objects (preserves all existing descriptions/comments)
+                        gen_ann = sync_schema_annotations(
+                            schema_meta,
                             annotations_path=cfg.annotationsPath,
-                            docs_overrides=cfg.docs,
                             multi_schema=True,
                             object_types=cfg.object_types,
-                            with_traces=with_traces,
+                            storage=storage,
                         )
-                        total_md += len(gen_md)
+                        total_ann += len(gen_ann)
+
+                        # 3. Optional compilation for modified objects
+                        if compile_docs:
+                            ticker.update(t("cli.compiling_docs"))
+                            gen_md, _ = write_schema_docs(
+                                schema_meta,
+                                doc_path=cfg.docPath,
+                                annotations_path=cfg.annotationsPath,
+                                docs_overrides=cfg.docs,
+                                multi_schema=True,
+                                object_types=cfg.object_types,
+                                with_traces=with_traces,
+                            )
+                            total_md += len(gen_md)
 
                 if storage:
                     status.update(f"[cyan]{t('cli.syncing_glossary')}[/cyan]")

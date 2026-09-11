@@ -2,6 +2,15 @@
 
 Todas as alterações notáveis no projeto **LEAI** são documentadas nesta página.
 
+## [0.3.3] — 2026
+
+### ⏱️ Atualização do Cronômetro em Tempo Real na Extração de Metadados (TUI & CLI)
+* **Eliminação do Congelamento de Timer (`LiveStatusTicker`):** Implementado o componente `LiveStatusTicker` com thread daemon periódica em `leai/status.py`. O contador de tempo decorrido `[MM:SS]` na mensagem de status do Rich agora avança continuamente segundo a segundo em tempo real durante queries demoradas do Oracle (`Views (querying...)`, `Tables`, etc.), evitando a falsa impressão de travamento da aplicação.
+* **Desacoplamento e Thread Safety:** O ticker roda desacoplado do I/O de rede e consultas do banco de dados (que liberam o GIL do Python no driver `oracledb`), com suporte a Context Manager para encerramento determinístico e seguro após a conclusão de cada schema.
+* **Cobertura Abrangente de Testes:** Adicionados testes unitários específicos em `tests/test_status.py` cobrindo formatação de duração, updates periódicos em background e tolerância a exceções.
+
+---
+
 ## [0.3.2] — 2026
 
 ### 🎨 Melhorias de UI, Localização de Prompt e Resiliência do Updater

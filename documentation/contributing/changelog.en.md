@@ -2,6 +2,15 @@
 
 All notable changes to the **LEAI** project are documented here.
 
+## [0.3.3] — 2026
+
+### ⏱️ Real-Time Elapsed Timer Updates During Metadata Extraction (TUI & CLI)
+* **Elimination of Frozen Status Timer (`LiveStatusTicker`):** Introduced the `LiveStatusTicker` component with a periodic daemon thread in `leai/status.py`. The elapsed duration counter `[MM:SS]` in Rich's status message now ticks continuously every second in real time during long Oracle database queries (`Views (querying...)`, `Tables`, etc.), eliminating the false perception of an application freeze.
+* **Decoupled Architecture & Thread Safety:** The status ticker runs asynchronously without interfering with database network I/O (which releases Python's GIL in the `oracledb` driver), and features full Context Manager support for deterministic and safe shutdown upon schema completion.
+* **Comprehensive Test Coverage:** Added dedicated unit tests in `tests/test_status.py` covering duration formatting, background periodic ticks, and exception resilience.
+
+---
+
 ## [0.3.2] — 2026
 
 ### 🎨 UI Polish, Prompt Localization, and Updater Resilience
