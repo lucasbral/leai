@@ -2,6 +2,15 @@
 
 Todas as alterações notáveis no projeto **LEAI** são documentadas nesta página.
 
+## [0.3.2] — 2026
+
+### 🎨 Melhorias de UI, Localização de Prompt e Resiliência do Updater
+* **Localização do Prompt de Atualização:** O prompt interativo agora exibe `[S/n]` no idioma Português (`pt-BR`) e `[Y/n]` em Inglês (`en-US`), com aceitação de `s/sim` ou `y/yes`.
+* **Resiliência e Timeout Estendido no Updater:** O tempo limite para consulta de novas versões no PyPI foi ampliado de 2.0s para 5.0s, e a busca de destaques no GitHub changelog de 1.5s para 4.0s, prevenindo falsos negativos em redes lentas ou instáveis.
+* **Loading Animado na Sincronização do SeaweedFS:** A sincronização e carregamento de catálogos do SeaweedFS S3 agora contam com spinner animado elegante (`console.status`), exibição temporária de confirmação (`✓ Catálogo sincronizado com SeaweedFS S3 com sucesso!`) e limpeza automática da linha de status, proporcionando uma transição visual fluida para o TUI e Web Studio.
+
+---
+
 ## [0.3.1] — 2026
 
 ### 📋 Sistema de Log de Auditoria e Manifesto de Objetos em `leai update`

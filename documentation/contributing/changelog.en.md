@@ -2,6 +2,15 @@
 
 All notable changes to the **LEAI** project are documented here.
 
+## [0.3.2] — 2026
+
+### 🎨 UI Polish, Prompt Localization, and Updater Resilience
+* **Update Prompt Localization:** The interactive update prompt now displays `[S/n]` when running in Portuguese (`pt-BR`) and `[Y/n]` in English (`en-US`), accepting both `s/sim` and `y/yes`.
+* **Updater Timeout Extension & Resilience:** The PyPI version lookup timeout was increased from 2.0s to 5.0s, and GitHub changelog highlights lookup from 1.5s to 4.0s, preventing false negative timeouts on slow or high-latency networks.
+* **Animated SeaweedFS Loading Spinner:** Connecting to SeaweedFS S3 and catalog synchronization now features an animated status spinner (`console.status`), brief success confirmation (`✓ Schema catalog synchronized with SeaweedFS S3 successfully!`), and automatic status cleanup, ensuring a seamless visual transition to the TUI and Web Studio.
+
+---
+
 ## [0.3.1] — 2026
 
 ### 📋 Audit Log System & Object Manifest for `leai update`

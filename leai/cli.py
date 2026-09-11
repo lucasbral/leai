@@ -1089,9 +1089,13 @@ def default(
         target_schemas = cfg.schemas if not cfg.is_all_schemas else None
         storage = _resolve_storage(cfg, seaweed)
         is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
-        if storage and not cfg.rawPath.exists():
-            console.print(t("seaweedfs.sync_catalog"))
-        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
+        if storage and (is_no_cache or not cfg.rawPath.exists()):
+            with console.status(t("seaweedfs.sync_catalog"), spinner="dots") as status:
+                schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
+                status.update(f"[bold green]✓ {t('seaweedfs.catalog_synced')}[/bold green]")
+                time.sleep(0.4)
+        else:
+            schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
         try:
             client = get_llm_client(cfg, provider_override=provider, model_override=model)
         except Exception:
@@ -1870,9 +1874,13 @@ def serve(
     storage = _resolve_storage(cfg, seaweed)
     is_no_cache = no_cache or cfg.storage.seaweedfs.no_cache
     target_schemas = cfg.schemas if not cfg.is_all_schemas else None
-    if storage and not cfg.rawPath.exists():
-        console.print(t("seaweedfs.sync_catalog"))
-    schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
+    if storage and (is_no_cache or not cfg.rawPath.exists()):
+        with console.status(t("seaweedfs.sync_catalog"), spinner="dots") as status:
+            schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
+            status.update(f"[bold green]✓ {t('seaweedfs.catalog_synced')}[/bold green]")
+            time.sleep(0.4)
+    else:
+        schemas_meta = load_raw_schemas(cfg.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache)
     try:
         client = get_llm_client(cfg, provider_override=provider)
     except Exception:

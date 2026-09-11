@@ -38,7 +38,7 @@ def is_newer_version(remote: str, local: str) -> bool:
     return parse_version(remote) > parse_version(local)
 
 
-def check_for_updates(current_version: str, timeout: float = 2.0) -> UpdateInfo | None:
+def check_for_updates(current_version: str, timeout: float = 5.0) -> UpdateInfo | None:
     """Queries PyPI API to check if a newer version of LEAI is available.
 
     Fails silently and returns None in case of offline mode, timeout, or errors.
@@ -61,7 +61,7 @@ def check_for_updates(current_version: str, timeout: float = 2.0) -> UpdateInfo 
         if not is_newer_version(latest_version, current_version):
             return None
 
-        release_notes = _fetch_release_notes(latest_version, timeout=1.5)
+        release_notes = _fetch_release_notes(latest_version, timeout=4.0)
 
         return UpdateInfo(
             latest_version=latest_version,
@@ -73,7 +73,7 @@ def check_for_updates(current_version: str, timeout: float = 2.0) -> UpdateInfo 
         return None
 
 
-def _fetch_release_notes(version: str, timeout: float = 1.5) -> str | None:
+def _fetch_release_notes(version: str, timeout: float = 4.0) -> str | None:
     """Attempts to fetch release notes from the changelog."""
     try:
         req = urllib.request.Request(

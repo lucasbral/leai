@@ -12,7 +12,7 @@ MESSAGES: dict[str, str] = {
     "updater.latest_version": "Nova Versão:",
     "updater.release_highlights": "Destaques da Versão:",
     "updater.changelog": "Changelog: https://github.com/lucasbral/leai/releases",
-    "updater.prompt": "[bold cyan]Deseja atualizar o LEAI agora? [Y/n]: [/bold cyan]",
+    "updater.prompt": "[bold cyan]Deseja atualizar o LEAI agora? [S/n]: [/bold cyan]",
     "updater.postponed": "[dim]Atualização postergada. Prosseguindo...[/dim]\n",
     "updater.downloading": "[bold cyan]Baixando e instalando nova versão do LEAI...[/bold cyan]",
     "updater.updated_success": "[bold green][OK] LEAI atualizado com sucesso para v{version}![/bold green]",
@@ -21,6 +21,7 @@ MESSAGES: dict[str, str] = {
     "updater.continuing": "[dim]Prosseguindo com a versão atual...[/dim]\n",
     # SeaweedFS
     "seaweedfs.sync_catalog": "[cyan]✦ Conectando ao SeaweedFS S3 e sincronizando catálogo de schemas...[/cyan]",
+    "seaweedfs.catalog_synced": "Catálogo sincronizado com SeaweedFS S3 com sucesso!",
     "seaweedfs.upload_success": "[green]✓ Sucesso no upload de {raw} arquivos RAW JSON e {annotations} arquivos YAML de anotação para o bucket SeaweedFS '{bucket}'.[/green]\n",
     "seaweedfs.download_success": "[green]✓ Sucesso no download de {raw} arquivos RAW JSON e {annotations} arquivos YAML de anotação do bucket SeaweedFS '{bucket}'.[/green]\n",
     # Git

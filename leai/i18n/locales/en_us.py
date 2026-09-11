@@ -21,6 +21,7 @@ MESSAGES: dict[str, str] = {
     "updater.continuing": "[dim]Continuing with current version...[/dim]\n",
     # SeaweedFS
     "seaweedfs.sync_catalog": "[cyan]✦ Connecting to SeaweedFS S3 and synchronizing schema catalog...[/cyan]",
+    "seaweedfs.catalog_synced": "Schema catalog synchronized with SeaweedFS S3 successfully!",
     "seaweedfs.upload_success": "[green]✓ Successfully uploaded {raw} RAW JSON files and {annotations} YAML annotation files to SeaweedFS bucket '{bucket}'.[/green]\n",
     "seaweedfs.download_success": "[green]✓ Successfully downloaded {raw} RAW JSON files and {annotations} YAML annotation files from SeaweedFS bucket '{bucket}'.[/green]\n",
     # Git

@@ -1940,17 +1940,21 @@ class InteractiveTUISession:
 
             if (not self.schemas) and storage:
                 try:
-                    console.print(t("seaweedfs.sync_catalog"))
-                    is_no_cache = getattr(self.config.storage.seaweedfs, "no_cache", False)
-                    target_schemas = self.config.schemas if not self.config.is_all_schemas else None
-                    loaded = load_raw_schemas(
-                        self.config.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache
-                    )
-                    if loaded:
-                        self.schemas = loaded
-                        from leai.tui.completer import LeaiCompleter
+                    with console.status(t("seaweedfs.sync_catalog"), spinner="dots") as status:
+                        is_no_cache = getattr(self.config.storage.seaweedfs, "no_cache", False)
+                        target_schemas = self.config.schemas if not self.config.is_all_schemas else None
+                        loaded = load_raw_schemas(
+                            self.config.rawPath, target_schemas=target_schemas, storage=storage, local_cache=not is_no_cache
+                        )
+                        if loaded:
+                            self.schemas = loaded
+                            from leai.tui.completer import LeaiCompleter
 
-                        self.completer = LeaiCompleter(self.schemas, config=self.config)
+                            self.completer = LeaiCompleter(self.schemas, config=self.config)
+                        status.update(f"[bold green]✓ {t('seaweedfs.catalog_synced')}[/bold green]")
+                        import time
+
+                        time.sleep(0.4)
                 except Exception as e:
                     console.print(f"[yellow]Warning loading schemas from SeaweedFS: {e}[/yellow]")
 
