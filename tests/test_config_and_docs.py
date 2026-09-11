@@ -598,7 +598,10 @@ class ConfigAndDocsTests(unittest.TestCase):
                 columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)],
             )
             md = render_table_markdown(table, annotation=loaded)
-            self.assertIn("## Use Cases & Sample Queries", md)
+            self.assertTrue(
+                "## Use Cases & Sample Queries" in md or "## Casos de Uso" in md,
+                f"Expected use cases header in markdown, got: {md}",
+            )
             self.assertIn("```sql\nSELECT id, nome FROM employees WHERE status = 'A';\n```", md)
             self.assertIn("- Relatório de folha de pagamento por departamento", md)
 

@@ -2,6 +2,17 @@
 
 Todas as alterações notáveis no projeto **LEAI** são documentadas nesta página.
 
+## [0.3.0] — 2026
+
+### ⚡ Otimização de Busca de Metadados e Eliminação de I/O de Rede com `annotations_index.json`
+* **Eliminação de Gargalo N+1 no SeaweedFS / S3:** As ferramentas de busca do assistente (`search_database_objects`, `search_column_comments`, `get_table_schema` e `search_business_documentation`) agora utilizam um índice centralizado em memória (`annotations_index.json`). Isso elimina centenas de requisições HTTP sequenciais via rede em modos remotos (`--no-cache`), reduzindo o tempo de consulta de ~150s para menos de 0.05s.
+* **Preservação de Stubs Vazios:** Todos os arquivos `.yml` (incluindo stubs sem conteúdo preenchido) continuam existindo normalmente no disco e no S3. O `annotations_index.json` inclui exclusivamente objetos enriquecidos (com comentários, regras de negócio ou tags modificadas), detectados pela nova função `is_annotation_enriched`.
+* **Sincronização Automática e Incremental:** O comando `leai annotate` compila o índice automaticamente e métodos dedicados no `SeaweedFSStorage` mantêm o índice atualizado a cada alteração ou salvamento individual de anotações.
+* **Busca Inteligente por Tabela em `search_column_comments`:** Ao pesquisar pelo nome direto de uma tabela (ex.: `WEB_DADOS_FUNC`), o sistema detecta a entidade e lista imediatamente todas as suas colunas e documentações.
+* **Padronização e Qualidade de Código com Ruff:** Formatação canônica aplicada e correções de linting em conformidade com as diretrizes do projeto.
+
+---
+
 ## [0.2.30] — 2026
 
 ### 🛡️ Tratamento de Bloqueio de Entrypoint no Windows & Compatibilidade Multiplataforma

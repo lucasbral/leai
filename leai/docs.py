@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, Callable
 
-from leai.annotations import ensure_annotation_stub
+from leai.annotations import ensure_annotation_stub, is_annotation_enriched
 from leai.i18n import t
 from leai.models import (
     CodeObjectMeta,
@@ -1181,6 +1181,27 @@ def sync_schema_annotations(
     total_objects = max(1, count_schema_objects(schema, object_types))
     processed_count = 0
     s_name = schema.schema_name or ""
+    enriched_objects: dict[str, dict[str, Any]] = {}
+
+    def _record_enriched(folder: str, name: str, ann: ObjectAnnotation, db_comment: str | None = None) -> None:
+        if is_annotation_enriched(ann, db_comment=db_comment):
+            clean_entry: dict[str, Any] = {}
+            if ann.description and ann.description.strip():
+                clean_entry["description"] = ann.description.strip()
+            if ann.tags:
+                clean_entry["tags"] = ann.tags
+            if ann.business_rules:
+                clean_entry["business_rules"] = ann.business_rules
+            if ann.use_cases:
+                clean_entry["use_cases"] = ann.use_cases
+            if ann.warnings:
+                clean_entry["warnings"] = ann.warnings
+            if ann.related_objects:
+                clean_entry["related_objects"] = ann.related_objects
+            clean_cols = {col: comm for col, comm in ann.columns.items() if comm and comm.strip()}
+            if clean_cols:
+                clean_entry["columns"] = clean_cols
+            enriched_objects.setdefault(folder.lower(), {})[name.upper()] = clean_entry
 
     if _is_category_allowed("tables", allowed_types):
         for table in schema.tables:
@@ -1189,7 +1210,7 @@ def sync_schema_annotations(
                 progress_callback("Table", table.name, processed_count, total_objects)
 
             ann_path = target_ann_path / "tables" / f"{table.name}.yml"
-            ensure_annotation_stub(
+            ann = ensure_annotation_stub(
                 ann_path,
                 db_comment=table.comment,
                 column_names=[c.name for c in table.columns],
@@ -1198,6 +1219,7 @@ def sync_schema_annotations(
                 obj_folder="tables",
                 obj_name=table.name,
             )
+            _record_enriched("tables", table.name, ann, db_comment=table.comment)
             generated_ann.append(ann_path)
 
     if _is_category_allowed("views", allowed_types):
@@ -1207,7 +1229,7 @@ def sync_schema_annotations(
                 progress_callback("View", view.name, processed_count, total_objects)
 
             ann_path = target_ann_path / "views" / f"{view.name}.yml"
-            ensure_annotation_stub(
+            ann = ensure_annotation_stub(
                 ann_path,
                 db_comment=view.comment,
                 column_names=[c.name for c in view.columns],
@@ -1216,6 +1238,7 @@ def sync_schema_annotations(
                 obj_folder="views",
                 obj_name=view.name,
             )
+            _record_enriched("views", view.name, ann, db_comment=view.comment)
             generated_ann.append(ann_path)
 
     if _is_category_allowed("mviews", allowed_types):
@@ -1225,7 +1248,7 @@ def sync_schema_annotations(
                 progress_callback("MView", mview.name, processed_count, total_objects)
 
             ann_path = target_ann_path / "mviews" / f"{mview.name}.yml"
-            ensure_annotation_stub(
+            ann = ensure_annotation_stub(
                 ann_path,
                 db_comment=mview.comment,
                 column_names=[c.name for c in mview.columns],
@@ -1234,6 +1257,7 @@ def sync_schema_annotations(
                 obj_folder="mviews",
                 obj_name=mview.name,
             )
+            _record_enriched("mviews", mview.name, ann, db_comment=mview.comment)
             generated_ann.append(ann_path)
 
     for code_obj in schema.code_objects:
@@ -1245,7 +1269,7 @@ def sync_schema_annotations(
 
         obj_folder = code_obj.object_type.lower().replace(" ", "_") + "s"
         ann_path = target_ann_path / obj_folder / f"{code_obj.name}.yml"
-        ensure_annotation_stub(
+        ann = ensure_annotation_stub(
             ann_path,
             db_comment=code_obj.comment,
             storage=storage,
@@ -1253,6 +1277,7 @@ def sync_schema_annotations(
             obj_folder=obj_folder,
             obj_name=code_obj.name,
         )
+        _record_enriched(obj_folder, code_obj.name, ann, db_comment=code_obj.comment)
         generated_ann.append(ann_path)
 
         for sub in code_obj.subprograms:
@@ -1261,7 +1286,7 @@ def sync_schema_annotations(
                 progress_callback("Routine", f"{code_obj.name}.{sub.name}", processed_count, total_objects)
 
             sub_ann_path = target_ann_path / obj_folder / code_obj.name / f"{sub.name}.yml"
-            ensure_annotation_stub(
+            sub_ann = ensure_annotation_stub(
                 sub_ann_path,
                 db_comment=sub.comment,
                 storage=storage,
@@ -1269,6 +1294,7 @@ def sync_schema_annotations(
                 obj_folder=f"{obj_folder}/{code_obj.name}",
                 obj_name=sub.name,
             )
+            _record_enriched(f"{obj_folder}/{code_obj.name}", sub.name, sub_ann, db_comment=sub.comment)
             generated_ann.append(sub_ann_path)
 
     if _is_category_allowed("triggers", allowed_types):
@@ -1278,13 +1304,14 @@ def sync_schema_annotations(
                 progress_callback("Trigger", trigger.name, processed_count, total_objects)
 
             ann_path = target_ann_path / "triggers" / f"{trigger.name}.yml"
-            ensure_annotation_stub(
+            ann = ensure_annotation_stub(
                 ann_path,
                 storage=storage,
                 schema_name=s_name,
                 obj_folder="triggers",
                 obj_name=trigger.name,
             )
+            _record_enriched("triggers", trigger.name, ann)
             generated_ann.append(ann_path)
 
     if _is_category_allowed("sequences", allowed_types):
@@ -1294,13 +1321,14 @@ def sync_schema_annotations(
                 progress_callback("Sequence", sequence.name, processed_count, total_objects)
 
             ann_path = target_ann_path / "sequences" / f"{sequence.name}.yml"
-            ensure_annotation_stub(
+            ann = ensure_annotation_stub(
                 ann_path,
                 storage=storage,
                 schema_name=s_name,
                 obj_folder="sequences",
                 obj_name=sequence.name,
             )
+            _record_enriched("sequences", sequence.name, ann)
             generated_ann.append(ann_path)
 
     if _is_category_allowed("indexes", allowed_types):
@@ -1310,13 +1338,14 @@ def sync_schema_annotations(
                 progress_callback("Index", index.name, processed_count, total_objects)
 
             ann_path = target_ann_path / "indexes" / f"{index.name}.yml"
-            ensure_annotation_stub(
+            ann = ensure_annotation_stub(
                 ann_path,
                 storage=storage,
                 schema_name=s_name,
                 obj_folder="indexes",
                 obj_name=index.name,
             )
+            _record_enriched("indexes", index.name, ann)
             generated_ann.append(ann_path)
 
     if _is_category_allowed("synonyms", allowed_types):
@@ -1326,14 +1355,36 @@ def sync_schema_annotations(
                 progress_callback("Synonym", synonym.name, processed_count, total_objects)
 
             ann_path = target_ann_path / "synonyms" / f"{synonym.name}.yml"
-            ensure_annotation_stub(
+            ann = ensure_annotation_stub(
                 ann_path,
                 storage=storage,
                 schema_name=s_name,
                 obj_folder="synonyms",
                 obj_name=synonym.name,
             )
+            _record_enriched("synonyms", synonym.name, ann)
             generated_ann.append(ann_path)
+
+    from datetime import datetime, timezone
+
+    index_data = {
+        "schema": s_name,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "enriched_count": sum(len(v) for v in enriched_objects.values()),
+        "objects": enriched_objects,
+    }
+    local_index_path = target_ann_path / "annotations_index.json"
+    try:
+        local_index_path.parent.mkdir(parents=True, exist_ok=True)
+        local_index_path.write_text(json.dumps(index_data, indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+    if storage and hasattr(storage, "save_annotations_index"):
+        try:
+            storage.save_annotations_index(s_name, index_data)
+        except Exception:
+            pass
 
     return generated_ann
 

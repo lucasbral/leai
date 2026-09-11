@@ -122,9 +122,7 @@ class TestUpdater(unittest.TestCase):
     @patch("leai.updater.run_upgrade")
     @patch("leai.updater.detect_install_method")
     @patch("leai.updater.check_for_updates")
-    def test_prompt_and_update_user_accepts_restart_windows(
-        self, mock_check, mock_detect, mock_upgrade, mock_subproc_call, mock_execv
-    ):
+    def test_prompt_and_update_user_accepts_restart_windows(self, mock_check, mock_detect, mock_upgrade, mock_subproc_call, mock_execv):
         mock_check.return_value = UpdateInfo(
             latest_version="0.3.0",
             current_version="0.2.21",
@@ -138,8 +136,10 @@ class TestUpdater(unittest.TestCase):
         fake_console = MagicMock()
         fake_console.input.return_value = "y"
 
-        with patch.dict(os.environ, {}, clear=True), patch("sys.platform", "win32"), patch.object(
-            sys, "argv", ["leai", "discover", "tests", "--verbose"]
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("sys.platform", "win32"),
+            patch.object(sys, "argv", ["leai", "discover", "tests", "--verbose"]),
         ):
             with self.assertRaises(SystemExit) as ctx:
                 prompt_and_update(current_version="0.2.21", console=fake_console)
@@ -158,9 +158,7 @@ class TestUpdater(unittest.TestCase):
     @patch("leai.updater.run_upgrade")
     @patch("leai.updater.detect_install_method")
     @patch("leai.updater.check_for_updates")
-    def test_prompt_and_update_user_accepts_restart_unix(
-        self, mock_check, mock_detect, mock_upgrade, mock_subproc_call, mock_execv
-    ):
+    def test_prompt_and_update_user_accepts_restart_unix(self, mock_check, mock_detect, mock_upgrade, mock_subproc_call, mock_execv):
         mock_check.return_value = UpdateInfo(
             latest_version="0.3.0",
             current_version="0.2.21",
@@ -173,8 +171,10 @@ class TestUpdater(unittest.TestCase):
         fake_console = MagicMock()
         fake_console.input.return_value = "y"
 
-        with patch.dict(os.environ, {}, clear=True), patch("sys.platform", "linux"), patch.object(
-            sys, "argv", ["leai", "discover", "tests", "chat"]
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("sys.platform", "linux"),
+            patch.object(sys, "argv", ["leai", "discover", "tests", "chat"]),
         ):
             with self.assertRaises(SystemExit) as ctx:
                 prompt_and_update(current_version="0.2.21", console=fake_console)
@@ -208,9 +208,7 @@ class TestUpdater(unittest.TestCase):
         mock_fail.returncode = 1
         mock_fail.stdout = "Updated leai v0.2.28 -> v0.2.29\n - leai==0.2.28\n + leai==0.2.29"
         mock_fail.stderr = (
-            "error: Failed to upgrade leai\n"
-            "  Caused by: Failed to install entrypoint\n"
-            "  Caused by: failed to copy file ... os error 32"
+            "error: Failed to upgrade leai\n  Caused by: Failed to install entrypoint\n  Caused by: failed to copy file ... os error 32"
         )
 
         mock_chk = MagicMock()

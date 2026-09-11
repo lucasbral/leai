@@ -41,6 +41,7 @@ class SeaweedFSStorage:
     def __init__(self, config: SeaweedFSConfig):
         self.config = config
         self._s3_client = None
+        self._cached_annotations_indexes: dict[str, dict[str, Any]] = {}
 
     @property
     def client(self):
@@ -444,6 +445,143 @@ class SeaweedFSStorage:
 
         self._cached_annotated_objects = annotated
         return annotated
+
+    # -------------------------------------------------------------------------
+    # ANNOTATIONS INDEX MANAGEMENT
+    # -------------------------------------------------------------------------
+
+    def get_annotations_index_key(self, schema_name: str = "") -> str:
+        """Returns the SeaweedFS S3 object key for annotations_index.json."""
+        prefix = self.config.annotations_prefix.strip("/")
+        s_name = schema_name.upper() if schema_name else ""
+        if prefix and s_name:
+            return f"{prefix}/{s_name}/annotations_index.json"
+        elif prefix:
+            return f"{prefix}/annotations_index.json"
+        elif s_name:
+            return f"{s_name}/annotations_index.json"
+        return "annotations_index.json"
+
+    def load_annotations_index(self, schema_name: str = "", force_refresh: bool = False) -> dict[str, Any]:
+        """Loads the annotations_index.json from SeaweedFS S3 with local in-memory caching."""
+        s_name = schema_name.upper() if schema_name else ""
+        if not force_refresh and hasattr(self, "_cached_annotations_indexes") and s_name in self._cached_annotations_indexes:
+            return self._cached_annotations_indexes[s_name]
+
+        if not hasattr(self, "_cached_annotations_indexes"):
+            self._cached_annotations_indexes = {}
+
+        self.ensure_bucket_exists()
+        bucket = self.config.bucket
+        key = self.get_annotations_index_key(schema_name)
+        try:
+            resp = self.client.get_object(Bucket=bucket, Key=key)
+            content = resp["Body"].read().decode("utf-8")
+            data = json.loads(content)
+            if isinstance(data, dict):
+                self._cached_annotations_indexes[s_name] = data
+                return data
+        except Exception:
+            pass
+
+        default_index: dict[str, Any] = {
+            "schema": s_name,
+            "enriched_count": 0,
+            "objects": {},
+        }
+        self._cached_annotations_indexes[s_name] = default_index
+        return default_index
+
+    def save_annotations_index(self, schema_name: str = "", index_data: dict[str, Any] | None = None) -> str:
+        """Saves the annotations_index.json to SeaweedFS S3."""
+        self.ensure_bucket_exists()
+        bucket = self.config.bucket
+        key = self.get_annotations_index_key(schema_name)
+        s_name = schema_name.upper() if schema_name else ""
+
+        if index_data is None:
+            index_data = self.load_annotations_index(schema_name)
+
+        objs = index_data.get("objects", {})
+        total_count = sum(len(items) for items in objs.values() if isinstance(items, dict))
+        index_data["enriched_count"] = total_count
+
+        body = json.dumps(index_data, indent=2, ensure_ascii=False)
+        self.client.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=body.encode("utf-8"),
+            ContentType="application/json",
+        )
+        if not hasattr(self, "_cached_annotations_indexes"):
+            self._cached_annotations_indexes = {}
+        self._cached_annotations_indexes[s_name] = index_data
+        return key
+
+    def update_object_in_index(
+        self,
+        schema_name: str,
+        obj_folder: str,
+        obj_name: str,
+        annotation: ObjectAnnotation,
+        db_comment: str | None = None,
+    ) -> None:
+        """Updates an individual object in annotations_index.json based on whether it is enriched."""
+        from leai.annotations import is_annotation_enriched
+
+        folder = obj_folder.lower()
+        name = obj_name.upper()
+
+        index_data = self.load_annotations_index(schema_name)
+        objects = index_data.setdefault("objects", {})
+        folder_dict = objects.setdefault(folder, {})
+
+        if is_annotation_enriched(annotation, db_comment=db_comment):
+            clean_entry: dict[str, Any] = {}
+            if annotation.description and annotation.description.strip():
+                clean_entry["description"] = annotation.description.strip()
+            if annotation.tags:
+                clean_entry["tags"] = annotation.tags
+            if annotation.business_rules:
+                clean_entry["business_rules"] = annotation.business_rules
+            if annotation.use_cases:
+                clean_entry["use_cases"] = annotation.use_cases
+            if annotation.warnings:
+                clean_entry["warnings"] = annotation.warnings
+            if annotation.related_objects:
+                clean_entry["related_objects"] = annotation.related_objects
+            clean_cols = {col: comm for col, comm in annotation.columns.items() if comm and comm.strip()}
+            if clean_cols:
+                clean_entry["columns"] = clean_cols
+
+            folder_dict[name] = clean_entry
+        else:
+            if name in folder_dict:
+                del folder_dict[name]
+
+        self.save_annotations_index(schema_name, index_data)
+
+    def delete_annotation(self, schema_name: str, obj_folder: str, obj_name: str) -> bool:
+        """Deletes an annotation YAML from SeaweedFS S3 and updates caches."""
+        self.ensure_bucket_exists()
+        bucket = self.config.bucket
+        prefix = self.config.annotations_prefix.strip("/")
+        key = f"{prefix}/{schema_name}/{obj_folder}/{obj_name}.yml" if prefix else f"{schema_name}/{obj_folder}/{obj_name}.yml"
+        try:
+            self.client.delete_object(Bucket=bucket, Key=key)
+            s_name = schema_name.upper() if schema_name else ""
+            folder = obj_folder.lower()
+            name = obj_name.upper()
+            if hasattr(self, "_cached_annotated_objects") and self._cached_annotated_objects is not None:
+                self._cached_annotated_objects.discard((s_name, folder, name))
+                self._cached_annotated_objects.discard(("", folder, name))
+            index_data = self.load_annotations_index(schema_name)
+            if name in index_data.get("objects", {}).get(folder, {}):
+                del index_data["objects"][folder][name]
+                self.save_annotations_index(schema_name, index_data)
+            return True
+        except Exception:
+            return False
 
     # -------------------------------------------------------------------------
     # GLOSSARY MANAGEMENT

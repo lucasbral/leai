@@ -906,6 +906,7 @@ def chat(
         raise typer.Exit(code=1)
 
     from leai.i18n import resolve_locale, set_locale
+
     set_locale(resolve_locale(language, getattr(cfg, "language", None)))
 
     storage = _resolve_storage(cfg, seaweed)
@@ -1037,7 +1038,6 @@ def default(
     set_locale(resolve_locale(language, getattr(cfg, "language", None)))
 
     if ctx.invoked_subcommand is None:
-
         if no_update_check:
             cfg.update_check = False
 

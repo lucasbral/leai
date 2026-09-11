@@ -192,7 +192,9 @@ def run_upgrade(method: str | None = None, target_version: str | None = None) ->
                 try:
                     uv_bin = shutil.which("uv") or "uv"
                     uv_chk = subprocess.run([uv_bin, "tool", "list"], capture_output=True, text=True, timeout=5.0)
-                    if "leai" in uv_chk.stdout and (target_version is None or target_version in uv_chk.stdout or "Updated leai" in output_str):
+                    if "leai" in uv_chk.stdout and (
+                        target_version is None or target_version in uv_chk.stdout or "Updated leai" in output_str
+                    ):
                         return True, res.stdout or t("updater.success")
                 except Exception:
                     pass
@@ -271,9 +273,7 @@ def prompt_and_update(current_version: str, console: Console | None = None) -> b
         # Filter sys.argv to preserve user CLI arguments while stripping test runner artifacts
         runner_keywords = {"discover", "run", "pytest", "unittest"}
         clean_args = [
-            arg
-            for arg in sys.argv[1:]
-            if arg not in runner_keywords and not arg.endswith(".py") and not arg.startswith(("-m", "--cov"))
+            arg for arg in sys.argv[1:] if arg not in runner_keywords and not arg.endswith(".py") and not arg.startswith(("-m", "--cov"))
         ]
         cmd = [sys.executable, "-m", "leai"] + clean_args
         if sys.platform == "win32":

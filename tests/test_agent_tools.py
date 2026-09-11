@@ -507,6 +507,63 @@ END;"""
         self.assertEqual(conv_msgs[2]["content"][0]["type"], "tool_result")
         self.assertEqual(conv_msgs[2]["content"][0]["tool_use_id"], "call_123")
 
+    def test_search_database_objects_with_annotations_index(self):
+        from unittest.mock import MagicMock
+
+        from leai.ai.tools import _SCHEMA_ANNOTATIONS_INDEX_CACHE
+
+        _SCHEMA_ANNOTATIONS_INDEX_CACHE.clear()
+        mock_storage = MagicMock()
+        mock_storage.load_annotations_index.return_value = {
+            "schema": "C_ERGON",
+            "enriched_count": 1,
+            "objects": {
+                "tables": {
+                    "EVENTO_FUNC": {
+                        "description": "Tabela mestre de historico e eventos funcionais",
+                        "tags": ["rh", "historico"],
+                        "columns": {"NUM_FOLHA": "Numero sequencial da folha"},
+                    }
+                }
+            },
+        }
+
+        # Search for term that only exists in the enriched annotations index description
+        res = search_database_objects(self.schemas, query="funcionais", config=self.cfg)
+        # Verify EVENTO_FUNC was found with the enriched description
+        matching = [r for r in res if r["name"] == "EVENTO_FUNC"]
+        self.assertEqual(len(matching), 1)
+
+    def test_search_column_comments_auto_table_detection_and_index(self):
+        from unittest.mock import MagicMock
+
+        from leai.ai.tools import _SCHEMA_ANNOTATIONS_INDEX_CACHE
+
+        _SCHEMA_ANNOTATIONS_INDEX_CACHE.clear()
+        mock_storage = MagicMock()
+        mock_storage.load_annotations_index.return_value = {
+            "schema": "C_ERGON",
+            "enriched_count": 1,
+            "objects": {
+                "tables": {
+                    "VINCULOS": {
+                        "description": "Tabela de vinculos",
+                        "columns": {"DTVAC": "Data de vacancia do cargo"},
+                    }
+                }
+            },
+        }
+
+        # Test auto-table detection: user passes query="VINCULOS" without table_name
+        res = search_column_comments(self.schemas, query="VINCULOS", config=self.cfg)
+        # All returned columns should be from VINCULOS
+        self.assertTrue(len(res) > 0)
+        self.assertTrue(all(r["table_name"] == "VINCULOS" for r in res))
+
+        # Test searching enriched column comment
+        res_col = search_column_comments(self.schemas, query="vacancia", config=self.cfg)
+        self.assertTrue(any(r["column_name"] == "DTVAC" for r in res_col))
+
 
 if __name__ == "__main__":
     unittest.main()

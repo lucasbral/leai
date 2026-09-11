@@ -427,6 +427,87 @@ storage:
         self.assertIn("--force-upload", clean_output)
         self.assertIn("-F", clean_output)
 
+    def test_is_annotation_enriched(self) -> None:
+        from leai.annotations import is_annotation_enriched
+
+        empty_stub = ObjectAnnotation(
+            description="",
+            business_rules=[],
+            tags=[],
+            use_cases=[],
+            warnings=[],
+            columns={"ID": "", "NAME": ""},
+        )
+        self.assertFalse(is_annotation_enriched(empty_stub))
+        self.assertFalse(is_annotation_enriched(None))
+
+        # Description matches native db_comment -> not enriched
+        db_stub = ObjectAnnotation(description="Native comment", columns={"ID": ""})
+        self.assertFalse(is_annotation_enriched(db_stub, db_comment="Native comment"))
+
+        # Description changed from native comment -> enriched!
+        self.assertTrue(is_annotation_enriched(db_stub, db_comment="Different original comment"))
+
+        # Business rule present -> enriched!
+        with_rules = ObjectAnnotation(business_rules=["Rule 1"])
+        self.assertTrue(is_annotation_enriched(with_rules))
+
+        # Column comment present -> enriched!
+        with_col = ObjectAnnotation(columns={"ID": "", "EMAIL": "User email address"})
+        self.assertTrue(is_annotation_enriched(with_col))
+
+    def test_annotations_index_save_load_update(self) -> None:
+        cfg = SeaweedFSConfig(endpoint_url="http://localhost:8333", bucket="leai-test", annotations_prefix="annotations")
+        storage = SeaweedFSStorage(cfg)
+        storage._s3_client = self.mock_s3_client
+
+        # Initial index save
+        initial_data = {
+            "schema": "TEST_SCHEMA",
+            "enriched_count": 1,
+            "objects": {
+                "tables": {
+                    "USERS": {
+                        "description": "Enriched user entity",
+                        "business_rules": ["Active users only"],
+                        "columns": {"ID": "Primary key"},
+                    }
+                }
+            },
+        }
+        storage.save_annotations_index("TEST_SCHEMA", initial_data)
+        put_keys = [call.kwargs["Key"] for call in self.mock_s3_client.put_object.call_args_list]
+        self.assertIn("annotations/TEST_SCHEMA/annotations_index.json", put_keys)
+
+        # Mock loading back
+        mock_body = MagicMock()
+        mock_body.read.return_value = json.dumps(initial_data).encode("utf-8")
+        self.mock_s3_client.get_object.return_value = {"Body": mock_body}
+
+        loaded = storage.load_annotations_index("TEST_SCHEMA", force_refresh=True)
+        self.assertEqual(loaded["schema"], "TEST_SCHEMA")
+        self.assertEqual(loaded["enriched_count"], 1)
+        self.assertIn("USERS", loaded["objects"]["tables"])
+
+        # Update object in index with enriched annotation
+        new_ann = ObjectAnnotation(
+            description="Customers entity",
+            tags=["finance"],
+            columns={"COD": "Customer code"},
+        )
+        storage.update_object_in_index("TEST_SCHEMA", "tables", "CUSTOMERS", new_ann)
+        self.assertIn("CUSTOMERS", storage._cached_annotations_indexes["TEST_SCHEMA"]["objects"]["tables"])
+
+        # Update object with empty stub -> should be removed from index
+        empty_ann = ObjectAnnotation(description="", columns={"ID": ""})
+        storage.update_object_in_index("TEST_SCHEMA", "tables", "CUSTOMERS", empty_ann)
+        self.assertNotIn("CUSTOMERS", storage._cached_annotations_indexes["TEST_SCHEMA"]["objects"]["tables"])
+
+        # Delete annotation
+        res_del = storage.delete_annotation("TEST_SCHEMA", "tables", "USERS")
+        self.assertTrue(res_del)
+        self.assertNotIn("USERS", storage._cached_annotations_indexes["TEST_SCHEMA"]["objects"]["tables"])
+
 
 if __name__ == "__main__":
     unittest.main()

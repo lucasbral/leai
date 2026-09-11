@@ -75,6 +75,36 @@ def load_annotation(
     return ObjectAnnotation()
 
 
+def is_annotation_enriched(annotation: ObjectAnnotation | None, db_comment: str | None = None) -> bool:
+    """Checks whether an annotation has actual human/AI enriched content beyond an empty stub.
+
+    Returns True if it contains business rules, tags, use cases, warnings, related objects,
+    non-empty custom column comments, or a description that differs from the native database comment.
+    """
+    if annotation is None:
+        return False
+    if annotation.business_rules:
+        return True
+    if annotation.tags:
+        return True
+    if annotation.use_cases:
+        return True
+    if annotation.warnings:
+        return True
+    if annotation.related_objects:
+        return True
+    if any(bool(v and str(v).strip()) for v in annotation.columns.values()):
+        return True
+    desc = (annotation.description or "").strip()
+    if db_comment is not None:
+        orig = db_comment.strip()
+        if desc and desc != orig:
+            return True
+    elif desc:
+        return True
+    return False
+
+
 def save_annotation(
     file_path: Path,
     annotation: ObjectAnnotation,
@@ -82,6 +112,7 @@ def save_annotation(
     schema_name: str = "",
     obj_folder: str = "",
     obj_name: str = "",
+    db_comment: str | None = None,
 ) -> None:
     file_path.parent.mkdir(parents=True, exist_ok=True)
     data = annotation.model_dump(exclude_defaults=False, exclude_none=False)
@@ -99,6 +130,14 @@ def save_annotation(
     if storage is not None and schema_name and obj_folder and obj_name:
         try:
             storage.save_annotation(schema_name, obj_folder, obj_name, annotation)
+            if hasattr(storage, "update_object_in_index"):
+                storage.update_object_in_index(
+                    schema_name=schema_name,
+                    obj_folder=obj_folder,
+                    obj_name=obj_name,
+                    annotation=annotation,
+                    db_comment=db_comment,
+                )
         except Exception as exc:
             print(f"Warning: Failed to upload annotation to SeaweedFS: {exc}", file=sys.stderr)
 
@@ -137,6 +176,7 @@ def ensure_annotation_stub(
                 schema_name=schema_name,
                 obj_folder=obj_folder,
                 obj_name=obj_name,
+                db_comment=db_comment,
             )
         return existing
 
@@ -154,5 +194,6 @@ def ensure_annotation_stub(
         schema_name=schema_name,
         obj_folder=obj_folder,
         obj_name=obj_name,
+        db_comment=db_comment,
     )
     return annotation

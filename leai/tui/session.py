@@ -108,6 +108,7 @@ class InteractiveTUISession:
         self.config = config
         # Ensure active locale matches project configuration
         from leai.i18n import resolve_locale, set_locale
+
         set_locale(resolve_locale(None, getattr(config, "language", None)))
         self.client = client
         self.provider_name = (provider_name or config.ai.default_provider or "openai").lower()
@@ -372,7 +373,11 @@ class InteractiveTUISession:
         provider_name = (self.provider_name or self.config.ai.default_provider or "openai").upper()
         model_name = self.model_name or "default"
         is_client_ok = self.client is not None
-        client_status = f"[bold green]{t('tui.status_connected')}[/bold green]" if is_client_ok else f"[bold yellow]{t('tui.status_not_configured')}[/bold yellow]"
+        client_status = (
+            f"[bold green]{t('tui.status_connected')}[/bold green]"
+            if is_client_ok
+            else f"[bold yellow]{t('tui.status_not_configured')}[/bold yellow]"
+        )
 
         chunks_dir = self.config.docPath / "chunks"
         chunk_count = len(list(chunks_dir.glob("*.json"))) if chunks_dir.exists() else 0
@@ -2185,9 +2190,7 @@ class InteractiveTUISession:
             (
                 "/schema [s]",
                 "Inspeção" if is_pt else "Inspection",
-                "Exibe visão geral detalhada do catálogo do schema"
-                if is_pt
-                else "Display detailed catalog overview for schema",
+                "Exibe visão geral detalhada do catálogo do schema" if is_pt else "Display detailed catalog overview for schema",
             ),
             (
                 "/changes [d]",
@@ -2206,16 +2209,12 @@ class InteractiveTUISession:
             (
                 "/workflow <name> <obj>",
                 "Workflows",
-                "Executa workflow autônomo multi-etapas (impact, refactor)"
-                if is_pt
-                else "Execute autonomous pipeline (impact, refactor)",
+                "Executa workflow autônomo multi-etapas (impact, refactor)" if is_pt else "Execute autonomous pipeline (impact, refactor)",
             ),
             (
                 "/models [p]",
                 "Config IA" if is_pt else "AI Config",
-                "Lista modelos de IA disponíveis na API do provedor"
-                if is_pt
-                else "List available AI models from the provider API",
+                "Lista modelos de IA disponíveis na API do provedor" if is_pt else "List available AI models from the provider API",
             ),
             (
                 "/model <p> [m]",
@@ -2269,9 +2268,7 @@ class InteractiveTUISession:
             (
                 "/clear",
                 "Sessão" if is_pt else "Session",
-                "Limpa a memória do chat e reseta a tela do terminal"
-                if is_pt
-                else "Reset chat memory and clear terminal screen",
+                "Limpa a memória do chat e reseta a tela do terminal" if is_pt else "Reset chat memory and clear terminal screen",
             ),
             (
                 "/chat <msg>",
@@ -2304,9 +2301,7 @@ class InteractiveTUISession:
                 border_style="#74c7ec",
             )
         )
-        console.print(
-            f"[dim #9399b2]{t('tui.help_tip')}[/dim #9399b2]\n"
-        )
+        console.print(f"[dim #9399b2]{t('tui.help_tip')}[/dim #9399b2]\n")
 
     def _render_models_table(self, provider_name: str | None = None, interactive: bool = True) -> None:
         target_prov = (provider_name or self.provider_name or "openai").lower()
@@ -2422,7 +2417,14 @@ class InteractiveTUISession:
             tbl.add_row("Synonyms", str(len(s.synonyms)))
 
             console.print()
-            console.print(Panel(tbl, title=f"[bold yellow]{t('tui.schema_summary_title', schema=s_name)}[/bold yellow]", box=box.ROUNDED, border_style="yellow"))
+            console.print(
+                Panel(
+                    tbl,
+                    title=f"[bold yellow]{t('tui.schema_summary_title', schema=s_name)}[/bold yellow]",
+                    box=box.ROUNDED,
+                    border_style="yellow",
+                )
+            )
         console.print()
 
     def _render_changes(self, days: int) -> None:

@@ -2,6 +2,17 @@
 
 All notable changes to the **LEAI** project are documented here.
 
+## [0.3.0] — 2026
+
+### ⚡ Metadata Search Optimization & Network I/O Elimination via `annotations_index.json`
+* **Elimination of N+1 Network Bottleneck in SeaweedFS / S3:** Assistant search tools (`search_database_objects`, `search_column_comments`, `get_table_schema`, and `search_business_documentation`) now leverage a centralized in-memory index (`annotations_index.json`). This eliminates hundreds of sequential HTTP network requests in remote modes (`--no-cache`), reducing search latency from ~150s to under 0.05s.
+* **Preservation of Empty Stubs:** All `.yml` annotation files (including empty or default stubs) continue to exist as-is on disk and in S3. The `annotations_index.json` includes only enriched objects (with custom comments, business rules, or tags), accurately classified by `is_annotation_enriched`.
+* **Automatic & Incremental Index Sync:** The `leai annotate` command automatically compiles the index, and dedicated methods in `SeaweedFSStorage` maintain the index updated on individual annotation writes and deletions.
+* **Smart Table Direct Match in `search_column_comments`:** When querying directly for a known table name (e.g. `WEB_DADOS_FUNC`), the tool immediately isolates that entity and returns all its documented columns.
+* **Code Quality & Ruff Linting:** Canonical formatting and linting fixes applied across the codebase according to project guidelines.
+
+---
+
 ## [0.2.30] — 2026
 
 ### 🛡️ Windows Entrypoint File Lock Handling & CI Cross-Platform Compatibility
