@@ -86,6 +86,8 @@ class LeaiConfig(BaseModel):
     storage: StorageConfig = Field(default_factory=StorageConfig)
     update_check: bool = True
     language: str = Field(default="en-US", description="Interface language: 'en-US' or 'pt-BR'")
+    updates_log_path: Path = Field(default=Path("./logs/updates"))
+    generate_update_log: bool = Field(default=True)
 
     @property
     def schema_name(self) -> str:
@@ -179,6 +181,8 @@ def load_config(config_path: Path) -> LeaiConfig:
     config.rawPath = (config_path.parent / config.rawPath).resolve()
     config.docPath = (config_path.parent / config.docPath).resolve()
     config.annotationsPath = (config_path.parent / config.annotationsPath).resolve()
+    if not config.updates_log_path.is_absolute():
+        config.updates_log_path = (config_path.parent / config.updates_log_path).resolve()
     config.include = [item.upper() for item in config.include]
     config.exclude = [item.upper() for item in config.exclude]
     config.object_types = [item.lower() for item in config.object_types]

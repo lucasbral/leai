@@ -2,6 +2,16 @@
 
 All notable changes to the **LEAI** project are documented here.
 
+## [0.3.1] — 2026
+
+### 📋 Audit Log System & Object Manifest for `leai update`
+* **Modified Objects Audit Trail:** The `leai update` command now formally tracks and records every Oracle database object modified within the specified time window (`tables`, `views`, `mviews`, packages, procedures, triggers, sequences, indexes, synonyms) along with timestamps (`last_ddl_time`), modifier (`last_modified_by`), and comments.
+* **Dual Manifest Format (JSON + Markdown):** Automatic generation of structured JSON manifests (`update_YYYYMMDD_HHMMSS.json` and `latest.json`) for agent and pipeline consumption, alongside human-readable Markdown tables (`update_YYYYMMDD_HHMMSS.md` and `latest.md`).
+* **Remote SeaweedFS S3 Persistence:** When remote storage is enabled, update reports and manifests are automatically replicated to the S3 bucket under `logs/updates/`.
+* **Configuration & Command-Line Flags:** Supported `--log / --no-log` and `--log-dir` flags in `leai update`, plus `updates_log_path` and `generate_update_log` configuration options in `leai.yml`.
+
+---
+
 ## [0.3.0] — 2026
 
 ### ⚡ Metadata Search Optimization & Network I/O Elimination via `annotations_index.json`

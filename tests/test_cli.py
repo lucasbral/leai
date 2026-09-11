@@ -576,6 +576,14 @@ docPath: "{(base / "docs").as_posix()}"
             self.assertTrue((base / "raw" / "HR" / "tables" / "T_DELTA.json").exists())
             self.assertTrue((base / "annotations" / "HR" / "tables" / "T_DELTA.yml").exists())
             self.assertTrue((base / "docs" / "HR" / "tables" / "T_DELTA.md").exists())
+            self.assertTrue((base / "logs" / "updates" / "latest.json").exists())
+            self.assertTrue((base / "logs" / "updates" / "latest.md").exists())
+
+            # Invoke update with --no-log and custom log-dir
+            custom_logs = base / "custom_logs"
+            result_no_log = self.runner.invoke(app, ["update", "-c", str(cfg_file), "--no-log", "--log-dir", str(custom_logs)])
+            self.assertEqual(result_no_log.exit_code, 0)
+            self.assertFalse(custom_logs.exists())
 
     @patch("leai.cli._resolve_storage")
     def test_rule_cli_commands(self, mock_resolve_storage):

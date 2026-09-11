@@ -731,3 +731,53 @@ class SeaweedFSStorage:
                     callback("annotations", rel)
 
         return counts
+
+    def save_update_log(
+        self,
+        manifest: dict[str, Any],
+        markdown_content: str,
+        timestamp_slug: str | None = None,
+    ) -> dict[str, str]:
+        """Saves update logs (JSON and Markdown) to SeaweedFS S3 under logs/updates/."""
+        from datetime import datetime, timezone
+
+        self.ensure_bucket_exists()
+        bucket = self.config.bucket
+
+        if not timestamp_slug:
+            dt = datetime.now(timezone.utc)
+            timestamp_slug = dt.strftime("%Y%m%d_%H%M%S")
+
+        prefix = "logs/updates"
+        json_key = f"{prefix}/update_{timestamp_slug}.json"
+        md_key = f"{prefix}/update_{timestamp_slug}.md"
+        latest_json_key = f"{prefix}/latest.json"
+        latest_md_key = f"{prefix}/latest.md"
+
+        json_bytes = json.dumps(manifest, indent=2, ensure_ascii=False).encode("utf-8")
+        md_bytes = markdown_content.encode("utf-8")
+
+        # Upload timestamped files
+        self.client.put_object(Bucket=bucket, Key=json_key, Body=json_bytes, ContentType="application/json")
+        self.client.put_object(Bucket=bucket, Key=md_key, Body=md_bytes, ContentType="text/markdown; charset=utf-8")
+
+        # Upload pointer files (latest)
+        self.client.put_object(Bucket=bucket, Key=latest_json_key, Body=json_bytes, ContentType="application/json")
+        self.client.put_object(Bucket=bucket, Key=latest_md_key, Body=md_bytes, ContentType="text/markdown; charset=utf-8")
+
+        return {
+            "json": json_key,
+            "markdown": md_key,
+            "latest_json": latest_json_key,
+            "latest_markdown": latest_md_key,
+        }
+
+    def load_latest_update_log(self) -> dict[str, Any] | None:
+        """Loads the most recent update manifest (latest.json) from SeaweedFS S3."""
+        bucket = self.config.bucket
+        key = "logs/updates/latest.json"
+        try:
+            resp = self.client.get_object(Bucket=bucket, Key=key)
+            return json.loads(resp["Body"].read().decode("utf-8"))
+        except Exception:
+            return None

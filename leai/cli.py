@@ -478,6 +478,8 @@ def update(
     force_upload: bool = typer.Option(
         False, "--force-upload", "-F", help="Force upload of all objects to SeaweedFS (bypasses SHA-256 manifest)"
     ),
+    update_log: bool = typer.Option(True, "--log/--no-log", help="Generate update audit log and manifest files"),
+    log_dir: Path | None = typer.Option(None, "--log-dir", help="Directory for update logs (overrides updates_log_path in leai.yml)"),
 ) -> None:
     """Fast incremental update: extracts recently modified objects from Oracle, merges snapshots, syncs annotations, and pushes delta to SeaweedFS."""
     start_time = time.perf_counter()
@@ -547,6 +549,7 @@ def update(
                     "indexes": 0,
                     "synonyms": 0,
                 }
+                schemas_modified_objects: dict[str, list[dict[str, Any]]] = {}
 
                 for s_idx, schema_name in enumerate(target_schemas, 1):
                     schema_t0 = time.perf_counter()
@@ -572,6 +575,10 @@ def update(
                         hours=effective_hours,
                         connection=connection,
                     )
+
+                    from leai.updates_log import collect_modified_objects
+
+                    schemas_modified_objects[schema_name] = collect_modified_objects(schema_meta)
 
                     num_objs = count_schema_objects(schema_meta, cfg.object_types)
                     schema_dur = time.perf_counter() - schema_t0
@@ -669,6 +676,37 @@ def update(
             if total_s3_skipped > 0 or total_s3_uploaded > 0:
                 bucket_str += f" ([bold green]{total_s3_uploaded} {t('cli.s3_versioned')}[/bold green], [dim]{total_s3_skipped} {t('cli.s3_unchanged')}[/dim])"
             out_paths["SeaweedFS S3"] = bucket_str
+
+        # 4. Generate update audit log and manifest if enabled
+        should_log = update_log and getattr(cfg, "generate_update_log", True)
+        if should_log:
+            from leai.updates_log import build_update_manifest, render_update_markdown, save_update_log
+
+            out_log_dir = log_dir or getattr(cfg, "updates_log_path", Path("./logs/updates"))
+            sync_summary = {
+                "s3_uploaded": total_s3_uploaded,
+                "s3_skipped": total_s3_skipped,
+                "annotations_synced": total_ann,
+                "docs_compiled": total_md,
+            }
+            manifest = build_update_manifest(
+                schemas_objects=schemas_modified_objects,
+                time_window=time_desc,
+                duration_seconds=elapsed,
+                sync_summary=sync_summary,
+            )
+
+            if not is_no_cache or log_dir is not None:
+                json_path, md_path, _, _ = save_update_log(manifest, out_log_dir)
+                out_paths["Update Audit Log"] = f"{out_log_dir} ({json_path.name}, latest.json)"
+
+            if storage:
+                try:
+                    md_content = render_update_markdown(manifest)
+                    storage.save_update_log(manifest, md_content)
+                    out_paths["SeaweedFS Audit Log"] = f"{cfg.storage.seaweedfs.bucket}/logs/updates/latest.json"
+                except Exception as exc:
+                    console.print(f"[yellow]Warning: Could not save update log to SeaweedFS: {exc}[/yellow]")
 
         _print_final_summary_panel(
             title=f"Incremental Update Completed ({time_desc})",

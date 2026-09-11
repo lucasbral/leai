@@ -508,6 +508,37 @@ storage:
         self.assertTrue(res_del)
         self.assertNotIn("USERS", storage._cached_annotations_indexes["TEST_SCHEMA"]["objects"]["tables"])
 
+    def test_storage_update_log_methods(self):
+        cfg = SeaweedFSConfig(endpoint_url="http://localhost:8333", bucket="leai-test")
+        storage = SeaweedFSStorage(cfg)
+        storage._s3_client = self.mock_s3_client
+        manifest = {
+            "timestamp": "2026-09-11T15:00:00Z",
+            "time_window": "last 1 days",
+            "total_modified_objects": 2,
+            "schemas": {"C_ERGON": {"total": 2}},
+        }
+        md_content = "# Update Report"
+
+        keys = storage.save_update_log(manifest, md_content, timestamp_slug="20260911_150000")
+        self.assertEqual(keys["json"], "logs/updates/update_20260911_150000.json")
+        self.assertEqual(keys["markdown"], "logs/updates/update_20260911_150000.md")
+        self.assertEqual(keys["latest_json"], "logs/updates/latest.json")
+        self.assertEqual(keys["latest_markdown"], "logs/updates/latest.md")
+
+        put_keys = [call.kwargs.get("Key") for call in self.mock_s3_client.put_object.call_args_list]
+        self.assertIn("logs/updates/update_20260911_150000.json", put_keys)
+        self.assertIn("logs/updates/latest.json", put_keys)
+
+        # Mock loading latest
+        mock_body = MagicMock()
+        mock_body.read.return_value = json.dumps(manifest).encode("utf-8")
+        self.mock_s3_client.get_object.return_value = {"Body": mock_body}
+
+        loaded = storage.load_latest_update_log()
+        self.assertIsNotNone(loaded)
+        self.assertEqual(loaded["total_modified_objects"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()
