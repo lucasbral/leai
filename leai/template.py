@@ -39,6 +39,8 @@ schemas:
 rawPath: "./raw"                  # Technical snapshot in JSON format
 annotationsPath: "./annotations"  # Business annotations layer in YAML
 docPath: "./docs"                  # Final compiled Markdown documentation for RAG
+updates_log_path: "./logs/updates" # Incremental update audit logs and manifests (latest.json, latest.md)
+generate_update_log: true         # Whether to generate update audit logs in leai update
 
 # ------------------------------------------------------------------------------
 # 4. OBJECT FILTERS (Include and Exclude)
@@ -187,6 +189,8 @@ schemas:
 rawPath: "./raw"                  # Snapshot técnico puro em formato JSON
 annotationsPath: "./annotations"  # Camada editável de anotações de negócio em YAML
 docPath: "./docs"                  # Documentação final compilada em Markdown para RAG
+updates_log_path: "./logs/updates" # Logs e manifestos de atualização incremental (latest.json, latest.md)
+generate_update_log: true         # Gera auditoria detalhada de objetos alterados no leai update
 
 # ------------------------------------------------------------------------------
 # 4. FILTROS DE OBJETOS (Inclusão e Exclusão)

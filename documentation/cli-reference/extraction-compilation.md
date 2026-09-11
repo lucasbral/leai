@@ -83,6 +83,8 @@ leai update -d 1 -W -C
 | `-W`, `--seaweed` | Flag | `False` | Sincroniza RAW delta, anotações e glossário com SeaweedFS S3. |
 | `--no-cache` | Flag | `False` | Opera em modo remoto puro sem salvar cópias locais. |
 | `-F`, `--force-upload` | Flag | `False` | Força envio ignorando validação do manifesto SHA-256. |
+| `--log / --no-log` | Flag | `True` | Gera manifesto e relatório de auditoria dos objetos alterados (`latest.json`, `latest.md`). |
+| `--log-dir PATH` | Opção | Do config | Diretório para gravação dos logs (sobrescreve `updates_log_path` do `leai.yml`). |
 
 > [!TIP]
 > No terminal interativo (`leai chat`), use o comando `/update [horas|dias] [-W] [-C]` (ex: `/update 4h -W`) para atualizar a sessão em tempo real sem precisar reiniciar o chat!

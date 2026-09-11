@@ -21,10 +21,12 @@ schemas:
   - HR
   - SALES
 
-# 3. Pipeline Paths
+# 3. Pipeline Paths & Logs
 rawPath: "./raw"                  # Technical snapshots in JSON
 annotationsPath: "./annotations"  # Business annotations in YAML
 docPath: "./docs"                  # Final Markdown documents
+updates_log_path: "./logs/updates" # Update audit logs and manifests (latest.json, latest.md)
+generate_update_log: true         # Whether to generate update audit logs in leai update
 
 # 4. Inclusion & Exclusion Filters (SQL LIKE Wildcards)
 include:
@@ -197,3 +199,18 @@ update_check: true # true (default) or false
    leai --no-update-check chat
    ```
 
+---
+
+## 📋 Update Audit Logs (`updates_log_path` & `generate_update_log`)
+
+When running `leai update`, LEAI can automatically record a manifest and report of all objects extracted and modified in Oracle:
+
+```yaml
+updates_log_path: "./logs/updates" # Output directory for log files (Default: ./logs/updates)
+generate_update_log: true         # Generates JSON and Markdown audit logs (Default: true)
+```
+
+### Generated Files per Run:
+- **`update_YYYYMMDD_HHMMSS.json` & `latest.json`:** Structured manifest with UTC timestamp, search window, modifier (`last_modified_by`), Oracle timestamp (`last_ddl_time`), and sync counts.
+- **`update_YYYYMMDD_HHMMSS.md` & `latest.md`:** Readable report with formatted tables for VS Code or GitHub.
+- **SeaweedFS / S3 Synchronization:** If `--seaweed` or S3 storage is enabled, files are automatically synced to the bucket under `logs/updates/`.

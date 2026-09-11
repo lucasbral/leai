@@ -83,6 +83,8 @@ leai update -d 1 -W -C
 | `-W`, `--seaweed` | Flag | `False` | Syncs RAW delta, annotations, and glossary with SeaweedFS S3 storage. |
 | `--no-cache` | Flag | `False` | Operates in pure remote mode without saving local files. |
 | `-F`, `--force-upload` | Flag | `False` | Force upload bypassing SHA-256 manifest check. |
+| `--log / --no-log` | Flag | `True` | Generates audit log and manifest files for modified objects (`latest.json`, `latest.md`). |
+| `--log-dir PATH` | Option | From config | Directory for audit logs (overrides `updates_log_path` in `leai.yml`). |
 
 > [!TIP]
 > In the interactive copilot session (`leai chat`), use `/update [hours|days] [-W] [-C]` (e.g. `/update 4h -W`) to refresh in-memory catalog data in real time!

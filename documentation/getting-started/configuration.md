@@ -21,10 +21,12 @@ schemas:
   - RH
   - FINANCEIRO
 
-# 3. Diretórios do Pipeline
+# 3. Diretórios do Pipeline e Logs
 rawPath: "./raw"                  # Snapshots técnicos em JSON
 annotationsPath: "./annotations"  # Camada de anotações em YAML
 docPath: "./docs"                  # Documentação final em Markdown
+updates_log_path: "./logs/updates" # Logs e manifestos de atualização (latest.json, latest.md)
+generate_update_log: true         # Gera auditoria de objetos alterados no leai update
 
 # 4. Filtros de Inclusão e Exclusão (Padrão SQL LIKE)
 include:
@@ -197,3 +199,18 @@ update_check: true # true (padrão) ou false
    leai --no-update-check chat
    ```
 
+---
+
+## 📋 Logs de Auditoria de Atualização (`updates_log_path` e `generate_update_log`)
+
+Ao executar o comando `leai update`, o LEAI pode registrar formalmente um manifesto e relatório de todos os objetos extraídos e modificados no Oracle naquela execução:
+
+```yaml
+updates_log_path: "./logs/updates" # Diretório para gravação dos arquivos (Padrão: ./logs/updates)
+generate_update_log: true         # Gera arquivos JSON e Markdown de auditoria (Padrão: true)
+```
+
+### Arquivos Gerados por Execução:
+- **`update_YYYYMMDD_HHMMSS.json` & `latest.json`:** Manifesto estruturado com timestamp UTC, janela de busca, autor da alteração (`last_modified_by`), timestamp no Oracle (`last_ddl_time`) e métricas de sincronização.
+- **`update_YYYYMMDD_HHMMSS.md` & `latest.md`:** Relatório com tabelas legíveis no VS Code ou GitHub.
+- **Sincronização com SeaweedFS / S3:** Se `--seaweed` ou o storage S3 estiver ativo, os arquivos são replicados automaticamente no bucket sob `logs/updates/`.
