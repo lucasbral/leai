@@ -2,6 +2,16 @@
 
 Todas as alterações notáveis no projeto **LEAI** são documentadas nesta página.
 
+## [0.3.4] — 2026
+
+### 🛡️ Blindagem Anti-Alucinação, Parser Resiliente de Tools e Padronização de Prompts em Inglês
+* **Parser Tolerante de Chamadas de Ferramentas (`extract_embedded_tool_calls`):** Adicionado suporte a extração resiliente de blocos JSON de ferramentas (`{"name": "...", "arguments": {...}}`) mesmo quando envoltos por texto livre ou preâmbulos conversacionais (problema comum em modelos locais no Ollama/Qwen), além de tags `<tool_call>` e blocos markdown.
+* **Loop de Auto-Correção (*Critique/Reprompting*):** Se o modelo alucinar promessas de busca (*"Vou pesquisar a tabela..."*) no primeiro turno sem disparar as ferramentas via API, o motor do LEAI intercepta internamente e exige a execução imediata via reprompting, eliminando respostas vazias para o usuário.
+* **Regra Anti-Preâmbulo (*Zero-Preamble*) e Few-Shot:** Inclusão de regras estritas proibindo preâmbulos conversacionais durante o uso de ferramentas e exemplos *few-shot* no prompt do sistema.
+* **Padronização Global de Prompts em Inglês com Resposta no Idioma Definido:** Todos os system prompts internos (agente, subagentes, enriquecimento e workflows) foram unificados em inglês para maximizar o raciocínio dos LLMs, acompanhados de uma diretiva mandatória garantindo que a resposta final seja entregue no idioma configurado no projeto (`language: "pt-BR"` ou `"en-US"`).
+
+---
+
 ## [0.3.3] — 2026
 
 ### ⏱️ Atualização do Cronômetro em Tempo Real na Extração de Metadados (TUI & CLI)

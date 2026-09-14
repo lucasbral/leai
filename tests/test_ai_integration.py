@@ -186,11 +186,13 @@ class AIIntegrationTests(unittest.TestCase):
 
         enrich_table_annotation(table, ann, client, overwrite=True, lang="pt-BR")
         self.assertIsNotNone(client.last_system_prompt)
-        self.assertIn("Engenheiro de Dados e DBA Oracle Especialista", client.last_system_prompt)
+        self.assertIn("You are an Expert Oracle Data Engineer", client.last_system_prompt)
+        self.assertIn("Portuguese (pt-BR)", client.last_system_prompt)
 
         enrich_table_annotation(table, ann, client, overwrite=True, lang="en-US")
         self.assertIsNotNone(client.last_system_prompt)
         self.assertIn("You are an Expert Oracle Data Engineer", client.last_system_prompt)
+        self.assertIn("English (en-US)", client.last_system_prompt)
 
     def test_enrich_schema_annotations_pipeline(self):
         with tempfile.TemporaryDirectory() as tmp:

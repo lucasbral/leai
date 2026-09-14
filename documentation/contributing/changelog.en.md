@@ -2,6 +2,16 @@
 
 All notable changes to the **LEAI** project are documented here.
 
+## [0.3.4] — 2026
+
+### 🛡️ Anti-Hallucination Guardrails, Resilient Tool Call Parser & English System Prompts
+* **Resilient Embedded Tool Call Parser (`extract_embedded_tool_calls`):** Added robust extraction of tool call JSON blocks (`{"name": "...", "arguments": {...}}`) even when embedded inside free-form conversational text (common quirk in local models such as Qwen in Ollama), `<tool_call>` tags, and markdown code blocks.
+* **Auto-Correction Critique Reprompting Loop:** When the model outputs conversational preambles promising to search (*"I will check the table..."*) on iteration 1 without executing tools via the API, LEAI interceptively reprompts the model internally to force immediate execution, preventing empty conversational responses to the user.
+* **Zero-Preamble Rule & Few-Shot Demonstrations:** Enforced strict zero-preamble rules during tool investigation along with in-context learning demonstrations showing direct tool calls versus prohibited preambles.
+* **Global English System Prompts with Localized Output Directive:** Unified all agent, subagent, workflow, and enrichment system prompts strictly in English to maximize LLM reasoning fidelity, coupled with a mandatory closing directive ensuring the final synthesized response is delivered in the project's configured language (`language: "pt-BR"` or `"en-US"`).
+
+---
+
 ## [0.3.3] — 2026
 
 ### ⏱️ Real-Time Elapsed Timer Updates During Metadata Extraction (TUI & CLI)

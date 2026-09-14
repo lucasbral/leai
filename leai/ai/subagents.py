@@ -185,7 +185,11 @@ class SubagentRunner:
     ) -> str:
         """Runs the subagent loop on the isolated task."""
         tools = self.filter_tools()
-        sys_prompt = self.config_obj.system_prompt.strip()
+        base_prompt = self.config_obj.system_prompt.strip()
+        lang = getattr(self.config, "language", "en-US") if self.config else "en-US"
+        from leai.ai.prompts import build_language_directive
+
+        sys_prompt = f"{base_prompt}\n\n{build_language_directive(lang)}"
         working_messages: list[dict[str, Any]] = [{"role": "user", "content": task}]
         self.last_tool_audits = []
         tools_ran = False
@@ -201,6 +205,34 @@ class SubagentRunner:
             )
 
             if not tool_calls:
+                if iteration == 1 and not tools_ran and content and tools:
+                    lower_c = content.lower()
+                    meta_signals = [
+                        '{"name":',
+                        "<tool_call>",
+                        "search_column_comments",
+                        "search_business_documentation",
+                        "get_table_schema",
+                        "lookup_business_term",
+                        "get_subprogram_source",
+                        "trace_object_lineage",
+                        "grep_plsql_code",
+                    ]
+                    if any(sig in lower_c for sig in meta_signals):
+                        working_messages.append({"role": "assistant", "content": content})
+                        working_messages.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    "EXECUTION PROTOCOL ERROR: You replied with conversational text or promised to execute tools "
+                                    "instead of calling them via the tools API. "
+                                    "Do NOT explain your plan or output JSON as text. "
+                                    "CALL the appropriate tool immediately."
+                                ),
+                            }
+                        )
+                        continue
+
                 if not tools_ran and not content:
                     if hasattr(self.client, "stream_chat") and callable(self.client.stream_chat):
                         content = self.client.stream_chat(working_messages, system_prompt=sys_prompt, on_chunk=on_token)

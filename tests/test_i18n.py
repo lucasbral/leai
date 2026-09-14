@@ -141,27 +141,33 @@ def test_cli_init_with_lang(tmp_path: Path, monkeypatch):
 
 
 def test_bilingual_ai_prompts():
-    """Verify localized AI system prompts for table enrichment, code enrichment, and copilot chat."""
-    # Table prompt
+    """Verify English AI system prompts with output language directives for table enrichment, code enrichment, and copilot chat."""
+    # Table prompt: system prompt instructions are in English, output directive targets locale
     en_table_prompt = get_table_enrichment_prompt("en-US")
     pt_table_prompt = get_table_enrichment_prompt("pt-BR")
     assert "You are an Expert Oracle Data Engineer" in en_table_prompt
-    assert "Engenheiro de Dados e DBA Oracle Especialista" in pt_table_prompt
+    assert "You are an Expert Oracle Data Engineer" in pt_table_prompt
+    assert "English (en-US)" in en_table_prompt
+    assert "Portuguese (pt-BR)" in pt_table_prompt
     assert "description" in en_table_prompt and "description" in pt_table_prompt
     assert "business_rules" in en_table_prompt and "business_rules" in pt_table_prompt
 
-    # Code prompt
+    # Code prompt: instructions in English, output directive targets locale
     en_code_prompt = get_code_enrichment_prompt("en-US")
     pt_code_prompt = get_code_enrichment_prompt("pt-BR")
     assert "Software Architect and Oracle PL/SQL Specialist" in en_code_prompt
-    assert "Arquiteto de Software e Especialista em Oracle PL/SQL" in pt_code_prompt
+    assert "Software Architect and Oracle PL/SQL Specialist" in pt_code_prompt
+    assert "English (en-US)" in en_code_prompt
+    assert "Portuguese (pt-BR)" in pt_code_prompt
     assert "subprograms" in en_code_prompt and "subprograms" in pt_code_prompt
 
-    # Ask Copilot prompt
+    # Ask Copilot prompt: instructions in English, output directive targets locale
     en_ask_prompt = get_ask_system_prompt("en-US")
     pt_ask_prompt = get_ask_system_prompt("pt-BR")
     assert "You are the LEAI Expert Assistant" in en_ask_prompt
-    assert "Você é o Assistente Especialista LEAI" in pt_ask_prompt
+    assert "You are the LEAI Expert Assistant" in pt_ask_prompt
+    assert "English (en-US)" in en_ask_prompt
+    assert "Portuguese (pt-BR)" in pt_ask_prompt
 
 
 def test_bilingual_markdown_doc_rendering():

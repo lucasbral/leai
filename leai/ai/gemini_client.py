@@ -356,6 +356,10 @@ class GeminiClient(BaseLLMClient):
                             tool_calls.append(tc_dict)
 
                     combined_text = "\n".join(text_parts).strip() if text_parts else None
+                    if not tool_calls and combined_text and tools:
+                        from leai.ai.openai_client import extract_embedded_tool_calls
+
+                        combined_text, tool_calls = extract_embedded_tool_calls(combined_text, tools=tools)
                     return combined_text, tool_calls
             except urllib.error.HTTPError as exc:
                 err_body = exc.read().decode("utf-8", errors="replace")

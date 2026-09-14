@@ -9,6 +9,99 @@ from typing import Any
 from leai.ai.base import BaseLLMClient
 
 
+def extract_embedded_tool_calls(content: str, tools: list[dict[str, Any]] | None = None) -> tuple[str | None, list[dict[str, Any]]]:
+    """Extracts tool calls embedded inside conversational text, markdown fences, or XML tags.
+
+    Supports:
+    1. <tool_call>...</tool_call> tags (Qwen / Ollama / Hermes format).
+    2. Markdown code fences (```json ... ```).
+    3. Free-form conversational text with embedded JSON tool call objects.
+    """
+    if not content:
+        return content, []
+
+    valid_names = set()
+    if tools:
+        for t in tools:
+            if isinstance(t, dict):
+                if "function" in t and isinstance(t["function"], dict) and "name" in t["function"]:
+                    valid_names.add(t["function"]["name"])
+                elif "name" in t:
+                    valid_names.add(t["name"])
+
+    extracted: list[dict[str, Any]] = []
+
+    # 1. Look for <tool_call>...</tool_call> tags
+    tag_matches = re.findall(r"<tool_call>(.*?)</tool_call>", content, re.DOTALL)
+    for tm in tag_matches:
+        try:
+            parsed = json.loads(tm.strip())
+            if isinstance(parsed, dict) and "name" in parsed:
+                extracted.append(parsed)
+            elif isinstance(parsed, list):
+                extracted.extend([x for x in parsed if isinstance(x, dict) and "name" in x])
+        except Exception:
+            pass
+
+    # 2. Look for markdown fenced blocks ```json ... ```
+    if not extracted:
+        block_matches = re.findall(r"```(?:json)?\s*(.*?)\s*```", content, re.DOTALL)
+        for bm in block_matches:
+            try:
+                parsed = json.loads(bm.strip())
+                if isinstance(parsed, dict) and "name" in parsed:
+                    extracted.append(parsed)
+                elif isinstance(parsed, list):
+                    extracted.extend([x for x in parsed if isinstance(x, dict) and "name" in x])
+            except Exception:
+                pass
+
+    # 3. Direct/embedded JSON objects search using raw_decode
+    if not extracted:
+        idx = 0
+        decoder = json.JSONDecoder()
+        while idx < len(content):
+            brace_pos = content.find("{", idx)
+            if brace_pos == -1:
+                break
+            try:
+                obj, end_pos = decoder.raw_decode(content[brace_pos:])
+                if isinstance(obj, dict) and "name" in obj and ("arguments" in obj or "parameters" in obj):
+                    extracted.append(obj)
+                    idx = brace_pos + end_pos
+                    continue
+            except Exception:
+                pass
+            idx = brace_pos + 1
+
+    # Filter to valid tool names if tools list is provided
+    if valid_names and extracted:
+        extracted = [x for x in extracted if x.get("name") in valid_names]
+
+    if not extracted:
+        return content, []
+
+    tool_calls: list[dict[str, Any]] = []
+    for i, item in enumerate(extracted):
+        fn_name = item.get("name", "")
+        raw_args = item.get("arguments") or item.get("parameters") or {}
+        if isinstance(raw_args, str):
+            try:
+                raw_args = json.loads(raw_args)
+            except Exception:
+                raw_args = {}
+        tool_calls.append(
+            {
+                "id": f"call_{fn_name}_{i}",
+                "name": fn_name,
+                "arguments": raw_args,
+            }
+        )
+
+    # When tool calls are extracted, suppress the intermediate meta-commentary
+    return None, tool_calls
+
+
 class OpenAICompatibleClient(BaseLLMClient):
     """Universal client compatible with OpenAI's /chat/completions endpoint.
     Supports: OpenAI (ChatGPT), DeepSeek, Qwen (DashScope), Kimi (Moonshot), Ollama, vLLM, LM Studio.
@@ -255,41 +348,10 @@ class OpenAICompatibleClient(BaseLLMClient):
                         }
                     )
 
-                # Fallback: some local models (e.g. Ollama with Qwen) output tool calls
-                # as a JSON string inside content instead of the structured tool_calls array
+                # Fallback: some local models (e.g. Ollama with Qwen/Llama) output tool calls
+                # as a JSON string inside content, wrapped in markdown/tags, or mixed with conversational text
                 if not tool_calls and content and tools:
-                    stripped = content.strip()
-                    if stripped.startswith("```"):
-                        first_newline = stripped.find("\n")
-                        if first_newline != -1:
-                            stripped = stripped[first_newline + 1 :]
-                        if stripped.endswith("```"):
-                            stripped = stripped[:-3].strip()
-                    try:
-                        parsed_c = json.loads(stripped)
-                        if isinstance(parsed_c, dict) and "name" in parsed_c and ("arguments" in parsed_c or "parameters" in parsed_c):
-                            tool_calls.append(
-                                {
-                                    "id": f"call_{parsed_c['name']}",
-                                    "name": parsed_c["name"],
-                                    "arguments": parsed_c.get("arguments") or parsed_c.get("parameters") or {},
-                                }
-                            )
-                            content = None
-                        elif (
-                            isinstance(parsed_c, list) and len(parsed_c) > 0 and all(isinstance(x, dict) and "name" in x for x in parsed_c)
-                        ):
-                            for i, tc_item in enumerate(parsed_c):
-                                tool_calls.append(
-                                    {
-                                        "id": f"call_{tc_item['name']}_{i}",
-                                        "name": tc_item["name"],
-                                        "arguments": tc_item.get("arguments") or tc_item.get("parameters") or {},
-                                    }
-                                )
-                            content = None
-                    except Exception:
-                        pass
+                    content, tool_calls = extract_embedded_tool_calls(content, tools=tools)
 
                 return content, tool_calls
         except urllib.error.HTTPError as exc:

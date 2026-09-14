@@ -564,6 +564,77 @@ END;"""
         res_col = search_column_comments(self.schemas, query="vacancia", config=self.cfg)
         self.assertTrue(any(r["column_name"] == "DTVAC" for r in res_col))
 
+    def test_extract_embedded_tool_calls_conversational_and_tags(self):
+        """Verify extract_embedded_tool_calls extracts tool calls embedded in conversational prose and XML tags."""
+        from leai.ai.openai_client import extract_embedded_tool_calls
+
+        # 1. Exact user scenario: conversational text with embedded JSON
+        user_scenario = """Para identificar quais tabelas possuem dados sensíveis, vamos seguir o protocolo:
+
+ 1 Pesquisa de colunas com comentários e nomes de colunas:
+
+    {"name": "search_column_comments", "arguments": {"query": "cpf, cnpj, rg, nis"}}
+
+ 2 Pesquisa de documentos de negócios:
+
+    {"name": "search_business_documentation", "arguments": {"query": "dados sensíveis"}}
+
+Depois de executar essas pesquisas, analisaremos os resultados."""
+
+        clean_c, tcs = extract_embedded_tool_calls(
+            user_scenario,
+            tools=[{"function": {"name": "search_column_comments"}}, {"function": {"name": "search_business_documentation"}}],
+        )
+        self.assertIsNone(clean_c)
+        self.assertEqual(len(tcs), 2)
+        self.assertEqual(tcs[0]["name"], "search_column_comments")
+        self.assertEqual(tcs[0]["arguments"]["query"], "cpf, cnpj, rg, nis")
+        self.assertEqual(tcs[1]["name"], "search_business_documentation")
+        self.assertEqual(tcs[1]["arguments"]["query"], "dados sensíveis")
+
+        # 2. Tag format: <tool_call>
+        tag_text = '<tool_call>\n{"name": "get_table_schema", "arguments": {"table_name": "EMPLOYEES"}}\n</tool_call>'
+        c_tag, tc_tag = extract_embedded_tool_calls(tag_text)
+        self.assertIsNone(c_tag)
+        self.assertEqual(len(tc_tag), 1)
+        self.assertEqual(tc_tag[0]["name"], "get_table_schema")
+
+        # 3. Clean conversational response with no tool calls should be preserved
+        clean_text = "As tabelas de folha foram identificadas."
+        c_clean, tc_clean = extract_embedded_tool_calls(clean_text)
+        self.assertEqual(c_clean, clean_text)
+        self.assertEqual(len(tc_clean), 0)
+
+    def test_agent_engine_self_correction_reprompt_on_meta_talk(self):
+        """Verify AgentExecutionEngine reprompts internally when model outputs meta-talk on iteration 1 without tools."""
+        # Turn 1: Model outputs conversational meta-commentary promising to search
+        turn1_response = (
+            "Vou pesquisar a tabela de funcionários para identificar as colunas.",
+            [],  # No structured tool calls
+        )
+        # Turn 2: After receiving the critique reprimand, model calls the tool properly
+        turn2_response = (
+            None,
+            [{"name": "get_table_schema", "arguments": {"table_name": "EMPLOYEES"}}],
+        )
+        # Turn 3: Final synthesis
+        turn3_response = (
+            "A tabela EMPLOYEES possui as colunas ID e NOME.",
+            [],
+        )
+
+        mock_client = MockLLMClient([turn1_response, turn2_response, turn3_response])
+        engine = AgentExecutionEngine(schemas=self.schemas, config=self.cfg, client=mock_client)
+
+        result = engine.run([{"role": "user", "content": "Quais colunas existem na tabela de funcionários?"}])
+
+        # Should have executed all 3 turns (reprompt -> tool execution -> synthesis)
+        self.assertEqual(mock_client.call_count, 3)
+        self.assertIn("A tabela EMPLOYEES possui as colunas ID e NOME.", result)
+        # Verify the corrective reprompt was added to working messages
+        reprompt_messages = [m for m in engine.last_working_messages if "EXECUTION PROTOCOL ERROR" in str(m.get("content"))]
+        self.assertTrue(len(reprompt_messages) > 0)
+
 
 if __name__ == "__main__":
     unittest.main()
