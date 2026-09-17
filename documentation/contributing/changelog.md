@@ -2,6 +2,16 @@
 
 Todas as alterações notáveis no projeto **LEAI** são documentadas nesta página.
 
+## [0.3.8] — 2026
+
+### 🛡️ Resiliência contra Diretórios Somente-Leitura e Fallback Multi-Camadas
+* **Fallback Multi-Camadas em `SessionAuditLogger` & Histórico TUI:**
+  * Corrigido o `PermissionError: [WinError 5] Acesso negado` que ocorria ao executar o comando `leai` a partir de diretórios de sistema ou somente-leitura (como `C:\WINDOWS\system32`).
+  * O motor de persistência de sessões de auditoria (`SessionAuditLogger`) e o histórico do terminal (`InteractiveTUISession`) agora utilizam uma cascata de diretórios resiliente: `./.leai` (pasta do projeto local) ➔ `~/.leai` (pasta do usuário) ➔ `%TEMP%/leai` (pasta temporária do sistema) ➔ `InMemoryHistory`.
+  * Garante que o LEAI inicialize perfeitamente a partir de qualquer terminal ou diretório de trabalho sem falhas de permissão.
+
+---
+
 ## [0.3.7] — 2026
 
 ### 🎯 Arquitetura RAG 100% Determinística com `@OBJETO` & Tool-Calling Dinâmico

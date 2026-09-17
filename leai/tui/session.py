@@ -123,12 +123,21 @@ class InteractiveTUISession:
         self.web_server = None
         self.web_url = None
 
-        # Setup persistent history in project folder (.leai/chat_history)
-        hist_dir = Path("./.leai")
-        try:
-            hist_dir.mkdir(parents=True, exist_ok=True)
-            self.history = FileHistory(str(hist_dir / "chat_history"))
-        except Exception:
+        # Setup persistent history in project folder (.leai/chat_history) with fallback to home or temp
+        candidate_hist_dirs = [
+            Path("./.leai"),
+            Path.home() / ".leai",
+            Path(os.environ.get("TEMP", os.environ.get("TMP", "/tmp"))) / "leai",
+        ]
+        self.history = None
+        for h_dir in candidate_hist_dirs:
+            try:
+                h_dir.mkdir(parents=True, exist_ok=True)
+                self.history = FileHistory(str(h_dir / "chat_history"))
+                break
+            except Exception:
+                continue
+        if self.history is None:
             self.history = InMemoryHistory()
 
         is_tty = hasattr(sys.stdin, "isatty") and sys.stdin.isatty()

@@ -206,6 +206,24 @@ class ChatSessionTests(unittest.TestCase):
             self.assertIsInstance(saved_turn["tools_executed"][0]["output_data"], list)
             self.assertEqual(saved_turn["tools_executed"][0]["model_thought"], "Preciso checar as colunas da tabela primeiro.")
 
+    def test_session_audit_logger_permission_fallback(self):
+        from unittest.mock import patch
+
+        from leai.audit import SessionAuditLogger
+
+        # Simulate PermissionError on ./.leai/sessions
+        orig_mkdir = Path.mkdir
+
+        def _mock_mkdir(self, *args, **kwargs):
+            if ".leai" in str(self) and "sessions" in str(self) and not str(self).startswith(tempfile.gettempdir()):
+                raise PermissionError("[WinError 5] Acesso negado: '.leai/sessions'")
+            return orig_mkdir(self, *args, **kwargs)
+
+        with patch.object(Path, "mkdir", side_effect=_mock_mkdir, autospec=True):
+            logger = SessionAuditLogger()
+            self.assertIsNotNone(logger.log_dir)
+            self.assertIsNotNone(logger.log_file)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,6 +2,16 @@
 
 All notable changes to the **LEAI** project are documented here.
 
+## [0.3.8] — 2026
+
+### 🛡️ Read-Only / System Directory Resilience & Multi-Tier Fallback
+* **Multi-Tier Directory Fallback for `SessionAuditLogger` & TUI History:**
+  * Fixed `PermissionError: [WinError 5] Access is denied` when launching `leai` from protected or system directories (such as `C:\WINDOWS\system32`).
+  * The session audit persistence engine (`SessionAuditLogger`) and terminal history manager (`InteractiveTUISession`) now employ a resilient multi-tier directory cascade: `./.leai` (local project directory) ➔ `~/.leai` (user home directory) ➔ `%TEMP%/leai` (system temporary directory) ➔ `InMemoryHistory`.
+  * Ensures that LEAI starts seamlessly from any working directory or terminal prompt without permission crashes.
+
+---
+
 ## [0.3.7] — 2026
 
 ### 🎯 100% Deterministic `@OBJECT` RAG Architecture & Dynamic Tool-Calling

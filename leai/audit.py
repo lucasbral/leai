@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Any
@@ -63,19 +64,27 @@ class SessionAuditLogger:
         self.start_time = datetime.datetime.now().isoformat()
         self.turns: list[TurnAuditRecord] = []
 
-        # Setup persistent directory in project folder (.leai/sessions)
+        # Setup persistent directory with resilient multi-tier fallback (CWD -> User Home -> System Temp)
         if log_dir is not None:
-            self.log_dir = Path(log_dir)
+            candidate_dirs = [Path(log_dir)]
         else:
-            self.log_dir = Path("./.leai/sessions")
+            candidate_dirs = [
+                Path("./.leai/sessions"),
+                Path.home() / ".leai" / "sessions",
+                Path(tempfile.gettempdir()) / "leai_sessions",
+            ]
 
-        try:
-            self.log_dir.mkdir(parents=True, exist_ok=True)
-            self.log_file = self.log_dir / f"session_{self.session_id}.json"
-        except Exception:
-            self.log_dir = Path("./.leai_sessions")
-            self.log_dir.mkdir(parents=True, exist_ok=True)
-            self.log_file = self.log_dir / f"session_{self.session_id}.json"
+        self.log_dir = candidate_dirs[0]
+        self.log_file = self.log_dir / f"session_{self.session_id}.json"
+
+        for candidate in candidate_dirs:
+            try:
+                candidate.mkdir(parents=True, exist_ok=True)
+                self.log_dir = candidate
+                self.log_file = self.log_dir / f"session_{self.session_id}.json"
+                break
+            except Exception:
+                continue
 
     def record_turn(
         self,
