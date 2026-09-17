@@ -119,3 +119,37 @@ def test_web_server_seaweedfs_fallback():
 
         finally:
             server.shutdown()
+
+
+def test_sync_schema_annotations_no_cache(tmp_path: Path):
+    """Verify that when local_cache=False (no_cache), annotations directory is NOT created on disk."""
+    from leai.docs import sync_schema_annotations
+
+    table = TableMeta(
+        name="PEDIDOS",
+        comment="Tabela de pedidos",
+        columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)],
+    )
+    schema = SchemaMetadata(schema_name="VENDAS", tables=[table])
+
+    mock_storage = MagicMock()
+    mock_storage.load_annotation.return_value = ObjectAnnotation()
+
+    ann_path = tmp_path / "annotations"
+    assert not ann_path.exists()
+
+    generated = sync_schema_annotations(
+        schema=schema,
+        annotations_path=ann_path,
+        multi_schema=True,
+        storage=mock_storage,
+        local_cache=False,
+    )
+
+    # Local disk must NOT have annotations folder or files
+    assert not ann_path.exists()
+    assert len(generated) == 1
+    # Storage should have been called to save the annotation and index
+    assert mock_storage.save_annotation.called
+    assert mock_storage.save_annotations_index.called
+

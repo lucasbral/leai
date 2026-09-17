@@ -5,7 +5,46 @@ from typing import Any, Iterable
 from prompt_toolkit.completion import CompleteEvent, Completer, Completion
 from prompt_toolkit.document import Document
 
+from leai.i18n import t
 from leai.models import SchemaMetadata
+
+
+def get_slash_commands() -> list[tuple[str, str]]:
+    """Returns slash commands and their localized descriptions."""
+    return [
+        ("/doc", t("completer.cmd_doc")),
+        ("/rule", t("completer.cmd_rule")),
+        ("/tune", t("completer.cmd_tune")),
+        ("/validate", t("completer.cmd_validate")),
+        ("/thoughts", t("completer.cmd_thoughts")),
+        ("/extract", t("completer.cmd_extract")),
+        ("/update", t("completer.cmd_update")),
+        ("/compile", t("completer.cmd_compile")),
+        ("/annotate", t("completer.cmd_annotate")),
+        ("/enrich", t("completer.cmd_enrich")),
+        ("/chat", t("completer.cmd_chat")),
+        ("/serve", t("completer.cmd_serve")),
+        ("/trace", t("completer.cmd_trace")),
+        ("/tables", t("completer.cmd_tables")),
+        ("/schema", t("completer.cmd_schema")),
+        ("/changes", t("completer.cmd_changes")),
+        ("/model", t("completer.cmd_model")),
+        ("/provider", t("completer.cmd_provider")),
+        ("/agent", t("completer.cmd_agent")),
+        ("/workflow", t("completer.cmd_workflow")),
+        ("/copy", t("completer.cmd_copy")),
+        ("/save", t("completer.cmd_save")),
+        ("/audit", t("completer.cmd_audit")),
+        ("/tools", t("completer.cmd_tools")),
+        ("/git", t("completer.cmd_git")),
+        ("/seaweed", t("completer.cmd_seaweed")),
+        ("/doctor", t("completer.cmd_doctor")),
+        ("/init", t("completer.cmd_init")),
+        ("/clear", t("completer.cmd_clear")),
+        ("/help", t("completer.cmd_help")),
+        ("/exit", t("completer.cmd_exit")),
+    ]
+
 
 SLASH_COMMANDS: list[tuple[str, str]] = [
     ("/doc", "Open in-terminal YAML annotation & documentation editor"),
@@ -65,9 +104,9 @@ class LeaiCompleter(Completer):
             s_name = s.schema_name.upper() if s.schema_name else ""
             if s_name:
                 s_names.add(s_name)
-            for t in s.tables:
-                pk_str = f" • PK: {', '.join(t.primary_keys)}" if t.primary_keys else ""
-                objs.append((s_name, t.name, "TABLE", f"{len(t.columns)} cols{pk_str}"))
+            for tbl in s.tables:
+                pk_str = f" • PK: {', '.join(tbl.primary_keys)}" if tbl.primary_keys else ""
+                objs.append((s_name, tbl.name, "TABLE", f"{len(tbl.columns)} cols{pk_str}"))
             for v in s.views:
                 objs.append((s_name, v.name, "VIEW", f"{len(v.columns)} cols"))
             for mv in s.mviews:
@@ -141,7 +180,7 @@ class LeaiCompleter(Completer):
             parts = text.split()
             if len(parts) <= 1 and not text.endswith(" "):
                 query = text.lower()
-                for cmd, desc in SLASH_COMMANDS:
+                for cmd, desc in get_slash_commands():
                     if cmd.lower().startswith(query):
                         yield Completion(
                             text=cmd,
@@ -175,9 +214,9 @@ class LeaiCompleter(Completer):
                 if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
                     th_query = parts[1].lower() if len(parts) > 1 else ""
                     th_options = [
-                        ("on", "Show real-time thinking / thought streaming stream"),
-                        ("off", "Hide thought stream (show compact status only)"),
-                        ("toggle", "Toggle thought stream visibility on/off"),
+                        ("on", t("completer.th_on")),
+                        ("off", t("completer.th_off")),
+                        ("toggle", t("completer.th_toggle")),
                     ]
                     for t_opt, t_meta in th_options:
                         if t_opt.startswith(th_query):
@@ -192,11 +231,11 @@ class LeaiCompleter(Completer):
             # Sub-argument completion for /extract (Schemas and SeaweedFS flags)
             if cmd_name == "/extract":
                 flag_options = [
-                    ("--seaweed", "Save RAW snapshots directly to SeaweedFS S3 storage"),
-                    ("-W", "Short for --seaweed"),
-                    ("--no-cache", "Do not write local files in raw/, send only to SeaweedFS"),
-                    ("--force-upload", "Force upload all objects (bypasses SHA-256 manifest)"),
-                    ("-F", "Short for --force-upload"),
+                    ("--seaweed", t("completer.extract_seaweed")),
+                    ("-W", t("completer.extract_short_seaweed")),
+                    ("--no-cache", t("completer.extract_no_cache")),
+                    ("--force-upload", t("completer.extract_force_upload")),
+                    ("-F", t("completer.extract_short_force")),
                 ]
                 if word_before_cursor.startswith("-"):
                     for flag_name, flag_desc in flag_options:
@@ -217,7 +256,7 @@ class LeaiCompleter(Completer):
                         text="ALL",
                         start_position=-len(word_before_cursor),
                         display="ALL",
-                        display_meta="Extract all schemas configured in leai.yml",
+                        display_meta=t("completer.extract_all"),
                     )
 
                 # 2. Suggest individual configured schemas from leai.yml
@@ -227,7 +266,7 @@ class LeaiCompleter(Completer):
                             text=s_name,
                             start_position=-len(word_before_cursor),
                             display=s_name,
-                            display_meta="Configured Schema (leai.yml)",
+                            display_meta=t("completer.extract_schema_desc"),
                         )
 
                 # 3. Also suggest flags
@@ -244,17 +283,17 @@ class LeaiCompleter(Completer):
             # Sub-argument completion for /update (Flags and Schemas)
             if cmd_name == "/update":
                 upd_flags = [
-                    ("--hours", "Extract objects modified in the last N hours"),
-                    ("-H", "Short for --hours"),
-                    ("--days", "Extract objects modified in the last N days"),
-                    ("-d", "Short for --days"),
-                    ("--compile", "Also recompile Markdown documentation for updated objects"),
-                    ("-C", "Short for --compile"),
-                    ("--seaweed", "Save RAW delta and annotations to SeaweedFS S3 storage"),
-                    ("-W", "Short for --seaweed"),
-                    ("--no-cache", "Operate directly with SeaweedFS without local files"),
-                    ("--force-upload", "Force upload all objects (bypasses SHA-256 manifest)"),
-                    ("-F", "Short for --force-upload"),
+                    ("--hours", t("completer.update_hours")),
+                    ("-H", t("completer.update_short_hours")),
+                    ("--days", t("completer.update_days")),
+                    ("-d", t("completer.update_short_days")),
+                    ("--compile", t("completer.update_compile")),
+                    ("-C", t("completer.update_short_compile")),
+                    ("--seaweed", t("completer.update_seaweed")),
+                    ("-W", t("completer.extract_short_seaweed")),
+                    ("--no-cache", t("completer.update_no_cache")),
+                    ("--force-upload", t("completer.extract_force_upload")),
+                    ("-F", t("completer.extract_short_force")),
                 ]
                 if word_before_cursor.startswith("-"):
                     for flag_name, flag_desc in upd_flags:
@@ -274,7 +313,7 @@ class LeaiCompleter(Completer):
                             text=s_name,
                             start_position=-len(word_before_cursor),
                             display=s_name,
-                            display_meta="Configured Schema (leai.yml)",
+                            display_meta=t("completer.extract_schema_desc"),
                         )
 
                 for flag_name, flag_desc in upd_flags:
@@ -292,10 +331,10 @@ class LeaiCompleter(Completer):
                 if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
                     rule_query = parts[1].lower() if len(parts) > 1 else ""
                     rule_options = [
-                        ("list", "List all defined business glossary terms and rules"),
-                        ("add", "Register or update a business glossary term in annotations & SeaweedFS"),
-                        ("del", "Delete a business glossary term from annotations & SeaweedFS"),
-                        ("find", "Search glossary terms by keyword or concept"),
+                        ("list", t("completer.rule_list")),
+                        ("add", t("completer.rule_add")),
+                        ("del", t("completer.rule_del")),
+                        ("find", t("completer.rule_find")),
                     ]
                     for r_cmd, r_desc in rule_options:
                         if r_cmd.startswith(rule_query):
@@ -310,9 +349,9 @@ class LeaiCompleter(Completer):
             # Sub-argument completion for /annotate (SeaweedFS flags)
             if cmd_name == "/annotate":
                 ann_flags = [
-                    ("--seaweed", "Sync annotations with SeaweedFS S3 storage"),
-                    ("-W", "Short for --seaweed"),
-                    ("--no-cache", "Do not write local files, sync directly with SeaweedFS"),
+                    ("--seaweed", t("completer.annotate_seaweed")),
+                    ("-W", t("completer.extract_short_seaweed")),
+                    ("--no-cache", t("completer.annotate_no_cache")),
                 ]
                 for flag_name, flag_desc in ann_flags:
                     if flag_name.startswith(word_before_cursor):
@@ -329,10 +368,10 @@ class LeaiCompleter(Completer):
                 if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
                     sw_query = parts[1].lower() if len(parts) > 1 else ""
                     sw_options = [
-                        ("status", "Check SeaweedFS S3 connection and bucket operational status"),
-                        ("push", "Upload local raw/ snapshots and annotations/ to SeaweedFS"),
-                        ("pull", "Download remote raw/ snapshots and annotations/ from SeaweedFS"),
-                        ("sync", "Bidirectional smart synchronization between local disk and SeaweedFS"),
+                        ("status", t("completer.seaweed_status")),
+                        ("push", t("completer.seaweed_push")),
+                        ("pull", t("completer.seaweed_pull")),
+                        ("sync", t("completer.seaweed_sync")),
                     ]
                     for sw_cmd, sw_desc in sw_options:
                         if sw_cmd.startswith(sw_query):
@@ -355,19 +394,19 @@ class LeaiCompleter(Completer):
                                 text=p,
                                 start_position=-len(word_before_cursor),
                                 display=p,
-                                display_meta="AI Provider",
+                                display_meta=t("completer.provider_desc"),
                             )
                 return
 
             # Sub-argument completion for /agent (Specialist Roles)
             if cmd_name == "/agent":
                 specialists = [
-                    ("catalog_researcher", "Discovery of tables, columns, comments, constraints"),
-                    ("plsql_analyst", "Reverse engineering of packages, procedures, SQL tuning"),
-                    ("lineage_auditor", "Dependency traversal and change impact risk audit"),
-                    ("patch_generator", "Production-grade PL/SQL refactoring, unit tests, rollback"),
-                    ("doc_annotator", "Business descriptions, rules, domain classification tags"),
-                    ("list", "List all registered subagent specialists"),
+                    ("catalog_researcher", t("completer.agent_catalog")),
+                    ("plsql_analyst", t("completer.agent_plsql")),
+                    ("lineage_auditor", t("completer.agent_lineage")),
+                    ("patch_generator", t("completer.agent_patch")),
+                    ("doc_annotator", t("completer.agent_doc")),
+                    ("list", t("completer.agent_list")),
                 ]
                 if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
                     a_query = parts[1].lower() if len(parts) > 1 else ""
@@ -384,14 +423,14 @@ class LeaiCompleter(Completer):
             # Sub-argument completion for /workflow (Pipelines)
             if cmd_name == "/workflow":
                 workflows = [
-                    ("reverse-procedure", "Decompile & specify PL/SQL routine with Mermaid flowchart"),
-                    ("reverse", "Alias for reverse-procedure workflow"),
-                    ("decomp", "Alias for reverse-procedure workflow"),
-                    ("impact-analysis", "Impact assessment: constraints, lineage, code scan & risk matrix"),
-                    ("impact", "Alias for impact-analysis workflow"),
-                    ("safe-refactor", "Safe PL/SQL subprogram refactoring with unit test & rollback"),
-                    ("refactor", "Alias for safe-refactor workflow"),
-                    ("list", "List all available autonomous workflows"),
+                    ("reverse-procedure", t("completer.wf_reverse_proc")),
+                    ("reverse", t("completer.wf_reverse_alias")),
+                    ("decomp", t("completer.wf_reverse_alias")),
+                    ("impact-analysis", t("completer.wf_impact")),
+                    ("impact", t("completer.wf_impact_alias")),
+                    ("safe-refactor", t("completer.wf_safe_refactor")),
+                    ("refactor", t("completer.wf_refactor_alias")),
+                    ("list", t("completer.wf_list")),
                 ]
                 if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
                     w_query = parts[1].lower() if len(parts) > 1 else ""
@@ -428,7 +467,7 @@ class LeaiCompleter(Completer):
                                 text=s_name,
                                 start_position=-len(word_before_cursor),
                                 display=s_name,
-                                display_meta="Database Schema",
+                                display_meta=t("completer.extract_schema_desc"),
                             )
                 return
 
@@ -437,12 +476,12 @@ class LeaiCompleter(Completer):
                 if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
                     c_query = parts[1] if len(parts) > 1 else ""
                     day_options = [
-                        ("1", "Last 24 hours"),
-                        ("7", "Last 7 days (Default)"),
-                        ("15", "Last 15 days"),
-                        ("30", "Last 30 days (1 month)"),
-                        ("60", "Last 60 days (2 months)"),
-                        ("90", "Last 90 days (3 months)"),
+                        ("1", t("completer.changes_1d")),
+                        ("7", t("completer.changes_7d")),
+                        ("15", t("completer.changes_15d")),
+                        ("30", t("completer.changes_30d")),
+                        ("60", t("completer.changes_60d")),
+                        ("90", t("completer.changes_90d")),
                     ]
                     for d_str, d_meta in day_options:
                         if d_str.startswith(c_query):
@@ -459,9 +498,9 @@ class LeaiCompleter(Completer):
                 if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
                     f_query = parts[1].lower() if len(parts) > 1 else ""
                     file_options = [
-                        ("leai_chat.md", "Export conversation to leai_chat.md"),
-                        ("transcript.md", "Export conversation to transcript.md"),
-                        ("history.md", "Export conversation to history.md"),
+                        ("leai_chat.md", t("completer.save_chat_md")),
+                        ("transcript.md", t("completer.save_transcript_md")),
+                        ("history.md", t("completer.save_history_md")),
                     ]
                     for f_name, f_meta in file_options:
                         if f_name.lower().startswith(f_query):
@@ -478,9 +517,9 @@ class LeaiCompleter(Completer):
                 if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
                     a_query = parts[1].lower() if len(parts) > 1 else ""
                     audit_options = [
-                        ("last", "Inspect tool traces and outputs of last interaction (Default)"),
-                        ("session", "View aggregate session statistics and tool breakdown"),
-                        ("export", "Export session audit report to Markdown or JSON"),
+                        ("last", t("completer.audit_last")),
+                        ("session", t("completer.audit_session")),
+                        ("export", t("completer.audit_export")),
                     ]
                     for a_opt, a_meta in audit_options:
                         if a_opt.startswith(a_query):
@@ -497,13 +536,13 @@ class LeaiCompleter(Completer):
                 if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
                     c_query = parts[1].lower() if len(parts) > 1 else ""
                     copy_options = [
-                        ("all", "Copy entire AI response text (Default)"),
-                        ("code", "Copy first code block (SQL/PLSQL/etc)"),
-                        ("1", "Copy 1st code block"),
-                        ("2", "Copy 2nd code block"),
-                        ("3", "Copy 3rd code block"),
-                        ("sql", "Copy SQL / PL/SQL query or routine"),
-                        ("list", "List all code blocks available in last response"),
+                        ("all", t("completer.copy_all")),
+                        ("code", t("completer.copy_code")),
+                        ("1", t("completer.copy_1")),
+                        ("2", t("completer.copy_2")),
+                        ("3", t("completer.copy_3")),
+                        ("sql", t("completer.copy_sql")),
+                        ("list", t("completer.copy_list")),
                     ]
                     for c_opt, c_meta in copy_options:
                         if c_opt.startswith(c_query):
@@ -561,7 +600,7 @@ class LeaiCompleter(Completer):
         # 4. /Slash commands within prompt
         if word_before_cursor.startswith("/"):
             query = word_before_cursor.lower()
-            for cmd, desc in SLASH_COMMANDS:
+            for cmd, desc in get_slash_commands():
                 if cmd.lower().startswith(query):
                     yield Completion(
                         text=cmd,

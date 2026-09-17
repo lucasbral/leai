@@ -850,12 +850,14 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
 
         cfg = self.server.config
         ann_folder = _get_object_folder(obj_type)
+        is_no_cache = getattr(cfg.storage.seaweedfs, "no_cache", False) and bool(self.server.storage)
         multi_schema = len(self.server.schemas) > 1
         if multi_schema and schema_name:
             target_dir = cfg.annotationsPath / schema_name / ann_folder
         else:
             target_dir = cfg.annotationsPath / ann_folder
-        target_dir.mkdir(parents=True, exist_ok=True)
+        if not is_no_cache:
+            target_dir.mkdir(parents=True, exist_ok=True)
         target_file = target_dir / f"{obj_name}.yml"
 
         cols_payload = payload.get("columns", {})
@@ -883,6 +885,7 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
             schema_name=schema_name,
             obj_folder=ann_folder,
             obj_name=obj_name,
+            local_cache=not is_no_cache,
         )
 
         # Recompile documentation for this object

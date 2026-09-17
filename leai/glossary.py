@@ -131,9 +131,10 @@ def save_glossary(
     annotations_path: Path | str | None,
     glossary: BusinessGlossary,
     storage: Any = None,
+    local_cache: bool = True,
 ) -> None:
     yaml_content = dump_glossary_yaml(glossary)
-    if annotations_path:
+    if local_cache and annotations_path:
         file_path = get_glossary_file(annotations_path)
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(yaml_content, encoding="utf-8")
@@ -149,6 +150,7 @@ def add_or_update_term(
     annotations_path: Path | str,
     new_term: GlossaryTerm,
     storage: Any = None,
+    local_cache: bool = True,
 ) -> None:
     glossary = load_glossary(annotations_path)
     if storage is not None and hasattr(storage, "load_glossary"):
@@ -172,13 +174,14 @@ def add_or_update_term(
     else:
         glossary.terms.append(new_term)
 
-    save_glossary(annotations_path, glossary, storage=storage)
+    save_glossary(annotations_path, glossary, storage=storage, local_cache=local_cache)
 
 
 def delete_term(
     annotations_path: Path | str,
     term_name: str,
     storage: Any = None,
+    local_cache: bool = True,
 ) -> bool:
     """Removes a glossary term by name. Returns True if found and deleted, False otherwise."""
     glossary = load_glossary(annotations_path)
@@ -194,7 +197,7 @@ def delete_term(
     initial_len = len(glossary.terms)
     glossary.terms = [t for t in glossary.terms if _normalize_text(t.term) != norm_target]
     if len(glossary.terms) < initial_len:
-        save_glossary(annotations_path, glossary, storage=storage)
+        save_glossary(annotations_path, glossary, storage=storage, local_cache=local_cache)
         return True
     return False
 

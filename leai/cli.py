@@ -617,6 +617,7 @@ def update(
                             multi_schema=True,
                             object_types=cfg.object_types,
                             storage=storage,
+                            local_cache=not is_no_cache,
                         )
                         total_ann += len(gen_ann)
 
@@ -804,6 +805,7 @@ def annotate(
                     object_types=cfg.object_types,
                     progress_callback=_on_ann_progress,
                     storage=storage,
+                    local_cache=not is_no_cache,
                 )
                 total_ann += len(generated_ann)
 

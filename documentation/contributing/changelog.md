@@ -2,6 +2,19 @@
 
 Todas as alterações notáveis no projeto **LEAI** são documentadas nesta página.
 
+## [0.3.10] — 2026
+
+### 🌐 Internacionalização Completa do TUI & Modo Remoto SeaweedFS (`no_cache`)
+* **Localização e Tradução Integral do Modo Interativo (TUI):**
+  * Traduzidas todas as 30+ descrições de comandos slash (`/doc`, `/rule`, `/tune`, `/validate`, `/thoughts`, `/extract`, `/update`, `/compile`, `/annotate`, `/enrich`, `/chat`, `/serve`, `/trace`, `/tables`, `/schema`, `/changes`, `/model`, `/provider`, `/agent`, `/workflow`, `/copy`, `/save`, `/audit`, `/tools`, `/git`, `/seaweed`, `/doctor`, `/init`, `/clear`, `/help`, `/exit`) e suas respectivas opções de autocompletar.
+  * Internacionalizados todos os subargumentos, cabeçalhos de tabelas, painéis de auditoria, inspeção de alterações e seletores de modelo interativo.
+  * Paridade rigorosa 1:1 entre os catálogos de tradução `pt-BR` e `en-US`.
+* **Suporte Completo a `local_cache=False` / `no_cache` no SeaweedFS:**
+  * Corrigida a criação indevida da pasta `./annotations` e de arquivos YAML locais quando o LEAI opera no modo remoto com SeaweedFS (`no_cache: true` ou `--no-cache`).
+  * As funções `save_annotation`, `ensure_annotation_stub`, `sync_schema_annotations` e `save_glossary` agora respeitam `local_cache=False`, operando 100% via memória e API S3.
+
+---
+
 ## [0.3.9] — 2026
 
 ### 🖥️ Correção de Quebra de Palavras no Terminal & Renderização Markdown Limpa

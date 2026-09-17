@@ -39,7 +39,7 @@ from leai.docs import (
     write_schema_docs,
 )
 from leai.enrich import enrich_schema_annotations
-from leai.i18n import t
+from leai.i18n import get_locale, t
 from leai.models import SchemaMetadata
 from leai.oracle import _build_connect_kwargs, fetch_available_schemas, fetch_schema_metadata
 from leai.raw import load_raw_schemas, save_raw_schema, trace_raw_dependencies
@@ -555,13 +555,8 @@ class InteractiveTUISession:
             else:
                 console.print(
                     Panel(
-                        "[bold cyan]Chat Assistant Mode[/bold cyan]\n\n"
-                        "You don't need to type [bold cyan]/chat[/bold cyan]! Any question typed directly in the terminal is answered by the AI with database context and RAG.\n\n"
-                        "[dim]Examples:[/dim]\n"
-                        "  • [yellow]Which tables are related to payroll?[/yellow]\n"
-                        "  • [yellow]@EMPLOYEES which columns are primary keys?[/yellow]\n"
-                        "  • [yellow]Generate a SQL query to list active employees by department.[/yellow]",
-                        title="[bold green]✦ AI Copilot[/bold green]",
+                        t("tui.chat_mode_body"),
+                        title=f"[bold green]{t('tui.chat_mode_title')}[/bold green]",
                         border_style="cyan",
                     )
                 )
@@ -587,7 +582,7 @@ class InteractiveTUISession:
 
         if cmd == "/trace":
             if len(parts) < 2:
-                console.print("[yellow]Usage: /trace <OBJECT_NAME> (e.g. /trace EMPLOYEES)[/yellow]")
+                console.print(t("tui.trace_usage"))
             else:
                 self._render_trace(parts[1].lstrip("@"))
             return True
@@ -618,9 +613,9 @@ class InteractiveTUISession:
         if cmd in ("/provider", "/providers"):
             if len(parts) < 2:
                 console.print(
-                    f"[cyan]Provedor ativo:[/cyan] [bold green]{self.provider_name.upper()}[/bold green] (Modelo: [bold yellow]{self.client.model}[/bold yellow])"
+                    t("tui.provider_active", provider=self.provider_name.upper(), model=self.client.model)
                 )
-                console.print("[dim]Uso: /provider <ollama|openai|gemini|anthropic|local|deepseek|qwen|kimi|grok>[/dim]")
+                console.print(t("tui.provider_usage"))
             else:
                 new_prov = parts[1].lower()
                 new_model = parts[2] if len(parts) >= 3 else None
@@ -629,10 +624,10 @@ class InteractiveTUISession:
                     self.provider_name = new_prov
                     self.session.client = self.client
                     console.print(
-                        f"[green]✓ Provedor de IA alternado para [bold]{new_prov.upper()}[/bold] (Modelo: [bold cyan]{self.client.model}[/bold cyan])[/green]"
+                        t("tui.provider_switched", provider=new_prov.upper(), model=self.client.model)
                     )
                 except Exception as exc:
-                    console.print(f"[red]Falha ao alternar provedor:[/red] {exc}")
+                    console.print(t("tui.provider_switch_failed", error=exc))
             return True
 
         if cmd in ("/model", "/models"):
@@ -670,10 +665,10 @@ class InteractiveTUISession:
                     self.provider_name = new_prov
                     self.session.client = self.client
                     console.print(
-                        f"[green]✓ Switched AI client to [bold]{new_prov.upper()}[/bold] (Model: [bold cyan]{self.client.model}[/bold cyan])[/green]"
+                        t("tui.models_switched", provider=new_prov.upper(), model=self.client.model)
                     )
                 except Exception as exc:
-                    console.print(f"[red]Failed to switch model:[/red] {exc}")
+                    console.print(t("tui.provider_switch_failed", error=exc))
             return True
 
         if cmd == "/agent":
@@ -681,31 +676,31 @@ class InteractiveTUISession:
 
             if len(parts) < 2 or parts[1].lower() == "list":
                 agents = list_registered_subagents()
-                tbl = Table(title="[bold cyan]⚡ LEAI Specialized Subagents[/bold cyan]", box=box.ROUNDED)
-                tbl.add_column("Role / Command", style="bold yellow")
-                tbl.add_column("Specialist Name", style="bold white")
-                tbl.add_column("Description", style="dim")
+                tbl = Table(title=f"[bold cyan]{t('tui.agent_table_title')}[/bold cyan]", box=box.ROUNDED)
+                tbl.add_column(t("tui.agent_col_role"), style="bold yellow")
+                tbl.add_column(t("tui.agent_col_name"), style="bold white")
+                tbl.add_column(t("tui.agent_col_desc"), style="dim")
                 for a in agents:
                     tbl.add_row(f"/agent {a['role']}", a["name"], a["description"])
                 console.print()
                 console.print(tbl)
-                console.print("[dim]Usage: [bold cyan]/agent <role> <task/question>[/bold cyan][/dim]\n")
+                console.print(t("tui.agent_usage_hint"))
                 return True
 
             target_role = parts[1].lower().lstrip("@")
             if target_role not in SUBAGENT_REGISTRY:
                 available = ", ".join(SUBAGENT_REGISTRY.keys())
-                console.print(f"[red]Unknown specialist role:[/red] '{target_role}'. Available: {available}")
+                console.print(t("tui.agent_unknown_role", role=target_role, available=available))
                 return True
 
             if len(parts) < 3:
-                console.print(f"[yellow]Usage: /agent {target_role} <task or question>[/yellow]")
+                console.print(t("tui.agent_usage", role=target_role))
                 return True
 
             task_query = " ".join(parts[2:])
             spec = SUBAGENT_REGISTRY[target_role]
             console.print()
-            console.print(f"[dim]🤖 Consulting Specialist [bold yellow]{spec.name}[/bold yellow]...[/dim]")
+            console.print(t("tui.agent_consulting", name=spec.name))
 
             def _on_sub_start(t_name: str, t_args: dict, step: int):
                 args_str = ", ".join(f"{k}={repr(v)[:20]}" for k, v in t_args.items())
@@ -732,7 +727,7 @@ class InteractiveTUISession:
                 console.print()
                 console.print(Rule(style="#313244"))
             except Exception as exc:
-                console.print(f"[red]Specialist error:[/red] {exc}")
+                console.print(t("tui.agent_error", error=exc))
             return True
 
         if cmd == "/workflow":
@@ -740,16 +735,14 @@ class InteractiveTUISession:
 
             if len(parts) < 2 or parts[1].lower() == "list":
                 wfs = list_workflows()
-                tbl = Table(title="[bold cyan]⚙️ LEAI Autonomous Workflows[/bold cyan]", box=box.ROUNDED)
-                tbl.add_column("Workflow / Command", style="bold yellow")
-                tbl.add_column("Description", style="white")
+                tbl = Table(title=f"[bold cyan]{t('tui.workflow_table_title')}[/bold cyan]", box=box.ROUNDED)
+                tbl.add_column(t("tui.workflow_col_name"), style="bold yellow")
+                tbl.add_column(t("tui.workflow_col_desc"), style="white")
                 for w in wfs:
                     tbl.add_row(f"/workflow {w['name']}", w["description"])
                 console.print()
                 console.print(tbl)
-                console.print(
-                    "[dim]Usage: [bold cyan]/workflow <name> <target_object>[/bold cyan] (e.g. /workflow impact VINCULOS)[/dim]\n"
-                )
+                console.print(t("tui.workflow_usage_hint"))
                 return True
 
             wf_name = parts[1].lower()
@@ -759,7 +752,7 @@ class InteractiveTUISession:
             elif len(parts) >= 3:
                 target_obj = parts[2].lstrip("@")
             else:
-                console.print(f"[yellow]Usage: /workflow {wf_name} <target_object>[/yellow]")
+                console.print(t("tui.workflow_usage", name=wf_name))
                 return True
 
             wf = get_workflow(name=wf_name, schemas=self.schemas, config=self.config, client=self.client)
@@ -767,13 +760,11 @@ class InteractiveTUISession:
                 from leai.workflows import WORKFLOW_REGISTRY
 
                 available = ", ".join(sorted(set(WORKFLOW_REGISTRY.keys())))
-                console.print(f"[red]Unknown workflow:[/red] '{wf_name}'. Available: {available}")
+                console.print(t("tui.workflow_unknown", name=wf_name, available=available))
                 return True
 
             console.print()
-            console.print(
-                f"[bold cyan]⚙️ Running workflow [bold yellow]{wf.name}[/bold yellow] on [bold white]{target_obj.upper()}[/bold white]...[/bold cyan]"
-            )
+            console.print(t("tui.workflow_running", name=wf.name, target=target_obj.upper()))
 
             def _on_wf_start(step):
                 console.print(f"[dim]  ▶ Step {step.step_number}: {step.name}[/dim]")
@@ -785,7 +776,7 @@ class InteractiveTUISession:
                 res = wf.run(target=target_obj, on_step_start=_on_wf_start, on_step_end=_on_wf_end)
                 console.print()
                 console.print(
-                    f"[bold #a6e3a1]✨ {wf.name.upper()} Completed[/bold #a6e3a1] [dim #6c7086]({res.total_duration_seconds:.2f}s)[/dim #6c7086]"
+                    f"[bold #a6e3a1]{t('tui.workflow_completed', name=wf.name.upper())}[/bold #a6e3a1] [dim #6c7086]({res.total_duration_seconds:.2f}s)[/dim #6c7086]"
                 )
                 console.print(Rule(style="#45475a"))
                 console.print()
@@ -793,7 +784,7 @@ class InteractiveTUISession:
                 console.print()
                 console.print(Rule(style="#313244"))
             except Exception as exc:
-                console.print(f"[red]Workflow error:[/red] {exc}")
+                console.print(t("tui.workflow_error", error=exc))
             return True
 
         if cmd in ("/copy", "/yank"):
@@ -804,7 +795,7 @@ class InteractiveTUISession:
         if cmd == "/save":
             out_file = Path(parts[1].strip()) if len(parts) > 1 else None
             saved = self.session.save_transcript(out_file)
-            console.print(f"[green]✓ Conversation transcript saved to:[/green] [bold cyan]{saved}[/bold cyan]")
+            console.print(t("tui.save_success", path=saved))
             return True
 
         if cmd == "/doctor":
@@ -830,7 +821,7 @@ class InteractiveTUISession:
             self._run_git(parts[1:])
             return True
 
-        console.print(f"[yellow]Unknown command '{cmd}'. Type [bold cyan]/help[/bold cyan] for available commands.[/yellow]")
+        console.print(t("tui.cmd_unknown", cmd=cmd))
         return True
 
     def _run_copy(self, args: list[str]) -> None:
@@ -1500,6 +1491,7 @@ class InteractiveTUISession:
                                 multi_schema=True,
                                 object_types=update_cfg.object_types,
                                 storage=storage,
+                                local_cache=not is_no_cache,
                             )
                             total_ann += len(gen_ann)
 
@@ -1855,6 +1847,7 @@ class InteractiveTUISession:
                         object_types=self.config.object_types,
                         progress_callback=_on_ann_progress,
                         storage=storage,
+                        local_cache=not is_no_cache,
                     )
                     total_ann += len(gen_ann)
 
@@ -2332,45 +2325,45 @@ class InteractiveTUISession:
                 else get_llm_client(self.config, provider_override=target_prov)
             )
             with console.status(
-                f"[#74c7ec]Fetching available models from [bold #f9e2af]{target_prov.upper()}[/bold #f9e2af] API...[/#74c7ec]",
+                t("tui.models_fetching", provider=target_prov.upper()),
                 spinner="dots",
             ):
                 models_list = temp_client.list_models()
         except Exception as exc:
-            console.print(f"[red]Could not fetch models for {target_prov.upper()}:[/red] {exc}\n")
+            console.print(t("tui.models_fetch_error", provider=target_prov.upper(), error=exc))
             return
 
         if not models_list:
-            console.print(f"[yellow]No models returned for {target_prov.upper()}.[/yellow]\n")
+            console.print(t("tui.models_none", provider=target_prov.upper()))
             return
 
         table = Table(show_header=True, header_style="bold #74c7ec", box=box.ROUNDED)
         table.add_column("#", justify="right", style="#74c7ec", width=4)
-        table.add_column("Status", justify="center", width=8)
-        table.add_column("Model ID", style="bold #f9e2af")
-        table.add_column("Display Name", style="#cdd6f4")
-        table.add_column("Description / Notes", style="dim #9399b2")
+        table.add_column(t("tui.models_col_status"), justify="center", width=8)
+        table.add_column(t("tui.models_col_id"), style="bold #f9e2af")
+        table.add_column(t("tui.models_col_name"), style="#cdd6f4")
+        table.add_column(t("tui.models_col_desc"), style="dim #9399b2")
 
         for idx, m in enumerate(models_list, 1):
             m_id = m.get("id", "")
             is_active = target_prov == (self.provider_name or "").lower() and m_id == self.client.model
-            status_badge = "[bold #a6e3a1]ACTIVE[/bold #a6e3a1]" if is_active else "[dim #6c7086]-[/dim #6c7086]"
+            status_badge = f"[bold #a6e3a1]{t('tui.models_status_active')}[/bold #a6e3a1]" if is_active else "[dim #6c7086]-[/dim #6c7086]"
             table.add_row(f"[{idx}]", status_badge, m_id, m.get("name", m_id), m.get("description", m.get("note", "")))
 
         console.print()
         console.print(
             Panel(
                 table,
-                title=f"[bold #cba6f7]✦ Available Models for {target_prov.upper()} ({len(models_list)} Total)[/bold #cba6f7]",
+                title=f"[bold #cba6f7]{t('tui.models_title', provider=target_prov.upper(), total=len(models_list))}[/bold #cba6f7]",
                 box=box.ROUNDED,
                 border_style="#74c7ec",
             )
         )
 
         if interactive:
-            console.print(f"[dim]Type a number (1-{len(models_list)}) or Model ID to switch, or press Enter to keep current:[/dim]")
+            console.print(t("tui.models_prompt_help", total=len(models_list)))
             try:
-                choice = Prompt.ask("[cyan]👉 Select model[/cyan]", default="")
+                choice = Prompt.ask(t("tui.models_prompt_select"), default="")
                 choice = choice.strip()
                 if choice:
                     selected_model = None
@@ -2385,15 +2378,13 @@ class InteractiveTUISession:
                         self.client = get_llm_client(self.config, provider_override=target_prov, model_override=selected_model)
                         self.provider_name = target_prov
                         self.session.client = self.client
-                        console.print(
-                            f"[green]✓ Switched AI client to [bold]{target_prov.upper()}[/bold] (Model: [bold cyan]{self.client.model}[/bold cyan])[/green]\n"
-                        )
+                        console.print(t("tui.models_switched", provider=target_prov.upper(), model=self.client.model))
                     else:
-                        console.print(f"[red]Invalid selection: '{choice}'[/red]\n")
+                        console.print(t("tui.models_invalid_choice", choice=choice))
             except (KeyboardInterrupt, EOFError):
                 console.print()
         else:
-            console.print(f"[dim]To switch model, type: [bold cyan]/model {target_prov} <model_id>[/bold cyan][/dim]\n")
+            console.print(t("tui.models_switch_cmd_hint", provider=target_prov))
 
     def _render_tables_table(self) -> None:
         table = Table(show_header=True, header_style="bold cyan", box=box.ROUNDED)
@@ -2427,14 +2418,24 @@ class InteractiveTUISession:
             tbl.add_column(t("tui.schema_summary_col_type"), style="bold white")
             tbl.add_column(t("tui.schema_summary_col_count"), justify="right", style="bold green")
 
-            tbl.add_row("Tables", str(len(s.tables)))
-            tbl.add_row("Views", str(len(s.views)))
-            tbl.add_row("Materialized Views", str(len(s.mviews)))
-            tbl.add_row("Code Objects (Packages/Procedures)", str(len(s.code_objects)))
-            tbl.add_row("Triggers", str(len(s.triggers)))
-            tbl.add_row("Sequences", str(len(s.sequences)))
-            tbl.add_row("Indexes", str(len(s.indexes)))
-            tbl.add_row("Synonyms", str(len(s.synonyms)))
+            if get_locale() == "pt-BR":
+                tbl.add_row("Tabelas", str(len(s.tables)))
+                tbl.add_row("Views", str(len(s.views)))
+                tbl.add_row("Views Materializadas", str(len(s.mviews)))
+                tbl.add_row("Objetos de Código (Packages/Procedures)", str(len(s.code_objects)))
+                tbl.add_row("Triggers", str(len(s.triggers)))
+                tbl.add_row("Sequences", str(len(s.sequences)))
+                tbl.add_row("Índices", str(len(s.indexes)))
+                tbl.add_row("Sinônimos", str(len(s.synonyms)))
+            else:
+                tbl.add_row("Tables", str(len(s.tables)))
+                tbl.add_row("Views", str(len(s.views)))
+                tbl.add_row("Materialized Views", str(len(s.mviews)))
+                tbl.add_row("Code Objects (Packages/Procedures)", str(len(s.code_objects)))
+                tbl.add_row("Triggers", str(len(s.triggers)))
+                tbl.add_row("Sequences", str(len(s.sequences)))
+                tbl.add_row("Indexes", str(len(s.indexes)))
+                tbl.add_row("Synonyms", str(len(s.synonyms)))
 
             console.print()
             console.print(
@@ -2481,15 +2482,15 @@ class InteractiveTUISession:
                             results.append((s_name, cat_label, obj.name, ddl_str, mod_by))
 
         if not results:
-            console.print(f"[yellow]No objects were modified in the last {days} days.[/yellow]\n")
+            console.print(t("tui.changes_none", days=days))
             return
 
         table = Table(show_header=True, header_style="bold cyan", box=box.ROUNDED)
-        table.add_column("Schema", style="yellow")
-        table.add_column("Category", style="dim")
-        table.add_column("Object Name", style="bold white")
-        table.add_column("Last DDL", style="bold green")
-        table.add_column("Modified By", style="magenta")
+        table.add_column(t("tui.changes_col_schema"), style="yellow")
+        table.add_column(t("tui.changes_col_category"), style="dim")
+        table.add_column(t("tui.changes_col_name"), style="bold white")
+        table.add_column(t("tui.changes_col_last_ddl"), style="bold green")
+        table.add_column(t("tui.changes_col_modified_by"), style="magenta")
 
         for row in sorted(results, key=lambda x: x[3], reverse=True):
             table.add_row(*row)
@@ -2498,7 +2499,7 @@ class InteractiveTUISession:
         console.print(
             Panel(
                 table,
-                title=f"[bold green]✦ Objects Modified in the Last {days} Days ({len(results)} Found)[/bold green]",
+                title=f"[bold green]{t('tui.changes_title', days=days, total=len(results))}[/bold green]",
                 box=box.ROUNDED,
                 border_style="green",
             )
@@ -2510,18 +2511,23 @@ class InteractiveTUISession:
         trace_res = trace_raw_dependencies(self.schemas, target_obj, max_depth=1)
 
         if not trace_res.focal_object and trace_res.focal_type == "UNKNOWN":
-            console.print(f"[red]Object '{target_obj}' was not found in catalog.[/red]\n")
+            console.print(t("tui.trace_not_found", target_obj=target_obj))
             return
 
         risk_level = _calculate_risk_level(len(trace_res.dependencies))
         risk_color = "red" if risk_level == "CRITICAL" else ("yellow" if risk_level in ("HIGH", "MEDIUM") else "green")
 
+        focal_lbl = t("tui.trace_focal")
+        type_lbl = t("tui.trace_type")
+        risk_lbl = t("tui.trace_risk_level")
+        conn_lbl = t("tui.trace_connections")
+
         console.print()
         console.print(
             Panel(
-                f"[bold]Focal Object:[/bold] [bold yellow]{target_obj}[/bold yellow]  •  [bold]Type:[/bold] `{trace_res.focal_type}`\n"
-                f"[bold]Change Risk Level:[/bold] [{risk_color}]{risk_level}[/{risk_color}] ([bold]{len(trace_res.dependencies)}[/bold] direct connections mapped)",
-                title="[bold cyan]🔍 Inline Lineage & Impact X-Ray[/bold cyan]",
+                f"[bold]{focal_lbl}:[/bold] [bold yellow]{target_obj}[/bold yellow]  •  [bold]{type_lbl}:[/bold] `{trace_res.focal_type}`\n"
+                f"[bold]{risk_lbl}:[/bold] [{risk_color}]{risk_level}[/{risk_color}] ([bold]{len(trace_res.dependencies)}[/bold] {conn_lbl})",
+                title=f"[bold cyan]{t('tui.trace_title')}[/bold cyan]",
                 box=box.ROUNDED,
                 border_style="cyan",
             )
@@ -2541,7 +2547,7 @@ class InteractiveTUISession:
         # Output Dossier
         out_file = self.config.docPath / "dossiers" / f"{target_obj}.md"
         written = write_dossier_doc(trace_res, out_file, annotations_path=self.config.annotationsPath)
-        console.print(f"[dim]✓ Dossier generated at: {written}[/dim]\n")
+        console.print(t("tui.trace_dossier_at", path=written))
 
     def _send_ai_prompt(self, user_input: str) -> None:
         """Queries AI Assistant with live step-by-step tool feedback, thought streaming, audit recording, and latency metrics."""
@@ -2842,7 +2848,7 @@ class InteractiveTUISession:
             table.add_row("Active Audit Log File", summary["log_file"])
 
             console.print()
-            console.print(Panel(table, title="[bold cyan]✦ AI Session Audit Overview[/bold cyan]", box=box.ROUNDED, border_style="cyan"))
+            console.print(Panel(table, title=f"[bold cyan]{t('tui.audit_session_title')}[/bold cyan]", box=box.ROUNDED, border_style="cyan"))
 
             if summary["tool_usage_breakdown"]:
                 t_table = Table(show_header=True, header_style="bold cyan", box=box.ROUNDED)
@@ -2851,7 +2857,7 @@ class InteractiveTUISession:
                 for t_name, count in sorted(summary["tool_usage_breakdown"].items(), key=lambda x: x[1], reverse=True):
                     t_table.add_row(t_name, str(count))
                 console.print(
-                    Panel(t_table, title="[bold green]✦ Tool Execution Breakdown[/bold green]", box=box.ROUNDED, border_style="green")
+                    Panel(t_table, title=f"[bold green]{t('tui.audit_tools_title')}[/bold green]", box=box.ROUNDED, border_style="green")
                 )
             console.print()
             return
@@ -2863,13 +2869,13 @@ class InteractiveTUISession:
                 saved = self.audit_logger.export_json(target_path)
             else:
                 saved = self.audit_logger.export_markdown(target_path)
-            console.print(f"[green]✓ Audit report successfully exported to:[/green] [bold cyan]{saved.resolve()}[/bold cyan]\n")
+            console.print(t("tui.audit_exported", path=saved.resolve()))
             return
 
         # Default: /audit or /audit last
         last_turn = self.audit_logger.get_last_turn()
         if not last_turn:
-            console.print("[yellow]! No interaction has occurred yet in this session.[/yellow]\n")
+            console.print(t("tui.audit_no_interaction"))
             return
 
         console.print()
@@ -2882,10 +2888,10 @@ class InteractiveTUISession:
             f"[bold white]Tokens:[/bold white] {last_turn.tokens_used:,}  •  "
             f"[bold white]Tools Used:[/bold white] [bold]{len(last_turn.tools_executed)}[/bold]"
         )
-        console.print(Panel(info_panel, title="[bold cyan]✦ AI Interaction Audit Trace[/bold cyan]", box=box.ROUNDED, border_style="cyan"))
+        console.print(Panel(info_panel, title=f"[bold cyan]{t('tui.audit_trace_title')}[/bold cyan]", box=box.ROUNDED, border_style="cyan"))
 
         if not last_turn.tools_executed:
-            console.print("[dim]No database tools were invoked for this question (direct answer or RAG context was sufficient).[/dim]\n")
+            console.print(t("tui.audit_no_tools"))
             return
 
         for te in last_turn.tools_executed:

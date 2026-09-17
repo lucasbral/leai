@@ -1173,6 +1173,7 @@ def sync_schema_annotations(
     object_types: list[str] | None = None,
     progress_callback: Callable[[str, str, int, int], None] | None = None,
     storage: Any = None,
+    local_cache: bool = True,
 ) -> list[Path]:
     target_ann_path = (annotations_path / schema.schema_name) if (multi_schema and schema.schema_name) else annotations_path
     allowed_types = {t.lower() for t in object_types} if object_types else None
@@ -1218,6 +1219,7 @@ def sync_schema_annotations(
                 schema_name=s_name,
                 obj_folder="tables",
                 obj_name=table.name,
+                local_cache=local_cache,
             )
             _record_enriched("tables", table.name, ann, db_comment=table.comment)
             generated_ann.append(ann_path)
@@ -1237,6 +1239,7 @@ def sync_schema_annotations(
                 schema_name=s_name,
                 obj_folder="views",
                 obj_name=view.name,
+                local_cache=local_cache,
             )
             _record_enriched("views", view.name, ann, db_comment=view.comment)
             generated_ann.append(ann_path)
@@ -1256,6 +1259,7 @@ def sync_schema_annotations(
                 schema_name=s_name,
                 obj_folder="mviews",
                 obj_name=mview.name,
+                local_cache=local_cache,
             )
             _record_enriched("mviews", mview.name, ann, db_comment=mview.comment)
             generated_ann.append(ann_path)
@@ -1276,6 +1280,7 @@ def sync_schema_annotations(
             schema_name=s_name,
             obj_folder=obj_folder,
             obj_name=code_obj.name,
+            local_cache=local_cache,
         )
         _record_enriched(obj_folder, code_obj.name, ann, db_comment=code_obj.comment)
         generated_ann.append(ann_path)
@@ -1293,6 +1298,7 @@ def sync_schema_annotations(
                 schema_name=s_name,
                 obj_folder=f"{obj_folder}/{code_obj.name}",
                 obj_name=sub.name,
+                local_cache=local_cache,
             )
             _record_enriched(f"{obj_folder}/{code_obj.name}", sub.name, sub_ann, db_comment=sub.comment)
             generated_ann.append(sub_ann_path)
@@ -1310,6 +1316,7 @@ def sync_schema_annotations(
                 schema_name=s_name,
                 obj_folder="triggers",
                 obj_name=trigger.name,
+                local_cache=local_cache,
             )
             _record_enriched("triggers", trigger.name, ann)
             generated_ann.append(ann_path)
@@ -1327,6 +1334,7 @@ def sync_schema_annotations(
                 schema_name=s_name,
                 obj_folder="sequences",
                 obj_name=sequence.name,
+                local_cache=local_cache,
             )
             _record_enriched("sequences", sequence.name, ann)
             generated_ann.append(ann_path)
@@ -1344,6 +1352,7 @@ def sync_schema_annotations(
                 schema_name=s_name,
                 obj_folder="indexes",
                 obj_name=index.name,
+                local_cache=local_cache,
             )
             _record_enriched("indexes", index.name, ann)
             generated_ann.append(ann_path)
@@ -1361,6 +1370,7 @@ def sync_schema_annotations(
                 schema_name=s_name,
                 obj_folder="synonyms",
                 obj_name=synonym.name,
+                local_cache=local_cache,
             )
             _record_enriched("synonyms", synonym.name, ann)
             generated_ann.append(ann_path)
@@ -1373,12 +1383,13 @@ def sync_schema_annotations(
         "enriched_count": sum(len(v) for v in enriched_objects.values()),
         "objects": enriched_objects,
     }
-    local_index_path = target_ann_path / "annotations_index.json"
-    try:
-        local_index_path.parent.mkdir(parents=True, exist_ok=True)
-        local_index_path.write_text(json.dumps(index_data, indent=2, ensure_ascii=False), encoding="utf-8")
-    except Exception:
-        pass
+    if local_cache:
+        local_index_path = target_ann_path / "annotations_index.json"
+        try:
+            local_index_path.parent.mkdir(parents=True, exist_ok=True)
+            local_index_path.write_text(json.dumps(index_data, indent=2, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
 
     if storage and hasattr(storage, "save_annotations_index"):
         try:

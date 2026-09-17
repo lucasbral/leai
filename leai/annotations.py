@@ -13,6 +13,7 @@ def load_annotation(
     schema_name: str = "",
     obj_folder: str = "",
     obj_name: str = "",
+    local_cache: bool = True,
 ) -> ObjectAnnotation:
     remote_ann: ObjectAnnotation | None = None
     if storage is not None and schema_name and obj_folder and obj_name:
@@ -24,7 +25,7 @@ def load_annotation(
             pass
 
     local_ann: ObjectAnnotation | None = None
-    if file_path.exists():
+    if local_cache and file_path and file_path.exists():
         try:
             raw = yaml.safe_load(file_path.read_text(encoding="utf-8"))
             if isinstance(raw, dict):
@@ -62,11 +63,13 @@ def load_annotation(
             warnings=_merge_lists(remote_ann.warnings, local_ann.warnings),
             columns=merged_cols,
         )
-        save_annotation(file_path, merged_ann)
+        if local_cache:
+            save_annotation(file_path, merged_ann, local_cache=True)
         return merged_ann
 
     if remote_ann is not None:
-        save_annotation(file_path, remote_ann)
+        if local_cache:
+            save_annotation(file_path, remote_ann, local_cache=True)
         return remote_ann
 
     if local_ann is not None:
@@ -113,19 +116,21 @@ def save_annotation(
     obj_folder: str = "",
     obj_name: str = "",
     db_comment: str | None = None,
+    local_cache: bool = True,
 ) -> None:
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-    data = annotation.model_dump(exclude_defaults=False, exclude_none=False)
-    clean_data = {
-        "description": data.get("description") or "",
-        "tags": data.get("tags") or [],
-        "business_rules": data.get("business_rules") or [],
-        "use_cases": data.get("use_cases") or [],
-        "related_objects": data.get("related_objects") or [],
-        "warnings": data.get("warnings") or [],
-        "columns": data.get("columns") or {},
-    }
-    file_path.write_text(yaml.safe_dump(clean_data, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    if local_cache and file_path is not None:
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        data = annotation.model_dump(exclude_defaults=False, exclude_none=False)
+        clean_data = {
+            "description": data.get("description") or "",
+            "tags": data.get("tags") or [],
+            "business_rules": data.get("business_rules") or [],
+            "use_cases": data.get("use_cases") or [],
+            "related_objects": data.get("related_objects") or [],
+            "warnings": data.get("warnings") or [],
+            "columns": data.get("columns") or {},
+        }
+        file_path.write_text(yaml.safe_dump(clean_data, sort_keys=False, allow_unicode=True), encoding="utf-8")
 
     if storage is not None and schema_name and obj_folder and obj_name:
         try:
@@ -150,6 +155,7 @@ def ensure_annotation_stub(
     schema_name: str = "",
     obj_folder: str = "",
     obj_name: str = "",
+    local_cache: bool = True,
 ) -> ObjectAnnotation:
     column_names = column_names or []
     existing = load_annotation(
@@ -158,8 +164,9 @@ def ensure_annotation_stub(
         schema_name=schema_name,
         obj_folder=obj_folder,
         obj_name=obj_name,
+        local_cache=local_cache,
     )
-    if existing.description or existing.columns or existing.business_rules or file_path.exists():
+    if existing.description or existing.columns or existing.business_rules or (local_cache and file_path and file_path.exists()):
         updated = False
         if not existing.description and db_comment:
             existing.description = db_comment
@@ -177,6 +184,7 @@ def ensure_annotation_stub(
                 obj_folder=obj_folder,
                 obj_name=obj_name,
                 db_comment=db_comment,
+                local_cache=local_cache,
             )
         return existing
 
@@ -195,5 +203,6 @@ def ensure_annotation_stub(
         obj_folder=obj_folder,
         obj_name=obj_name,
         db_comment=db_comment,
+        local_cache=local_cache,
     )
     return annotation
