@@ -19,7 +19,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn, TimeElapsedColumn
-from rich.prompt import Confirm, Prompt
+from rich.prompt import Prompt
 from rich.rule import Rule
 from rich.syntax import Syntax
 from rich.table import Column, Table
@@ -2037,21 +2037,35 @@ class InteractiveTUISession:
         run_diagnostics(self.config, console=console)
 
     def _run_init(self, force: bool = False) -> None:
-        """Informs or initializes leai.yml with interactive overwrite confirmation."""
+        """Informs, updates layout, or initializes leai.yml."""
         from leai.i18n import get_locale, t
-        from leai.template import write_default_config
+        from leai.template import update_existing_config, write_default_config
 
         out_file = Path("leai.yml")
         if out_file.exists() and not force:
-            console.print(t("tui.config_exists", path=out_file.resolve()))
-            try:
-                overwrite = Confirm.ask(t("tui.overwrite_prompt"), default=False)
-            except (EOFError, KeyboardInterrupt, OSError):
-                console.print(t("tui.operation_cancelled"))
-                return
-            if not overwrite:
-                console.print(t("tui.operation_cancelled_kept"))
-                return
+            modified, added_keys = update_existing_config(out_file, lang=get_locale(), backup=True)
+            is_pt = get_locale() == "pt-BR"
+            if modified:
+                if is_pt:
+                    console.print(
+                        f"[green]✓ Layout do [bold]{out_file}[/bold] atualizado com sucesso (valores e credenciais preservados)![/green]"
+                    )
+                    if added_keys:
+                        console.print(
+                            f"[dim]Campos mesclados ({len(added_keys)}): {', '.join(added_keys[:8])}{'...' if len(added_keys) > 8 else ''}[/dim]"
+                        )
+                else:
+                    console.print(f"[green]✓ Layout of [bold]{out_file}[/bold] updated successfully (existing values preserved)![/green]")
+                    if added_keys:
+                        console.print(
+                            f"[dim]Merged fields ({len(added_keys)}): {', '.join(added_keys[:8])}{'...' if len(added_keys) > 8 else ''}[/dim]"
+                        )
+            else:
+                if is_pt:
+                    console.print(f"[green]✓ O arquivo [bold]{out_file}[/bold] já está com o layout atualizado.[/green]")
+                else:
+                    console.print(f"[green]✓ The file [bold]{out_file}[/bold] layout is already up to date.[/green]")
+            return
 
         write_default_config(out_file, overwrite=True, lang=get_locale())
         console.print(t("tui.config_created", path=out_file.resolve()))

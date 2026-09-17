@@ -589,7 +589,7 @@ class TuiUnitTests(unittest.TestCase):
             finally:
                 os.chdir(orig_cwd)
 
-    def test_run_init_when_exists_and_declined(self):
+    def test_run_init_when_exists_updates_layout_preserving_values(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             orig_cwd = Path.cwd()
             import os
@@ -600,12 +600,13 @@ class TuiUnitTests(unittest.TestCase):
                 out_file.write_text("existing_custom: true\n", encoding="utf-8")
 
                 session = InteractiveTUISession([self.schema], self.config, self.mock_client)
-                with patch("rich.prompt.Confirm.ask", return_value=False):
-                    res = session.handle_slash_command("/init")
-                    self.assertTrue(res)
+                res = session.handle_slash_command("/init")
+                self.assertTrue(res)
 
                 content = out_file.read_text(encoding="utf-8")
-                self.assertEqual(content, "existing_custom: true\n")
+                self.assertIn("existing_custom: true", content)
+                self.assertIn("rawPath", content)
+                self.assertIn("ollama", content)
             finally:
                 os.chdir(orig_cwd)
 

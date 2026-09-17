@@ -2,6 +2,16 @@
 
 All notable changes to the **LEAI** project are documented here.
 
+## [0.3.6] — 2026
+
+### 🛠️ Non-Destructive `leai.yml` Layout Update & Smart Config Migration
+* **Smart Installer Config Update (`install.ps1`):** Configuration step now checks for existing `leai.yml` files and safely merges missing sections and schema layout fields (such as `updates_log_path`, `generate_update_log`, new AI providers, `git`, and `storage.seaweedfs`), preserving 100% of existing user-configured values (`dsn`, schemas, API keys, models) with automatic `.bak` backup creation.
+* **Deep Merge Engine & Canonical Config Renderer (`leai.template`):** Implemented `deep_merge_missing_fields`, `render_canonical_config`, and `update_existing_config` to regenerate configuration files with clean numbered sections and detailed comments without dropping custom user settings.
+* **CLI `leai init --update` (`-u`):** New CLI option to non-destructively refresh existing configuration layouts from the terminal.
+* **TUI `/init` Command:** Slash command `/init` inside interactive chat sessions now safely updates existing layouts instead of prompting for destructive overwrites.
+
+---
+
 ## [0.3.5] — 2026
 
 ### 🚀 SQL Performance Tuning, Strict Oracle Dialect Validation, Reverse-Engineering Workflow, Thought Streaming & Modernized TUI

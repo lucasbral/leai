@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 DEFAULT_OBJECT_TYPES = [
     "tables",
@@ -100,6 +100,24 @@ class LeaiConfig(BaseModel):
     language: str = Field(default="en-US", description="Interface language: 'en-US' or 'pt-BR'")
     updates_log_path: Path = Field(default=Path("./logs/updates"))
     generate_update_log: bool = Field(default=True)
+
+    @field_validator("include", "exclude", mode="before")
+    @classmethod
+    def _validate_filters(cls, v: Any) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [v]
+        return list(v)
+
+    @field_validator("object_types", mode="before")
+    @classmethod
+    def _validate_object_types(cls, v: Any) -> list[str]:
+        if v is None:
+            return list(DEFAULT_OBJECT_TYPES)
+        if isinstance(v, str):
+            return [v]
+        return list(v)
 
     @property
     def schema_name(self) -> str:

@@ -984,6 +984,89 @@ FUNCTION get_setor_func (p_numfunc IN NUMBER, p_numvinc IN NUMBER, p_data IN DAT
             self.assertTrue(local_gloss.exists())
             self.assertIn("REMOTO", local_gloss.read_text(encoding="utf-8"))
 
+    def test_update_existing_config_preserves_filled_fields_and_adds_missing(self):
+        import yaml
+
+        from leai.template import update_existing_config
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg_file = Path(tmp) / "leai.yml"
+            # Minimal legacy config
+            cfg_file.write_text(
+                """
+                dsn: "oracle://meu_user:senha_secreta@host_legado:1521/SRV1"
+                schemas:
+                  - MEU_SCHEMA_CUSTOM
+                ai:
+                  default_provider: "ollama"
+                  temperature: 0.77
+                  providers:
+                    ollama:
+                      model: "meu-modelo-custom:14b"
+                custom_user_key: "valor_customizado"
+                """,
+                encoding="utf-8",
+            )
+
+            modified, added_keys = update_existing_config(cfg_file, lang="pt-BR", backup=True)
+            self.assertTrue(modified)
+            self.assertTrue(len(added_keys) > 0)
+            self.assertTrue((Path(tmp) / "leai.yml.bak").exists())
+
+            # Verify contents
+            updated_text = cfg_file.read_text(encoding="utf-8")
+            loaded = yaml.safe_load(updated_text)
+
+            # Check preserved fields
+            self.assertEqual(loaded["dsn"], "oracle://meu_user:senha_secreta@host_legado:1521/SRV1")
+            self.assertEqual(loaded["schemas"], ["MEU_SCHEMA_CUSTOM"])
+            self.assertEqual(loaded["ai"]["default_provider"], "ollama")
+            self.assertEqual(loaded["ai"]["temperature"], 0.77)
+            self.assertEqual(loaded["ai"]["providers"]["ollama"]["model"], "meu-modelo-custom:14b")
+            self.assertEqual(loaded["custom_user_key"], "valor_customizado")
+
+            # Check added/merged fields
+            self.assertIn("rawPath", loaded)
+            self.assertIn("docPath", loaded)
+            self.assertIn("annotationsPath", loaded)
+            self.assertIn("updates_log_path", loaded)
+            self.assertIn("generate_update_log", loaded)
+            self.assertIn("object_types", loaded)
+            self.assertIn("openai", loaded["ai"]["providers"])
+            self.assertIn("gemini", loaded["ai"]["providers"])
+            self.assertIn("anthropic", loaded["ai"]["providers"])
+            self.assertIn("deepseek", loaded["ai"]["providers"])
+            self.assertIn("git", loaded)
+            self.assertIn("storage", loaded)
+            self.assertEqual(loaded["language"], "pt-BR")
+
+            # Verify load_config succeeds on updated file
+            cfg = load_config(cfg_file)
+            self.assertEqual(cfg.schema_name, "MEU_SCHEMA_CUSTOM")
+            self.assertEqual(cfg.ai.temperature, 0.77)
+
+    def test_cli_init_update_command(self):
+        from typer.testing import CliRunner
+
+        from leai.cli import app
+
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg_file = Path(tmp) / "leai.yml"
+            cfg_file.write_text(
+                'dsn: "oracle://u:p@db:1521/s"\nschemas: ["HR"]\n',
+                encoding="utf-8",
+            )
+
+            result = runner.invoke(app, ["init", "--update", "-o", str(cfg_file)])
+            self.assertEqual(result.exit_code, 0)
+            self.assertIn("updated", result.output.lower())
+
+            content = cfg_file.read_text(encoding="utf-8")
+            self.assertIn("oracle://u:p@db:1521/s", content)
+            self.assertIn("HR", content)
+            self.assertIn("updates_log_path", content)
+
 
 if __name__ == "__main__":
     unittest.main()

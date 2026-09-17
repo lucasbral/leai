@@ -242,14 +242,35 @@ def _print_final_summary_panel(
 def init(
     output: Path = typer.Option(Path("leai.yml"), "--output", "-o", help="Configuration file path to create"),
     force: bool = typer.Option(False, "--force", "-f", help="Overwrite if the file already exists"),
+    update: bool = typer.Option(
+        False,
+        "--update",
+        "-u",
+        help="Update layout of existing configuration adding missing fields without modifying filled values",
+    ),
     language: str = typer.Option(None, "--lang", "-L", help="Template language ('en-US' or 'pt-BR')"),
 ) -> None:
-    """Creates an initial leai.yml configuration file in the current directory."""
-    if output.exists() and not force:
-        console.print(f"[yellow]The file [bold]{output}[/bold] already exists. Use [bold]--force[/bold] to overwrite.[/yellow]")
+    """Creates an initial leai.yml configuration file or updates layout of an existing one."""
+    if output.exists() and not force and not update:
+        console.print(
+            f"[yellow]The file [bold]{output}[/bold] already exists. Use [bold]--update[/bold] (-u) to update layout or [bold]--force[/bold] (-f) to overwrite.[/yellow]"
+        )
         raise typer.Exit(code=1)
 
-    from leai.template import write_default_config
+    from leai.template import update_existing_config, write_default_config
+
+    if update and output.exists():
+        modified, added_keys = update_existing_config(output, lang=language, backup=True)
+        if modified:
+            console.print(f"[green]✓ Configuration layout updated successfully at:[/green] [bold cyan]{output}[/bold cyan]")
+            if added_keys:
+                console.print(
+                    f"[dim]Added/Merged fields ({len(added_keys)}): {', '.join(added_keys[:10])}{'...' if len(added_keys) > 10 else ''}[/dim]"
+                )
+            console.print(f"[dim]Backup of previous version saved at: {output.with_suffix('.yml.bak')}[/dim]")
+        else:
+            console.print(f"[green]✓ Configuration layout is already up to date at:[/green] [bold cyan]{output}[/bold cyan]")
+        return
 
     write_default_config(output, overwrite=True, lang=language)
     console.print(f"[green]✓ Configuration file created successfully at:[/green] [bold cyan]{output}[/bold cyan]")

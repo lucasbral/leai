@@ -2,6 +2,16 @@
 
 Todas as alterações notáveis no projeto **LEAI** são documentadas nesta página.
 
+## [0.3.6] — 2026
+
+### 🛠️ Atualização Não-Destrutiva de Layout do `leai.yml` & Migração Inteligente
+* **Atualização Inteligente no Script de Instalação (`install.ps1`):** A etapa de configuração agora detecta arquivos `leai.yml` pré-existentes e executa a mesclagem estrutural das novas seções e chaves do layout padrão (como `updates_log_path`, `generate_update_log`, novos provedores de IA, seções `git` e `storage.seaweedfs`), preservando 100% dos valores preenchidos pelo usuário (`dsn`, schemas, chaves de API, modelos) e criando backup automático (`.bak`).
+* **Engine de Deep Merge e Renderizador Canônico (`leai.template`):** Implementadas as funções `deep_merge_missing_fields`, `render_canonical_config` e `update_existing_config` para regenerar a configuração com estrutura numerada e comentários descritivos sem perder campos customizados do usuário.
+* **Comando CLI `leai init --update` (`-u`):** Novo comando para atualizar o layout de arquivos de configuração existentes sem exigir sobrescrita destrutiva.
+* **Comando `/init` na TUI:** O comando de barra `/init` dentro da sessão de chat agora atualiza o layout existente de forma segura.
+
+---
+
 ## [0.3.5] — 2026
 
 ### 🚀 Otimização de Queries (Tuning), Validação Oracle Estrita, Workflow de Engenharia Reversa, Streaming com Raciocínio e TUI Modernizada
