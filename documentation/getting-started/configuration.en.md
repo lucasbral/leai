@@ -61,15 +61,21 @@ ai:
       model: "qwen2.5-coder:latest"
       temperature: 0.1
       timeout: 300.0
+      num_ctx: 32768              # Context window size in tokens to prevent truncation on large DDLs
+      keep_alive: "1h"            # Keep model loaded in memory on Ollama server
     local:
       base_url: "http://localhost:1234/v1" # e.g. LM Studio, vLLM, LocalAI
       model: "qwen2.5"
       temperature: 0.1
+      num_ctx: 32768
+      max_tokens: 4096
+      top_p: 0.95
     openai:
       api_key: "${OPENAI_API_KEY}"
       model: "gpt-4o-mini"
       temperature: 0.2
       timeout: 120.0
+      max_tokens: 4096
     gemini:
       api_key: "${GEMINI_API_KEY}"
       model: "gemini-2.5-flash"

@@ -289,6 +289,9 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
         def _on_token(token: str) -> None:
             _send_sse_event("token", {"text": token})
 
+        def _on_thought(thought_text: str) -> None:
+            _send_sse_event("thought", {"thought": thought_text})
+
         # 1. Check for workflow command (e.g. /workflow impact VINCULOS)
         if prompt.startswith("/workflow"):
             from leai.workflows import get_workflow, list_workflows
@@ -402,6 +405,7 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                     config=self.server.config,
                     client=client,
                     on_token=_on_token,
+                    on_thought=_on_thought,
                     on_tool_start=_on_tool_start,
                     on_tool_end=_on_tool_end,
                 )
@@ -432,6 +436,7 @@ class LEAIStudioHandler(BaseHTTPRequestHandler):
                 on_tool_start=_on_tool_start,
                 on_tool_end=_on_tool_end,
                 on_token=_on_token,
+                on_thought=_on_thought,
             )
             latency = time.perf_counter() - start_t
             _send_sse_event(

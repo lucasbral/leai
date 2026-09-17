@@ -117,6 +117,7 @@ class InteractiveTUISession:
         self.last_latency: float | None = None
         self.last_ai_reply: str = ""
         self.last_code_blocks: list[dict] = []
+        self.show_thoughts: bool = True
         self.completer = LeaiCompleter(schemas, config=config)
         self.audit_logger = SessionAuditLogger()
         self.web_server = None
@@ -134,8 +135,9 @@ class InteractiveTUISession:
         kb = KeyBindings()
 
         @kb.add("escape", "enter")
+        @kb.add("c-j")
         def _(event):
-            """Inserts newline on Alt+Enter or Escape+Enter."""
+            """Inserts newline on Alt+Enter, Escape+Enter or Ctrl+J."""
             event.current_buffer.insert_text("\n")
 
         @kb.add("enter", filter=has_completions)
@@ -229,11 +231,17 @@ class InteractiveTUISession:
         msg_count = len(self.session.messages)
         latency_str = f"{self.last_latency:.2f}s" if self.last_latency is not None else t("tui.toolbar_ready")
         tokens_str = _format_tokens(self.session.total_tokens, self.session.last_turn_tokens)
+        th_status = (
+            "<style fg='#a6e3a1'>🧠 thoughts:on</style>"
+            if getattr(self, "show_thoughts", True)
+            else "<style fg='#6c7086'>🧠 thoughts:off</style>"
+        )
 
         return HTML(
             f" <b><style fg='#cba6f7'>✦ LEAI</style></b> │ "
             f"{t('tui.toolbar_schema')}: <b><style fg='#f9e2af'>{schema_text}</style></b> │ "
             f"{t('tui.toolbar_model')}: <b><style fg='#a6e3a1'>{self.provider_name.upper()}:{self.model_name}</style></b> │ "
+            f"{th_status} │ "
             f"{t('tui.toolbar_latency')}: <style fg='#9399b2'>{latency_str}</style> │ "
             f"{t('tui.toolbar_history')}: <b>{msg_count}</b> msgs │ "
             f"{t('tui.toolbar_tokens')}: <b><style fg='#89b4fa'>{tokens_str}</style></b> "
@@ -575,6 +583,49 @@ class InteractiveTUISession:
                 self._render_trace(parts[1].lstrip("@"))
             return True
 
+        if cmd in ("/tune", "/optimize", "/explain"):
+            if len(parts) < 2:
+                console.print(
+                    "[yellow]Uso: /tune <SQL_QUERY> (ex: /tune SELECT * FROM FUNCIONARIOS WHERE TRUNC(DT_ADMISSAO) = SYSDATE)[/yellow]"
+                )
+            else:
+                sql_query = cmd_line.strip()[len(parts[0]) :].strip()
+                self._run_tune_sql(sql_query)
+            return True
+
+        if cmd in ("/validate", "/check-sql"):
+            if len(parts) < 2:
+                console.print("[yellow]Uso: /validate <SQL_QUERY> (ex: /validate SELECT * FROM EMPLOYEES LIMIT 10)[/yellow]")
+            else:
+                sql_query = cmd_line.strip()[len(parts[0]) :].strip()
+                self._run_validate_sql(sql_query)
+            return True
+
+        if cmd in ("/thoughts", "/thought"):
+            sub_arg = parts[1].lower() if len(parts) > 1 else "toggle"
+            self._run_thoughts_toggle(sub_arg)
+            return True
+
+        if cmd in ("/provider", "/providers"):
+            if len(parts) < 2:
+                console.print(
+                    f"[cyan]Provedor ativo:[/cyan] [bold green]{self.provider_name.upper()}[/bold green] (Modelo: [bold yellow]{self.client.model}[/bold yellow])"
+                )
+                console.print("[dim]Uso: /provider <ollama|openai|gemini|anthropic|local|deepseek|qwen|kimi|grok>[/dim]")
+            else:
+                new_prov = parts[1].lower()
+                new_model = parts[2] if len(parts) >= 3 else None
+                try:
+                    self.client = get_llm_client(self.config, provider_override=new_prov, model_override=new_model)
+                    self.provider_name = new_prov
+                    self.session.client = self.client
+                    console.print(
+                        f"[green]✓ Provedor de IA alternado para [bold]{new_prov.upper()}[/bold] (Modelo: [bold cyan]{self.client.model}[/bold cyan])[/green]"
+                    )
+                except Exception as exc:
+                    console.print(f"[red]Falha ao alternar provedor:[/red] {exc}")
+            return True
+
         if cmd in ("/model", "/models"):
             if len(parts) < 2:
                 # List models for current provider
@@ -589,6 +640,7 @@ class InteractiveTUISession:
                 "qwen",
                 "kimi",
                 "ollama",
+                "local",
             ):
                 # List models for specified provider
                 self._render_models_table(parts[1].lower())
@@ -597,7 +649,7 @@ class InteractiveTUISession:
                 if len(parts) >= 3:
                     new_prov = parts[1].lower()
                     new_model = parts[2]
-                elif parts[1].lower() in ("openai", "gemini", "anthropic", "grok", "xai", "deepseek", "qwen", "kimi", "ollama"):
+                elif parts[1].lower() in ("openai", "gemini", "anthropic", "grok", "xai", "deepseek", "qwen", "kimi", "ollama", "local"):
                     new_prov = parts[1].lower()
                     new_model = None
                 else:
@@ -742,7 +794,7 @@ class InteractiveTUISession:
             console.print(f"[green]✓ Conversation transcript saved to:[/green] [bold cyan]{saved}[/bold cyan]")
             return True
 
-        if cmd in ("/doctor", "/check"):
+        if cmd == "/doctor":
             self._run_doctor()
             return True
 
@@ -1978,91 +2030,11 @@ class InteractiveTUISession:
         except Exception as exc:
             console.print(f"[red]Failed to launch Web Studio:[/red] {exc}\n")
 
-    def _run_check(self) -> None:
-        """Runs diagnostics on Oracle connection, schemas snapshot, and AI provider."""
-        import oracledb
-
-        console.print("[cyan]✦ Running LEAI Environment Diagnostics...[/cyan]\n")
-
-        # 1. Check schemas snapshot
-        if self.schemas:
-            s_names = ", ".join(s.schema_name for s in self.schemas)
-            total_objs = sum(len(s.tables) + len(s.views) + len(s.code_objects) for s in self.schemas)
-            console.print(
-                f"[green]✓ Metadata Snapshot Loaded:[/green] [bold]{len(self.schemas)} schemas[/bold] ({s_names}) • {total_objs:,} objects"
-            )
-        else:
-            console.print(f"[yellow]! No schema metadata snapshot loaded from {self.config.rawPath}[/yellow]")
-
-        # 2. Check Oracle Connection
-        if self.config.dsn:
-            try:
-                from leai.oracle import _build_connect_kwargs
-
-                conn = oracledb.connect(**_build_connect_kwargs(self.config.dsn))
-                cur = conn.cursor()
-                cur.execute("SELECT * FROM v$version WHERE ROWNUM = 1")
-                ver = cur.fetchone()
-                ver_str = ver[0] if ver else "Oracle Database"
-                conn.close()
-                console.print(f"[green]✓ Oracle Database Connection:[/green] [bold]OK[/bold] ([dim]{ver_str}[/dim])")
-            except Exception as exc:
-                console.print(f"[red]✗ Oracle Connection Error:[/red] {exc}")
-        else:
-            console.print("[yellow]! DSN not configured in leai.yml (offline mode)[/yellow]")
-
-        # 3. Check AI Provider
-        try:
-            if self.client:
-                console.print(
-                    f"[green]✓ Active AI Provider:[/green] [bold yellow]{self.provider_name.upper()}[/bold yellow] (Model: [bold cyan]{self.client.model}[/bold cyan])"
-                )
-            else:
-                console.print("[yellow]! AI Client not initialized[/yellow]")
-        except Exception as exc:
-            console.print(f"[yellow]! Warning checking AI client:[/yellow] {exc}")
-
-        # 4. Check Documentation Directory
-        doc_count = len(list(self.config.docPath.glob("**/*.md"))) if self.config.docPath.exists() else 0
-        ann_count = len(list(self.config.annotationsPath.glob("**/*.yml"))) if self.config.annotationsPath.exists() else 0
-        console.print(
-            f"[green]✓ Documentation Store:[/green] [cyan]{ann_count}[/cyan] annotations in [bold]{self.config.annotationsPath}[/bold] • [cyan]{doc_count}[/cyan] docs in [bold]{self.config.docPath}[/bold]"
-        )
-
-        # 5. Check SeaweedFS S3 Storage
-        if getattr(self.config, "storage", None) and self.config.storage.seaweedfs.enabled:
-            try:
-                from leai.storage import SeaweedFSStorage
-
-                sw_storage = SeaweedFSStorage(self.config.storage.seaweedfs)
-                res = sw_storage.test_connection()
-                status_str = "OK" if res.get("success") else "Failed"
-                objs = res.get("objects_found", 0)
-                console.print(
-                    f"[green]✓ SeaweedFS S3 Storage:[/green] [bold]{status_str}[/bold] (Bucket: {self.config.storage.seaweedfs.bucket}, Objects: {objs})"
-                )
-            except Exception as exc:
-                console.print(f"[yellow]! SeaweedFS Warning:[/yellow] {exc}")
-
-        # 6. Check Git / GitLab Status
-        try:
-            from leai.git_ops import get_git_status
-
-            git_info = get_git_status(fetch=False)
-            if git_info.is_repo:
-                plat = git_info.platform_name
-                sync_desc = f"{git_info.behind} behind" if git_info.behind > 0 else "up to date"
-                console.print(
-                    f"[green]✓ Git Repository ({plat}):[/green] branch [bold]{git_info.branch}[/bold] • {sync_desc} • {len(git_info.modified_files)} modified\n"
-                )
-            else:
-                console.print("[dim]! Git Repository: not inside a git working tree[/dim]\n")
-        except Exception:
-            console.print()
-
     def _run_doctor(self) -> None:
-        """Executes full diagnostic pre-flight health check (alias for /check)."""
-        self._run_check()
+        """Executes full diagnostic pre-flight health check across all active subsystems."""
+        from leai.doctor import run_diagnostics
+
+        run_diagnostics(self.config, console=console)
 
     def _run_init(self, force: bool = False) -> None:
         """Informs or initializes leai.yml with interactive overwrite confirmation."""
@@ -2193,6 +2165,27 @@ class InteractiveTUISession:
                 else "Inspect objects modified in the last N days (default: 7)",
             ),
             (
+                "/tune <sql>",
+                "Tuning" if is_pt else "Tuning",
+                "Analisa sargabilidade, FTS, índices compostos e reescrita de query"
+                if is_pt
+                else "Analyze sargability, FTS, compound indexes, and AI query tuning",
+            ),
+            (
+                "/validate <sql>",
+                "Validação" if is_pt else "Validation",
+                "Valida aderência ao dialeto Oracle SQL e objetos dos schemas"
+                if is_pt
+                else "Validate Oracle SQL dialect compliance and schema objects",
+            ),
+            (
+                "/thoughts [on|off]",
+                "Config IA" if is_pt else "AI Config",
+                "Alterna exibição do fluxo de pensamento/raciocínio do modelo"
+                if is_pt
+                else "Toggle real-time model thinking / thought streaming",
+            ),
+            (
                 "/agent <role> <task>",
                 "Multi-Agente" if is_pt else "Multi-Agent",
                 "Executa subagente especialista diretamente (catalog, plsql, lineage, patch, doc)"
@@ -2202,7 +2195,9 @@ class InteractiveTUISession:
             (
                 "/workflow <name> <obj>",
                 "Workflows",
-                "Executa workflow autônomo multi-etapas (impact, refactor)" if is_pt else "Execute autonomous pipeline (impact, refactor)",
+                "Executa workflow autônomo (reverse-procedure, impact, refactor)"
+                if is_pt
+                else "Execute autonomous pipeline (reverse-procedure, impact, refactor)",
             ),
             (
                 "/models [p]",
@@ -2217,11 +2212,16 @@ class InteractiveTUISession:
                 else "Switch provider (openai, gemini, grok, etc.) and model",
             ),
             (
-                "/doctor, /check",
+                "/provider <p>",
+                "Config IA" if is_pt else "AI Config",
+                "Alterna o provedor de IA ativo dinamicamente" if is_pt else "Switch active AI provider dynamically",
+            ),
+            (
+                "/doctor",
                 "Diagnóstico" if is_pt else "Diagnostics",
-                "Diagnóstico preventivo de conectividade Oracle, IA, Storage e Git"
+                "Diagnóstico de conectividade Oracle, IA, Storage, Git e diretórios"
                 if is_pt
-                else "Pre-flight health check on Oracle, AI, Storage, and Git",
+                else "Pre-flight health check on Oracle, AI, Storage, Git, and stores",
             ),
             (
                 "/init",
@@ -2517,7 +2517,7 @@ class InteractiveTUISession:
         console.print(f"[dim]✓ Dossier generated at: {written}[/dim]\n")
 
     def _send_ai_prompt(self, user_input: str) -> None:
-        """Queries AI Assistant with live step-by-step tool feedback, audit recording, and latency metrics."""
+        """Queries AI Assistant with live step-by-step tool feedback, thought streaming, audit recording, and latency metrics."""
         if not self.client:
             console.print(
                 "[yellow]! No active AI client configured. Type [bold cyan]/model[/bold cyan] to configure a provider.[/yellow]\n"
@@ -2535,7 +2535,7 @@ class InteractiveTUISession:
                 items.append(f"{k}={v_str}")
             return ", ".join(items)
 
-        # 1. Print User message in OpenCode format
+        # 1. Print User message in modern terminal format
         console.print()
         console.print(
             Panel(
@@ -2548,7 +2548,33 @@ class InteractiveTUISession:
             )
         )
 
+        thought_chunks: list[str] = []
+        thought_start_t = time.perf_counter()
+        thought_printed = False
+
+        def _on_thought(chunk: str) -> None:
+            if not getattr(self, "show_thoughts", True):
+                return
+            thought_chunks.append(chunk)
+
         def _on_tool_start(t_name: str, t_args: dict, step_idx: int = 1) -> None:
+            nonlocal thought_printed
+            if thought_chunks and not thought_printed:
+                dur_th = time.perf_counter() - thought_start_t
+                th_text = "".join(thought_chunks).strip()
+                if th_text and len(th_text) > 5:
+                    console.print(
+                        Panel(
+                            f"[dim italic #a6adc8]{th_text}[/dim italic #a6adc8]",
+                            title=f"[dim #b4befe]🧠 Raciocínio ({dur_th:.2f}s)[/dim #b4befe]",
+                            box=box.ROUNDED,
+                            border_style="#45475a",
+                            padding=(0, 1),
+                        )
+                    )
+                thought_printed = True
+                thought_chunks.clear()
+
             args_str = _format_args_preview(t_args)
             console.print(
                 f"  [bold #fab387]⚡ [{step_idx}][/bold #fab387] [bold #74c7ec]{t_name}[/bold #74c7ec][#a6adc8]({args_str})[/#a6adc8] [dim #6c7086]➔ Executando...[/dim #6c7086]"
@@ -2573,10 +2599,26 @@ class InteractiveTUISession:
                 on_tool_start=_on_tool_start,
                 on_tool_end=_on_tool_end,
                 on_token=_on_token,
+                on_thought=_on_thought,
             )
         self.last_latency = time.perf_counter() - start_t
         self.last_ai_reply = reply
         self.last_code_blocks = extract_code_blocks(reply)
+
+        # Print thoughts if not printed before tools
+        if thought_chunks and not thought_printed and getattr(self, "show_thoughts", True):
+            dur_th = time.perf_counter() - thought_start_t
+            th_text = "".join(thought_chunks).strip()
+            if th_text and len(th_text) > 5:
+                console.print(
+                    Panel(
+                        f"[dim italic #a6adc8]{th_text}[/dim italic #a6adc8]",
+                        title=f"[dim #b4befe]🧠 Raciocínio ({dur_th:.2f}s)[/dim #b4befe]",
+                        box=box.ROUNDED,
+                        border_style="#45475a",
+                        padding=(0, 1),
+                    )
+                )
 
         # Record in Session Audit Logger
         turn_audit = self.audit_logger.record_turn(
@@ -2626,6 +2668,133 @@ class InteractiveTUISession:
                 code_hint=code_hint,
             )
         )
+
+    def _run_tune_sql(self, query: str) -> None:
+        """Executes explain_and_tune_sql and renders a rich performance tuning report in the terminal."""
+        from leai.ai.tools import explain_and_tune_sql
+
+        console.print()
+        with console.status("[cyan]Analisando consulta SQL para sargabilidade, FTS e índices compostos...[/cyan]", spinner="dots"):
+            t0 = time.perf_counter()
+            res = explain_and_tune_sql(self.schemas, sql_query=query, detailed=True, client=self.client)
+            dur = time.perf_counter() - t0
+
+        console.print(
+            Panel(
+                Syntax(query, "sql", theme="monokai", word_wrap=True),
+                title="[bold #cba6f7]🔍 Diagnóstico e Tuning de Consulta SQL[/bold #cba6f7]",
+                box=box.ROUNDED,
+                border_style="#cba6f7",
+            )
+        )
+
+        # Anti-patterns
+        anti = res.get("anti_patterns_detected", [])
+        if anti:
+            tbl_anti = Table(title="[bold red]⚠️ Anti-Patterns de Performance Identificados[/bold red]", box=box.ROUNDED, expand=True)
+            tbl_anti.add_column("Tipo", style="bold yellow", width=26)
+            tbl_anti.add_column("Trecho / Alvo", style="white", width=32)
+            tbl_anti.add_column("Impacto & Recomendação", style="dim")
+            for a in anti:
+                tbl_anti.add_row(
+                    a.get("type", "ANTI_PATTERN"),
+                    a.get("target") or a.get("snippet", ""),
+                    f"[bold]{a.get('impact', '')}[/bold]\n[green]➜ {a.get('recommendation', '')}[/green]",
+                )
+            console.print(tbl_anti)
+            console.print()
+        else:
+            console.print(
+                "  [bold green]✓[/bold green] [dim]Nenhum anti-pattern de função não-sargável (TRUNC, UPPER, NVL) detectado.[/dim]\n"
+            )
+
+        # FTS Warnings
+        fts = res.get("full_table_scan_warnings", [])
+        if fts:
+            console.print("[bold yellow]⚠️ Alertas de Full Table Scan (FTS):[/bold yellow]")
+            for f in fts:
+                console.print(f"  • [yellow]{f.get('warning')}[/yellow]")
+            console.print()
+
+        # Compound index recommendations
+        idx = res.get("compound_index_recommendations", [])
+        if idx:
+            console.print("[bold green]💡 Índices Compostos Sugeridos (Igualdade antes de Faixa):[/bold green]")
+            for i in idx:
+                console.print(f"  • [bold cyan]{i.get('suggested_index')}[/bold cyan] [dim]- {i.get('rationale')}[/dim]")
+            console.print()
+
+        # AI Tuning Proposal
+        proposal = res.get("ai_tuning_proposal")
+        if proposal:
+            console.print(
+                Panel(
+                    Markdown(proposal, code_theme="monokai"),
+                    title=f"[bold green]✨ Proposta de Reescrita Otimizada com IA ({dur:.2f}s)[/bold green]",
+                    box=box.ROUNDED,
+                    border_style="green",
+                )
+            )
+        console.print()
+
+    def _run_validate_sql(self, query: str) -> None:
+        """Executes validate_oracle_sql and renders a dialect compatibility report in the terminal."""
+        from leai.ai.tools import validate_oracle_sql
+
+        console.print()
+        with console.status("[cyan]Validando dialeto Oracle e integridade com metadados...[/cyan]", spinner="dots"):
+            t0 = time.perf_counter()
+            res = validate_oracle_sql(self.schemas, sql_query=query)
+            dur = time.perf_counter() - t0
+
+        is_valid = res.get("valid_oracle_sql", False)
+        status_color = "green" if is_valid else "red"
+        status_title = f"✓ SQL Oracle Válido ({dur:.2f}s)" if is_valid else f"⚠️ Incompatibilidades de Dialeto Oracle ({dur:.2f}s)"
+
+        console.print(
+            Panel(
+                Syntax(query, "sql", theme="monokai", word_wrap=True),
+                title=f"[{status_color}]{status_title}[/{status_color}]",
+                box=box.ROUNDED,
+                border_style=status_color,
+            )
+        )
+
+        issues = res.get("issues", [])
+        if issues:
+            tbl_issues = Table(title="[bold red]Problemas de Sintaxe / Dialeto Não-Oracle[/bold red]", box=box.ROUNDED, expand=True)
+            tbl_issues.add_column("Tipo", style="bold yellow", width=25)
+            tbl_issues.add_column("Trecho", style="white", width=25)
+            tbl_issues.add_column("Sugestão de Correção Oracle", style="green")
+            for iss in issues:
+                tbl_issues.add_row(iss.get("type", "DIALECT_ERROR"), iss.get("snippet", ""), iss.get("suggestion", ""))
+            console.print(tbl_issues)
+            console.print()
+
+        warnings = res.get("warnings", [])
+        if warnings:
+            for w in warnings:
+                console.print(f"  [yellow]• Aviso:[/yellow] {w.get('message', '')}")
+            console.print()
+
+        recs = res.get("recommendations", [])
+        if recs:
+            console.print("[bold cyan]Recomendações:[/bold cyan]")
+            for r in recs:
+                console.print(f"  • {r}")
+            console.print()
+
+    def _run_thoughts_toggle(self, arg: str = "toggle") -> None:
+        """Toggles real-time model thought/reasoning token streaming."""
+        if arg in ("on", "true", "1", "show", "enable"):
+            self.show_thoughts = True
+        elif arg in ("off", "false", "0", "hide", "disable"):
+            self.show_thoughts = False
+        else:
+            self.show_thoughts = not getattr(self, "show_thoughts", True)
+
+        state_str = "[bold green]ATIVADO (ON)[/bold green]" if self.show_thoughts else "[bold yellow]DESATIVADO (OFF)[/bold yellow]"
+        console.print(f"[cyan]Visualização de pensamentos (Thoughts):[/cyan] {state_str}\n")
 
     def _run_audit(self, sub_cmd: str | None = None, arg: str | None = None) -> None:
         """Inspects AI reasoning, tool execution traces, and session audit logs."""

@@ -74,7 +74,7 @@ leai chat --web
 | `/audit [last\|session\|export]`| Audit & Logs | Inspect AI tool call trace, latency & session audit log. |
 | `/tools` | Audit & Logs | Quick viewer for last turn's tool execution inputs/outputs. |
 | `/save [file.md]` | Session | Export current conversation transcript to Markdown. |
-| `/doctor` (or `/check`) | Diagnostics | Run pre-flight health checks across Oracle, AI, Storage, and Git. |
+| `/doctor` | Diagnostics | Run pre-flight health checks across Oracle, AI, Storage, Git, and directories. |
 | `/init` | Setup | Initialize or update the `leai.yml` configuration file. |
 | `/clear` | Session | Clear conversation memory and reset terminal screen. |
 | `/exit`, `/quit` | Session | Exit LEAI interactive copilot. |

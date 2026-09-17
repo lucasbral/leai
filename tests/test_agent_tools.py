@@ -635,6 +635,71 @@ Depois de executar essas pesquisas, analisaremos os resultados."""
         reprompt_messages = [m for m in engine.last_working_messages if "EXECUTION PROTOCOL ERROR" in str(m.get("content"))]
         self.assertTrue(len(reprompt_messages) > 0)
 
+    def test_agent_engine_stream_chat_with_tools_and_thoughts(self):
+        """Verify AgentExecutionEngine forwards on_token and on_thought when invoking stream_chat_with_tools."""
+
+        class MockStreamingLLM(BaseLLMClient):
+            def __init__(self):
+                super().__init__(api_key="mock", model="mock-model")
+                self.call_count = 0
+
+            def stream_chat_with_tools(
+                self,
+                messages,
+                tools=None,
+                system_prompt=None,
+                tool_choice_mode="auto",
+                on_token=None,
+                on_thought=None,
+            ):
+                self.call_count += 1
+                if self.call_count == 1:
+                    # Model emits thought tokens during reasoning before calling the tool
+                    if on_thought:
+                        on_thought("Analyzing request...\n")
+                        on_thought("Need to inspect table schema.\n")
+                    return None, [{"name": "get_table_schema", "arguments": {"table_name": "EVENTO_FUNC"}}]
+                else:
+                    # Final turn without tool calls: streams text tokens
+                    final_txt = "A tabela EVENTO_FUNC possui a coluna NUMFUNC."
+                    if on_token:
+                        for chunk in ["A tabela ", "EVENTO_FUNC ", "possui a coluna NUMFUNC."]:
+                            on_token(chunk)
+                    return final_txt, []
+
+            def generate_text(self, prompt: str, system_prompt: str | None = None) -> str:
+                return "mock"
+
+            def generate_json(self, prompt: str, system_prompt: str | None = None) -> dict:
+                return {}
+
+            def generate_chat(self, messages: list[dict], system_prompt: str | None = None) -> str:
+                return "mock"
+
+        client = MockStreamingLLM()
+        engine = AgentExecutionEngine(schemas=self.schemas, config=self.cfg, client=client)
+
+        captured_thoughts: list[str] = []
+        captured_tokens: list[str] = []
+
+        def _on_thought(th: str):
+            captured_thoughts.append(th)
+
+        def _on_token(tok: str):
+            captured_tokens.append(tok)
+
+        res = engine.run(
+            [{"role": "user", "content": "Mostre a tabela EVENTO_FUNC"}],
+            on_thought=_on_thought,
+            on_token=_on_token,
+        )
+
+        self.assertIn("NUMFUNC", res)
+        self.assertEqual(len(captured_thoughts), 2)
+        self.assertEqual("".join(captured_thoughts), "Analyzing request...\nNeed to inspect table schema.\n")
+        self.assertEqual("".join(captured_tokens), "A tabela EVENTO_FUNC possui a coluna NUMFUNC.")
+        self.assertEqual(client.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -10,6 +10,9 @@ from leai.models import SchemaMetadata
 SLASH_COMMANDS: list[tuple[str, str]] = [
     ("/doc", "Open in-terminal YAML annotation & documentation editor"),
     ("/rule", "Manage global business glossary and canonical domain rules"),
+    ("/tune", "Analyze and tune SQL query (sargability, FTS risks, compound indexes)"),
+    ("/validate", "Validate SQL query Oracle dialect compliance and schema objects"),
+    ("/thoughts", "Toggle live reasoning/thought token streaming in terminal (on/off)"),
     ("/extract", "Extract fresh metadata snapshot from Oracle database"),
     ("/update", "Fast incremental update of recently modified objects, stubs & S3"),
     ("/compile", "Compile Markdown documentation in docs/"),
@@ -21,17 +24,17 @@ SLASH_COMMANDS: list[tuple[str, str]] = [
     ("/tables", "List all tables, columns count and stats"),
     ("/schema", "Show active schema metadata & object counts"),
     ("/changes", "Inspect recent DDL modifications in database"),
-    ("/model", "Switch AI provider and model dynamically"),
+    ("/model", "Switch AI model dynamically in active session"),
+    ("/provider", "Switch AI provider dynamically (ollama, openai, gemini, etc.)"),
     ("/agent", "Run specialized subagents (catalog, plsql, lineage, patch, doc)"),
-    ("/workflow", "Execute autonomous multi-step workflows (impact, refactor)"),
+    ("/workflow", "Execute autonomous multi-step workflows (reverse-procedure, impact, refactor)"),
     ("/copy", "Copy last AI response or specific code block to OS clipboard"),
     ("/save", "Save conversation transcript to Markdown file"),
     ("/audit", "Inspect AI reasoning, tool execution trace and session logs"),
     ("/tools", "Quick viewer for last turn's tool execution inputs/outputs"),
     ("/git", "Check Git status, pull updates, or sync metadata with remote"),
     ("/seaweed", "SeaweedFS S3 storage status, push, and pull operations"),
-    ("/doctor", "Pre-flight health check on Oracle, AI, Storage, and Git (alias: /check)"),
-    ("/check", "Run environment diagnostics on DB, config and AI provider"),
+    ("/doctor", "Pre-flight health check on Oracle, AI, Storage, Git, and local stores"),
     ("/init", "Create or check leai.yml configuration file"),
     ("/clear", "Clear conversation memory and terminal screen"),
     ("/help", "Display interactive command reference"),
@@ -107,6 +110,22 @@ class LeaiCompleter(Completer):
                 deduped.append((s_name, name.upper(), otype, details))
         self._db_objects = deduped
 
+        # Build glossary cache from annotations_path if configured
+        glossary_items: list[tuple[str, str, str]] = []
+        ann_path = getattr(self.config, "annotationsPath", None) or "./annotations"
+        try:
+            from leai.glossary import load_glossary
+
+            g = load_glossary(ann_path)
+            for term_obj in g.terms:
+                t_name = term_obj.term.upper()
+                tags_str = f"[{', '.join(term_obj.tags)}]" if term_obj.tags else ""
+                desc = term_obj.definition or term_obj.canonical_filter or ""
+                glossary_items.append((t_name, tags_str, desc))
+        except Exception:
+            pass
+        self._glossary_terms = glossary_items
+
         # Collect configured schemas from config.schemas
         cfg_schemas = [
             s.strip().upper() for s in getattr(self.config, "schemas", []) or [] if s and not getattr(self.config, "is_all_schemas", False)
@@ -134,8 +153,8 @@ class LeaiCompleter(Completer):
 
             cmd_name = parts[0].lower()
 
-            # Sub-argument completion for /doc, /trace, /enrich, /compile, /build (DB Objects)
-            if cmd_name in ("/doc", "/trace", "/enrich", "/compile", "/build"):
+            # Sub-argument completion for /doc, /trace, /enrich, /compile, /build, /tune, /validate (DB Objects)
+            if cmd_name in ("/doc", "/trace", "/enrich", "/compile", "/build", "/tune", "/validate"):
                 arg_query = parts[1].lstrip("@").upper() if len(parts) > 1 else ""
                 if text.endswith(" ") and len(parts) == 1:
                     arg_query = ""
@@ -149,6 +168,25 @@ class LeaiCompleter(Completer):
                             display=f"{s_name}.{name}" if s_name else name,
                             display_meta=meta_desc,
                         )
+                return
+
+            # Sub-argument completion for /thoughts (on, off, toggle)
+            if cmd_name in ("/thoughts", "/thought"):
+                if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
+                    th_query = parts[1].lower() if len(parts) > 1 else ""
+                    th_options = [
+                        ("on", "Show real-time thinking / thought streaming stream"),
+                        ("off", "Hide thought stream (show compact status only)"),
+                        ("toggle", "Toggle thought stream visibility on/off"),
+                    ]
+                    for t_opt, t_meta in th_options:
+                        if t_opt.startswith(th_query):
+                            yield Completion(
+                                text=t_opt,
+                                start_position=-len(word_before_cursor),
+                                display=t_opt,
+                                display_meta=t_meta,
+                            )
                 return
 
             # Sub-argument completion for /extract (Schemas and SeaweedFS flags)
@@ -306,9 +344,9 @@ class LeaiCompleter(Completer):
                             )
                 return
 
-            # Sub-argument completion for /model and /models (AI Providers)
-            if cmd_name in ("/model", "/models"):
-                providers = ["openai", "gemini", "anthropic", "grok", "xai", "deepseek", "qwen", "kimi", "ollama"]
+            # Sub-argument completion for /provider and /model
+            if cmd_name in ("/provider", "/providers", "/model", "/models"):
+                providers = ["ollama", "local", "openai", "gemini", "anthropic", "deepseek", "qwen", "kimi", "grok", "xai"]
                 if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
                     p_query = parts[1].lower() if len(parts) > 1 else ""
                     for p in providers:
@@ -325,7 +363,7 @@ class LeaiCompleter(Completer):
             if cmd_name == "/agent":
                 specialists = [
                     ("catalog_researcher", "Discovery of tables, columns, comments, constraints"),
-                    ("plsql_analyst", "Reverse engineering of packages, procedures, triggers"),
+                    ("plsql_analyst", "Reverse engineering of packages, procedures, SQL tuning"),
                     ("lineage_auditor", "Dependency traversal and change impact risk audit"),
                     ("patch_generator", "Production-grade PL/SQL refactoring, unit tests, rollback"),
                     ("doc_annotator", "Business descriptions, rules, domain classification tags"),
@@ -346,8 +384,13 @@ class LeaiCompleter(Completer):
             # Sub-argument completion for /workflow (Pipelines)
             if cmd_name == "/workflow":
                 workflows = [
-                    ("impact", "Impact assessment: constraints, lineage, code scan & risk matrix"),
-                    ("refactor", "Safe PL/SQL subprogram refactoring with unit test & rollback"),
+                    ("reverse-procedure", "Decompile & specify PL/SQL routine with Mermaid flowchart"),
+                    ("reverse", "Alias for reverse-procedure workflow"),
+                    ("decomp", "Alias for reverse-procedure workflow"),
+                    ("impact-analysis", "Impact assessment: constraints, lineage, code scan & risk matrix"),
+                    ("impact", "Alias for impact-analysis workflow"),
+                    ("safe-refactor", "Safe PL/SQL subprogram refactoring with unit test & rollback"),
+                    ("refactor", "Alias for safe-refactor workflow"),
                     ("list", "List all available autonomous workflows"),
                 ]
                 if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
@@ -448,6 +491,7 @@ class LeaiCompleter(Completer):
                                 display_meta=a_meta,
                             )
                 return
+
             # Sub-argument completion for /copy and /yank
             if cmd_name in ("/copy", "/yank"):
                 if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
@@ -473,16 +517,43 @@ class LeaiCompleter(Completer):
 
             return
 
-        # 2. @Mentions within chat prompts
+        # 2. @Mentions within chat prompts (Database objects)
         if word_before_cursor.startswith("@"):
             query = word_before_cursor[1:].upper()
+            icon_map = {
+                "TABLE": "📋",
+                "VIEW": "👁️",
+                "MVIEW": "⚡",
+                "PACKAGE": "📦",
+                "PROCEDURE": "⚙️",
+                "FUNCTION": "ƒ",
+                "TRIGGER": "⚡",
+                "SEQUENCE": "🔢",
+                "SYNONYM": "🔗",
+            }
             for s_name, name, otype, details in self._db_objects:
                 qualified = f"{s_name}.{name}" if s_name else name
                 if name.startswith(query) or qualified.startswith(query):
-                    meta_desc = f"{s_name} [{otype}] {details}".strip() if s_name else f"[{otype}] {details}".strip()
+                    icon = icon_map.get(otype, "•")
+                    meta_desc = f"{icon} {s_name} [{otype}] {details}".strip() if s_name else f"{icon} [{otype}] {details}".strip()
                     yield Completion(
                         text=f"@{name}",
                         start_position=-len(word_before_cursor),
                         display=f"@{s_name}.{name}" if s_name else f"@{name}",
                         display_meta=meta_desc,
                     )
+            return
+
+        # 3. #Mentions within chat prompts (Business glossary rules)
+        if word_before_cursor.startswith("#"):
+            query = word_before_cursor[1:].upper()
+            for t_name, tags, desc in self._glossary_terms:
+                if t_name.startswith(query):
+                    meta_desc = f"📖 {tags} {desc}"[:60].strip()
+                    yield Completion(
+                        text=f"#{t_name}",
+                        start_position=-len(word_before_cursor),
+                        display=f"#{t_name}",
+                        display_meta=meta_desc,
+                    )
+            return

@@ -8,7 +8,7 @@ from typing import Any
 from leai.annotations import ObjectAnnotation, load_annotation
 from leai.compression import extract_subprogram_block, minify_plsql_source
 from leai.config import LeaiConfig
-from leai.models import SchemaMetadata
+from leai.models import SchemaMetadata, TableMeta
 from leai.raw import trace_raw_dependencies
 
 DATABASE_TOOLS_DEFINITIONS = [
@@ -185,6 +185,45 @@ DATABASE_TOOLS_DEFINITIONS = [
                     },
                 },
                 "required": ["pattern"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "explain_and_tune_sql",
+            "description": "Analyzes an Oracle SQL query for performance anti-patterns, non-sargable filters (functions on indexed columns like TRUNC, TO_CHAR, UPPER, NVL), missing partition/index clauses, predictable Full Table Scans (FTS), NOT IN subqueries with nullable columns, and provides optimized SQL rewrites, compound index recommendations, and analytic windowing advice (e.g. ROW_NUMBER() OVER (PARTITION BY ...)).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The SQL query to inspect, explain, and tune for Oracle Database.",
+                    },
+                    "target_tables": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional list of table names involved in the query to inspect schema metadata and index structures.",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "validate_oracle_sql",
+            "description": "Validates SQL syntax specifically for Oracle Database dialect compatibility, flagging non-Oracle anti-patterns (e.g. LIMIT/OFFSET, ILIKE, BOOLEAN columns, IFNULL, DATEADD, AUTO_INCREMENT, VARCHAR(MAX), text concatenation with '+') and cross-referencing referenced tables and columns against database schema metadata.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sql": {
+                        "type": "string",
+                        "description": "The SQL statement (SELECT, DML, or DDL) to validate for Oracle Database dialect compatibility.",
+                    },
+                },
+                "required": ["sql"],
             },
         },
     },
@@ -1632,6 +1671,479 @@ def grep_plsql_code(
     return matches
 
 
+def validate_oracle_sql(
+    schemas: list[SchemaMetadata],
+    sql: str,
+    config: LeaiConfig | None = None,
+) -> dict[str, Any]:
+    """Validates SQL statement for Oracle Database dialect compatibility and schema correctness."""
+    if not sql or not sql.strip():
+        return {"valid": False, "error": "Empty SQL statement provided."}
+
+    raw_sql = sql.strip()
+    cleaned_sql = raw_sql
+    dialect_issues: list[dict[str, str]] = []
+    schema_warnings: list[str] = []
+
+    # 1. Check for LIMIT / OFFSET (Postgres / MySQL)
+    limit_match = re.search(r"\bLIMIT\s+(\d+)(?:\s+OFFSET\s+(\d+))?\b", raw_sql, re.IGNORECASE)
+    offset_limit_match = re.search(r"\bOFFSET\s+(\d+)\s+LIMIT\s+(\d+)\b", raw_sql, re.IGNORECASE)
+    if limit_match or offset_limit_match:
+        m = limit_match or offset_limit_match
+        snippet = m.group(0)
+        dialect_issues.append(
+            {
+                "rule": "LIMIT_OFFSET_CLAUSE",
+                "severity": "ERROR",
+                "snippet": snippet,
+                "message": "PostgreSQL/MySQL 'LIMIT / OFFSET' clause is not supported in Oracle SQL.",
+                "suggested_fix": (
+                    "Use 'FETCH FIRST n ROWS ONLY' (or 'OFFSET m ROWS FETCH NEXT n ROWS ONLY' for Oracle 12c+), "
+                    "or 'WHERE ROWNUM <= n' for older versions."
+                ),
+            }
+        )
+        if limit_match:
+            n_rows = limit_match.group(1)
+            offset_val = limit_match.group(2)
+            if offset_val:
+                rep = f"OFFSET {offset_val} ROWS FETCH NEXT {n_rows} ROWS ONLY"
+            else:
+                rep = f"FETCH FIRST {n_rows} ROWS ONLY"
+            cleaned_sql = re.sub(r"\bLIMIT\s+\d+(?:\s+OFFSET\s+\d+)?\b", rep, cleaned_sql, flags=re.IGNORECASE)
+        elif offset_limit_match:
+            offset_val = offset_limit_match.group(1)
+            n_rows = offset_limit_match.group(2)
+            rep = f"OFFSET {offset_val} ROWS FETCH NEXT {n_rows} ROWS ONLY"
+            cleaned_sql = re.sub(r"\bOFFSET\s+\d+\s+LIMIT\s+\d+\b", rep, cleaned_sql, flags=re.IGNORECASE)
+
+    # 2. Check for BOOLEAN column type or literal
+    boolean_matches = re.finditer(r"\bBOOLEAN\b", raw_sql, re.IGNORECASE)
+    for bm in boolean_matches:
+        snippet = bm.group(0)
+        dialect_issues.append(
+            {
+                "rule": "BOOLEAN_DATA_TYPE",
+                "severity": "ERROR",
+                "snippet": snippet,
+                "message": "Oracle SQL table columns do not support the BOOLEAN data type.",
+                "suggested_fix": "Use 'NUMBER(1)' with 'CHECK (col IN (0, 1))' or 'CHAR(1)' with 'CHECK (col IN ('S', 'N'))'.",
+            }
+        )
+        cleaned_sql = re.sub(r"\bBOOLEAN\b", "NUMBER(1) CHECK (/* col */ IN (0, 1))", cleaned_sql, flags=re.IGNORECASE)
+
+    # 3. Check for ILIKE (PostgreSQL)
+    ilike_matches = re.finditer(r"(\b\w+(?:\.\w+)?\b)\s+ILIKE\s+('[^']*'|\b\w+\b)", raw_sql, re.IGNORECASE)
+    for im in ilike_matches:
+        col_name = im.group(1)
+        val = im.group(2)
+        dialect_issues.append(
+            {
+                "rule": "ILIKE_OPERATOR",
+                "severity": "ERROR",
+                "snippet": im.group(0),
+                "message": "'ILIKE' is PostgreSQL-specific syntax.",
+                "suggested_fix": f"Use 'REGEXP_LIKE({col_name}, {val}, 'i')' or 'UPPER({col_name}) LIKE UPPER({val})'.",
+            }
+        )
+        cleaned_sql = cleaned_sql.replace(im.group(0), f"REGEXP_LIKE({col_name}, {val}, 'i')")
+
+    # 4. Check for IFNULL / ISNULL (MySQL / SQL Server)
+    ifnull_matches = re.finditer(r"\b(IFNULL|ISNULL)\s*\(([^,]+),\s*([^)]+)\)", raw_sql, re.IGNORECASE)
+    for inm in ifnull_matches:
+        fn_name = inm.group(1).upper()
+        expr1 = inm.group(2).strip()
+        expr2 = inm.group(3).strip()
+        dialect_issues.append(
+            {
+                "rule": "NON_ORACLE_NULL_FUNCTION",
+                "severity": "ERROR",
+                "snippet": inm.group(0),
+                "message": f"Function '{fn_name}' is not native to Oracle SQL.",
+                "suggested_fix": f"Use 'NVL({expr1}, {expr2})' or standard 'COALESCE({expr1}, {expr2})'.",
+            }
+        )
+        cleaned_sql = cleaned_sql.replace(inm.group(0), f"NVL({expr1}, {expr2})")
+
+    # 5. Check for DATEADD / DATEDIFF / DATE_ADD / DATE_SUB
+    date_fn_matches = re.finditer(r"\b(DATEADD|DATEDIFF|DATE_ADD|DATE_SUB)\s*\(([^)]+)\)", raw_sql, re.IGNORECASE)
+    for dfm in date_fn_matches:
+        fn_name = dfm.group(1).upper()
+        dialect_issues.append(
+            {
+                "rule": "NON_ORACLE_DATE_MATH",
+                "severity": "ERROR",
+                "snippet": dfm.group(0),
+                "message": f"Date function '{fn_name}' is SQL Server/MySQL specific.",
+                "suggested_fix": "In Oracle, add days directly ('dt + n'), use 'ADD_MONTHS(dt, n)', or 'dt + INTERVAL 'n' DAY'.",
+            }
+        )
+
+    # 6. Check for GETDATE() / NOW() / SYSDATE()
+    getdate_matches = re.finditer(r"\b(GETDATE|NOW)\s*\(\s*\)", raw_sql, re.IGNORECASE)
+    for gdm in getdate_matches:
+        fn_name = gdm.group(1).upper()
+        dialect_issues.append(
+            {
+                "rule": "NON_ORACLE_CURRENT_DATE",
+                "severity": "ERROR",
+                "snippet": gdm.group(0),
+                "message": f"'{fn_name}()' is not native Oracle syntax.",
+                "suggested_fix": "Use 'SYSDATE' (without parentheses) or 'CURRENT_TIMESTAMP'.",
+            }
+        )
+        cleaned_sql = re.sub(r"\b(GETDATE|NOW)\s*\(\s*\)", "SYSDATE", cleaned_sql, flags=re.IGNORECASE)
+
+    sysdate_fn_matches = re.finditer(r"\bSYSDATE\s*\(\s*\)", raw_sql, re.IGNORECASE)
+    for sfm in sysdate_fn_matches:
+        dialect_issues.append(
+            {
+                "rule": "SYSDATE_WITH_PARENTHESES",
+                "severity": "WARNING",
+                "snippet": sfm.group(0),
+                "message": "In Oracle, 'SYSDATE' is a pseudo-column keyword and must NOT have parentheses.",
+                "suggested_fix": "Use 'SYSDATE'.",
+            }
+        )
+        cleaned_sql = re.sub(r"\bSYSDATE\s*\(\s*\)", "SYSDATE", cleaned_sql, flags=re.IGNORECASE)
+
+    # 7. Check for AUTO_INCREMENT / SERIAL / BIGSERIAL
+    auto_inc_matches = re.finditer(r"\b(AUTO_INCREMENT|SERIAL|BIGSERIAL)\b", raw_sql, re.IGNORECASE)
+    for aim in auto_inc_matches:
+        kw = aim.group(0).upper()
+        dialect_issues.append(
+            {
+                "rule": "AUTO_INCREMENT_KEYWORD",
+                "severity": "ERROR",
+                "snippet": aim.group(0),
+                "message": f"'{kw}' is MySQL/PostgreSQL syntax.",
+                "suggested_fix": "Use 'NUMBER GENERATED ALWAYS AS IDENTITY' (Oracle 12c+) or a SEQUENCE + TRIGGER.",
+            }
+        )
+        cleaned_sql = re.sub(
+            r"\b(AUTO_INCREMENT|SERIAL|BIGSERIAL)\b", "NUMBER GENERATED ALWAYS AS IDENTITY", cleaned_sql, flags=re.IGNORECASE
+        )
+
+    # 8. Check for VARCHAR(MAX) / TEXT
+    text_matches = re.finditer(r"\bVARCHAR\s*\(\s*MAX\s*\)|\bTEXT\b", raw_sql, re.IGNORECASE)
+    for tm in text_matches:
+        kw = tm.group(0)
+        dialect_issues.append(
+            {
+                "rule": "NON_ORACLE_TEXT_TYPE",
+                "severity": "ERROR",
+                "snippet": kw,
+                "message": f"Data type '{kw}' is not native to Oracle SQL.",
+                "suggested_fix": "Use 'VARCHAR2(4000)' for strings up to 4000 bytes or 'CLOB' for large documents.",
+            }
+        )
+        cleaned_sql = re.sub(r"\bVARCHAR\s*\(\s*MAX\s*\)|\bTEXT\b", "VARCHAR2(4000)", cleaned_sql, flags=re.IGNORECASE)
+
+    # 9. Check for string concatenation with '+'
+    plus_concat = re.finditer(r"('[^']*')\s*\+\s*('[^']*'|\b\w+\b)|(\b\w+\b)\s*\+\s*('[^']*')", raw_sql)
+    for pc in plus_concat:
+        snippet = pc.group(0)
+        dialect_issues.append(
+            {
+                "rule": "PLUS_STRING_CONCATENATION",
+                "severity": "ERROR",
+                "snippet": snippet,
+                "message": "'+' operator is arithmetic addition in Oracle; using it with strings causes ORA-01722 (invalid number).",
+                "suggested_fix": "Use '||' for string concatenation (e.g., col1 || ' ' || col2).",
+            }
+        )
+
+    # 10. Check for backtick identifiers `table` / `col`
+    backtick_matches = re.finditer(r"`([^`]+)`", raw_sql)
+    for btm in backtick_matches:
+        snippet = btm.group(0)
+        ident = btm.group(1)
+        dialect_issues.append(
+            {
+                "rule": "BACKTICK_QUOTED_IDENTIFIER",
+                "severity": "ERROR",
+                "snippet": snippet,
+                "message": "Backticks '`' for quoting identifiers are MySQL-specific.",
+                "suggested_fix": f"Use standard Oracle double quotes '\"{ident.upper()}\"' or unquoted uppercase '{ident.upper()}'.",
+            }
+        )
+        cleaned_sql = cleaned_sql.replace(snippet, f'"{ident.upper()}"')
+
+    # 11. Check for SELECT TOP n
+    top_matches = re.finditer(r"\bSELECT\s+TOP\s+(\d+)\b", raw_sql, re.IGNORECASE)
+    for tm in top_matches:
+        n_rows = tm.group(1)
+        dialect_issues.append(
+            {
+                "rule": "SELECT_TOP_CLAUSE",
+                "severity": "ERROR",
+                "snippet": tm.group(0),
+                "message": "'SELECT TOP' is SQL Server syntax.",
+                "suggested_fix": f"Remove 'TOP {n_rows}' and append 'FETCH FIRST {n_rows} ROWS ONLY' at the end of the query or use 'WHERE ROWNUM <= {n_rows}'.",
+            }
+        )
+        cleaned_sql = re.sub(r"\bSELECT\s+TOP\s+\d+\b", "SELECT", cleaned_sql, flags=re.IGNORECASE)
+        if not re.search(r"\bFETCH\s+FIRST\b", cleaned_sql, re.IGNORECASE):
+            cleaned_sql = f"{cleaned_sql.rstrip(';')} FETCH FIRST {n_rows} ROWS ONLY;"
+
+    # 12. Cross-reference tables and columns with schema metadata
+    if schemas:
+        known_tables: dict[str, TableMeta] = {}
+        for s in schemas:
+            for t in s.tables:
+                known_tables[t.name.upper()] = t
+            for v in s.views:
+                known_tables[v.name.upper()] = TableMeta(name=v.name, columns=v.columns)
+
+        found_tables = re.findall(r"\b(?:FROM|JOIN|INTO|UPDATE)\s+([a-zA-Z0-9_$#\.]+)", raw_sql, re.IGNORECASE)
+        for tbl_ref in found_tables:
+            tbl_clean = tbl_ref.strip().split(".")[-1].upper()
+            if tbl_clean.startswith("("):
+                continue
+            if tbl_clean in known_tables:
+                meta = known_tables[tbl_clean]
+                table_cols = {c.name.upper() for c in meta.columns}
+                col_refs = re.findall(rf"\b{tbl_clean}\.([a-zA-Z0-9_$#]+)\b", raw_sql, re.IGNORECASE)
+                for col in col_refs:
+                    col_u = col.upper()
+                    if col_u != "*" and col_u not in table_cols:
+                        schema_warnings.append(f"Column '{col_u}' not found in schema definition of table '{tbl_clean}'.")
+
+    is_valid = len(dialect_issues) == 0
+
+    return {
+        "valid": is_valid,
+        "total_issues": len(dialect_issues),
+        "dialect_issues": dialect_issues,
+        "schema_warnings": schema_warnings,
+        "suggested_oracle_sql": cleaned_sql if not is_valid else raw_sql,
+        "summary": "Valid Oracle SQL syntax." if is_valid else f"Identified {len(dialect_issues)} non-Oracle dialect issue(s).",
+    }
+
+
+def explain_and_tune_sql(
+    schemas: list[SchemaMetadata],
+    query: str,
+    target_tables: list[str] | None = None,
+    config: LeaiConfig | None = None,
+    client: Any = None,
+) -> dict[str, Any]:
+    """Analyzes an Oracle SQL query for performance anti-patterns, non-sargable filters, FTS risks, and suggests optimized rewrites."""
+    if not query or not query.strip():
+        return {"error": "Empty query provided for analysis."}
+
+    raw_query = query.strip()
+    anti_patterns_found: list[dict[str, Any]] = []
+    index_recommendations: list[dict[str, Any]] = []
+    fts_warnings: list[dict[str, Any]] = []
+    rewritten_query = raw_query
+
+    # 1. Non-sargable TRUNC / TO_CHAR / UPPER / NVL on columns in WHERE / JOIN
+    trunc_matches = re.finditer(r"\bTRUNC\s*\(\s*([a-zA-Z0-9_$#\.]+)\s*\)\s*(=|>=|<=|>|<|BETWEEN)", raw_query, re.IGNORECASE)
+    for tm in trunc_matches:
+        col = tm.group(1)
+        anti_patterns_found.append(
+            {
+                "type": "NON_SARGABLE_PREDICATE",
+                "snippet": tm.group(0),
+                "target": col,
+                "impact": "HIGH - Function TRUNC() hides the column from standard B-Tree index range scans and forces Full Table Scan (FTS).",
+                "recommendation": f"Rewrite as a date range condition (e.g. `{col} >= :dt_start AND {col} < :dt_end`) or create a Function-Based Index `CREATE INDEX idx_fbi_{col.replace('.', '_')} ON tab (TRUNC({col}))`.",
+            }
+        )
+
+    to_char_matches = re.finditer(r"\bTO_CHAR\s*\(\s*([a-zA-Z0-9_$#\.]+)[^)]*\)\s*(=|LIKE)", raw_query, re.IGNORECASE)
+    for tcm in to_char_matches:
+        col = tcm.group(1)
+        anti_patterns_found.append(
+            {
+                "type": "NON_SARGABLE_PREDICATE",
+                "snippet": tcm.group(0),
+                "target": col,
+                "impact": "HIGH - TO_CHAR() prevents optimizer index range scans and performs implicit string conversions per row.",
+                "recommendation": f"Filter against native date/number values instead of converting `{col}` to string, or create an FBI on `TO_CHAR({col})`.",
+            }
+        )
+
+    upper_lower_matches = re.finditer(r"\b(UPPER|LOWER)\s*\(\s*([a-zA-Z0-9_$#\.]+)\s*\)\s*(=|LIKE)", raw_query, re.IGNORECASE)
+    for ulm in upper_lower_matches:
+        fn = ulm.group(1).upper()
+        col = ulm.group(2)
+        anti_patterns_found.append(
+            {
+                "type": "FUNCTION_ON_INDEXED_COLUMN",
+                "snippet": ulm.group(0),
+                "target": col,
+                "impact": f"MEDIUM - {fn}() prevents standard index usage unless a Function-Based Index exists.",
+                "recommendation": f"Ensure data is stored standardized in uppercase, or create a Function-Based Index `CREATE INDEX idx_{fn.lower()}_{col.replace('.', '_')} ON tab ({fn}({col}))`.",
+            }
+        )
+
+    nvl_matches = re.finditer(
+        r"\b(NVL|COALESCE)\s*\(\s*([a-zA-Z0-9_$#\.]+)\s*,[^)]+\)\s*(?:=|!=|<>|>=|<=|>|<|\bIS\b|\bBETWEEN\b|\bLIKE\b)",
+        raw_query,
+        re.IGNORECASE,
+    )
+    for nm in nvl_matches:
+        fn = nm.group(1).upper()
+        col = nm.group(2)
+        anti_patterns_found.append(
+            {
+                "type": "NULL_WRAPPER_PREDICATE",
+                "snippet": nm.group(0),
+                "target": col,
+                "impact": f"MEDIUM - {fn}() prevents optimizer from utilizing index nullability statistics.",
+                "recommendation": f"Rewrite condition using explicit boolean logic: `({col} = :val OR {col} IS NULL)`.",
+            }
+        )
+
+    # 2. Leading wildcard LIKE '%value'
+    wildcard_matches = re.finditer(r"([a-zA-Z0-9_$#\.]+)\s+LIKE\s+'%[^']+'", raw_query, re.IGNORECASE)
+    for wm in wildcard_matches:
+        col = wm.group(1)
+        anti_patterns_found.append(
+            {
+                "type": "LEADING_WILDCARD_LIKE",
+                "snippet": wm.group(0),
+                "target": col,
+                "impact": "HIGH - Leading wildcard '%...' cannot traverse a B-Tree index and requires Full Table Scan.",
+                "recommendation": "Use trailing wildcard only (`LIKE 'PREFIX%'`), Oracle Text (`CONTAINS`), or a Reverse Key Index for suffix matching.",
+            }
+        )
+
+    # 3. NOT IN subqueries with potentially nullable columns
+    not_in_matches = re.finditer(
+        r"([a-zA-Z0-9_$#\.]+)\s+NOT\s+IN\s*\(\s*SELECT\s+([a-zA-Z0-9_$#\.]+)\s+FROM\s+([a-zA-Z0-9_$#\.]+)([^)]*)\)",
+        raw_query,
+        re.IGNORECASE,
+    )
+    for nim in not_in_matches:
+        outer_col = nim.group(1)
+        sub_col = nim.group(2)
+        sub_tab = nim.group(3)
+        extra = nim.group(4).strip()
+        anti_patterns_found.append(
+            {
+                "type": "NOT_IN_SUBQUERY_NULL_RISK",
+                "snippet": nim.group(0),
+                "target": f"{outer_col} NOT IN (SELECT {sub_col} FROM {sub_tab})",
+                "impact": "CRITICAL - If the subquery returns even one NULL row, NOT IN evaluates to UNKNOWN and returns 0 rows. Additionally, optimizer cannot easily transform this into a Hash Anti-Join.",
+                "recommendation": f"Rewrite using `NOT EXISTS (SELECT 1 FROM {sub_tab} WHERE {sub_tab}.{sub_col.split('.')[-1]} = {outer_col})` or `LEFT JOIN ... WHERE {sub_tab}.{sub_col.split('.')[-1]} IS NULL`.",
+            }
+        )
+        where_join = f"WHERE {sub_tab}.{sub_col.split('.')[-1]} = {outer_col}"
+        if extra and extra.upper().startswith("WHERE"):
+            where_join += f" AND ({extra[5:].strip()})"
+        elif extra:
+            where_join += f" {extra}"
+        rewritten_query = rewritten_query.replace(nim.group(0), f"NOT EXISTS (SELECT 1 FROM {sub_tab} {where_join})")
+
+    # 4. Correlated subqueries in SELECT list
+    select_sub_matches = re.finditer(r"SELECT\s+[^;]*,\s*\(\s*SELECT\s+[^)]+\s+FROM\s+([a-zA-Z0-9_$#\.]+)[^)]*\)", raw_query, re.IGNORECASE)
+    for ssm in select_sub_matches:
+        anti_patterns_found.append(
+            {
+                "type": "CORRELATED_SCALAR_SUBQUERY",
+                "snippet": ssm.group(0)[:120] + "...",
+                "target": "SELECT list scalar subquery",
+                "impact": "HIGH - Scalar subquery in SELECT projection may execute once per parent row (N+1 execution pattern).",
+                "recommendation": "Rewrite using a `LEFT JOIN` with aggregated subquery/inline view, or analytic functions (e.g. `MAX(...) OVER (PARTITION BY ...)`).",
+            }
+        )
+
+    # 5. Schema-Aware Index & FTS analysis
+    table_names: list[str] = list(target_tables or [])
+    if not table_names:
+        found = re.findall(r"\b(?:FROM|JOIN|INTO|UPDATE)\s+([a-zA-Z0-9_$#\.]+)", raw_query, re.IGNORECASE)
+        for t in found:
+            clean = t.strip().split(".")[-1].upper()
+            if not clean.startswith("(") and clean not in table_names:
+                table_names.append(clean)
+
+    if schemas:
+        known_tables: dict[str, TableMeta] = {}
+        for s in schemas:
+            for t in s.tables:
+                known_tables[t.name.upper()] = t
+            for v in s.views:
+                known_tables[v.name.upper()] = TableMeta(name=v.name, columns=v.columns)
+
+        for t_name in table_names:
+            if t_name in known_tables:
+                meta = known_tables[t_name]
+                pks = set(meta.primary_keys or [])
+                fks = {fk.column.upper() for fk in (meta.foreign_keys or []) if fk.column}
+                indexed_cols = pks | fks
+                table_cols = {c.name.upper() for c in meta.columns}
+
+                raw_where_cols = re.findall(
+                    rf"\b(?:{t_name}\.)?([a-zA-Z0-9_$#]+)\s*(?:=|!=|<>|>=|<=|>|<|\bBETWEEN\b|\bIN\b|\bLIKE\b|\bIS\b)",
+                    raw_query,
+                    re.IGNORECASE,
+                )
+                used_where_cols = {c.upper() for c in raw_where_cols if c.upper() in table_cols}
+
+                has_index_filter = bool(used_where_cols & indexed_cols)
+                if not has_index_filter and used_where_cols:
+                    fts_warnings.append(
+                        {
+                            "table": t_name,
+                            "used_filters": list(sorted(used_where_cols)),
+                            "warning": f"Table '{t_name}' is filtered on columns ({', '.join(sorted(used_where_cols))}) without Primary Key ({', '.join(sorted(pks)) or 'None'}) or Foreign Key filters, which may cause a Full Table Scan (FTS).",
+                        }
+                    )
+                    eq_cols = []
+                    range_cols = []
+                    for c in used_where_cols:
+                        if re.search(rf"\b(?:{t_name}\.)?{c}\s*=", raw_query, re.IGNORECASE):
+                            eq_cols.append(c)
+                        else:
+                            range_cols.append(c)
+                    ordered_idx_cols = eq_cols + range_cols
+                    index_recommendations.append(
+                        {
+                            "table": t_name,
+                            "suggested_index": f"CREATE INDEX idx_{t_name.lower()}_{'_'.join(ordered_idx_cols).lower()} ON {t_name} ({', '.join(ordered_idx_cols)});",
+                            "rationale": "Compound index ordering: Equality columns placed first, followed by range/inequality columns to maximize index pruning.",
+                        }
+                    )
+
+    # 6. AI-assisted synthesis if client is available
+    ai_tuning_proposal: str | None = None
+    if client and hasattr(client, "generate_text") and callable(client.generate_text):
+        try:
+            prompt = (
+                f"You are an expert Oracle SQL Performance & DBA Tuning Specialist.\n"
+                f"Analyze and optimize this Oracle SQL query:\n```sql\n{raw_query}\n```\n\n"
+                f"Identified Heuristic Anti-Patterns:\n{json.dumps(anti_patterns_found, indent=2, ensure_ascii=False)}\n\n"
+                f"FTS Warnings:\n{json.dumps(fts_warnings, indent=2, ensure_ascii=False)}\n\n"
+                f"Provide:\n"
+                f"1. A fully rewritten, high-performance Oracle SQL query.\n"
+                f"2. Step-by-step rationale for each optimization (e.g. sargability, anti-join, analytic functions, indexing).\n"
+                f"3. Expected execution plan improvements (e.g. INDEX RANGE SCAN vs FULL TABLE SCAN, HASH ANTI-JOIN)."
+            )
+            ai_tuning_proposal = client.generate_text(
+                prompt, system_prompt="You are an expert Oracle Database Performance Tuning Engineer."
+            )
+        except Exception:
+            ai_tuning_proposal = None
+
+    return {
+        "query": raw_query,
+        "analyzed_tables": table_names,
+        "anti_patterns_count": len(anti_patterns_found),
+        "anti_patterns": anti_patterns_found,
+        "fts_warnings": fts_warnings,
+        "index_recommendations": index_recommendations,
+        "rewritten_query": rewritten_query if rewritten_query != raw_query else None,
+        "ai_tuning_proposal": ai_tuning_proposal,
+        "summary": (
+            f"Analysis complete: {len(anti_patterns_found)} anti-pattern(s) detected, "
+            f"{len(fts_warnings)} potential FTS warning(s), {len(index_recommendations)} index recommendation(s)."
+        ),
+    }
+
+
 def execute_tool_call(
     tool_name: str,
     arguments: dict[str, Any],
@@ -1702,6 +2214,20 @@ def execute_tool_call(
                 pattern=arguments.get("pattern", ""),
                 max_results=arguments.get("max_results", 10),
             )
+        elif tool_name == "explain_and_tune_sql":
+            res = explain_and_tune_sql(
+                schemas,
+                query=arguments.get("query", ""),
+                target_tables=arguments.get("target_tables"),
+                config=config,
+                client=client,
+            )
+        elif tool_name == "validate_oracle_sql":
+            res = validate_oracle_sql(
+                schemas,
+                sql=arguments.get("sql", ""),
+                config=config,
+            )
         else:
             res = {"error": f"Unknown tool: '{tool_name}'"}
         return json.dumps(res, ensure_ascii=False, separators=(",", ":"))
@@ -1727,6 +2253,21 @@ def summarize_tool_result(tool_name: str, arguments: dict[str, Any], raw_output:
         if tool_name == "delegate_to_specialist":
             role = arguments.get("specialist_role", "specialist")
             return f"Specialist @{role} completed analysis"
+
+        if tool_name == "explain_and_tune_sql":
+            if isinstance(data, dict):
+                ap_cnt = data.get("anti_patterns_count", 0)
+                idx_cnt = len(data.get("index_recommendations", []))
+                return f"{ap_cnt} anti-pattern{'s' if ap_cnt != 1 else ''}, {idx_cnt} index rec{'s' if idx_cnt != 1 else ''}"
+            return "SQL tuning analysis complete"
+
+        if tool_name == "validate_oracle_sql":
+            if isinstance(data, dict):
+                if data.get("valid"):
+                    return "✓ Valid Oracle SQL"
+                issues = data.get("total_issues", 0)
+                return f"⚠️ {issues} non-Oracle dialect issue{'s' if issues != 1 else ''}"
+            return "SQL validated"
 
         if tool_name == "search_column_comments":
             results = data if isinstance(data, list) else data.get("results", [])

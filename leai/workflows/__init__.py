@@ -7,6 +7,7 @@ from leai.config import LeaiConfig
 from leai.models import SchemaMetadata
 from leai.workflows.base import BaseWorkflow, WorkflowResult, WorkflowStep
 from leai.workflows.impact_analysis import ImpactAnalysisWorkflow
+from leai.workflows.reverse_procedure import ReverseProcedureWorkflow
 from leai.workflows.safe_refactor import SafeRefactorWorkflow
 
 __all__ = [
@@ -15,6 +16,7 @@ __all__ = [
     "WorkflowResult",
     "WorkflowStep",
     "ImpactAnalysisWorkflow",
+    "ReverseProcedureWorkflow",
     "SafeRefactorWorkflow",
     "get_workflow",
     "list_workflows",
@@ -25,6 +27,9 @@ WORKFLOW_REGISTRY: dict[str, Type[BaseWorkflow]] = {
     "impact": ImpactAnalysisWorkflow,
     "safe-refactor": SafeRefactorWorkflow,
     "refactor": SafeRefactorWorkflow,
+    "reverse-procedure": ReverseProcedureWorkflow,
+    "reverse": ReverseProcedureWorkflow,
+    "decomp": ReverseProcedureWorkflow,
 }
 
 

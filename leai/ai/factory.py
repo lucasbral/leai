@@ -53,11 +53,13 @@ PROVIDER_DEFAULTS = {
         "env_key": None,
         "base_url": "http://localhost:11434/v1",
         "default_model": "qwen2.5-coder:latest",
+        "num_ctx": 16384,
     },
     "local": {
         "env_key": None,
         "base_url": "http://localhost:1234/v1",
         "default_model": "qwen2.5",
+        "num_ctx": 16384,
     },
     "custom": {
         "env_key": None,
@@ -90,10 +92,49 @@ def get_llm_client(
     temp = p_cfg.temperature if (p_cfg and p_cfg.temperature is not None) else config.ai.temperature
     timeout = p_cfg.timeout if (p_cfg and p_cfg.timeout is not None) else (config.ai.timeout or 300.0)
 
+    num_ctx = (p_cfg and p_cfg.num_ctx) if (p_cfg and p_cfg.num_ctx is not None) else defaults.get("num_ctx") or config.ai.num_ctx
+    max_tokens = (p_cfg and p_cfg.max_tokens) if (p_cfg and p_cfg.max_tokens is not None) else config.ai.max_tokens
+    top_p = (p_cfg and p_cfg.top_p) if (p_cfg and p_cfg.top_p is not None) else config.ai.top_p
+    keep_alive = (p_cfg and p_cfg.keep_alive) if (p_cfg and p_cfg.keep_alive is not None) else config.ai.keep_alive
+    options = dict(p_cfg.options) if (p_cfg and p_cfg.options) else {}
+
     if provider_name == "gemini":
-        return GeminiClient(api_key=api_key, model=model, base_url=base_url, temperature=temp, timeout=timeout)
+        return GeminiClient(
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            temperature=temp,
+            timeout=timeout,
+            num_ctx=num_ctx,
+            max_tokens=max_tokens,
+            top_p=top_p,
+            keep_alive=keep_alive,
+            options=options,
+        )
     elif provider_name in ("anthropic", "claude"):
-        return AnthropicClient(api_key=api_key, model=model, base_url=base_url, temperature=temp, timeout=timeout)
+        return AnthropicClient(
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            temperature=temp,
+            timeout=timeout,
+            num_ctx=num_ctx,
+            max_tokens=max_tokens,
+            top_p=top_p,
+            keep_alive=keep_alive,
+            options=options,
+        )
     else:
         # Default OpenAI-compatible client (handles OpenAI, DeepSeek, Qwen, Kimi, Ollama, etc.)
-        return OpenAICompatibleClient(api_key=api_key, model=model, base_url=base_url, temperature=temp, timeout=timeout)
+        return OpenAICompatibleClient(
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            temperature=temp,
+            timeout=timeout,
+            num_ctx=num_ctx,
+            max_tokens=max_tokens,
+            top_p=top_p,
+            keep_alive=keep_alive,
+            options=options,
+        )

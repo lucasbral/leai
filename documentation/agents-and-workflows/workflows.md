@@ -43,7 +43,7 @@ leai workflow run impact TB_CLIENTES --output ./relatorio_impacto_clientes.md
 
 ---
 
-### 2. `safe-refactor` (Alias: `refactor`)
+### 2. `safe-refactor` (Alias: `refactor`, `patch`)
 Planeja e elabora uma refatoração assistida para procedimentos e tabelas:
 1. Analisa a estrutura e constraints do objeto atual.
 2. Identifica todos os pontos de consumo afetados.
@@ -52,4 +52,18 @@ Planeja e elabora uma refatoração assistida para procedimentos e tabelas:
 
 ```bash
 leai workflow run refactor PKG_FATURAMENTO -p claude
+```
+
+---
+
+### 3. `reverse-procedure` (Alias: `reverse`, `decomp`)
+Executa engenharia reversa completa e gera especificação funcional de rotinas PL/SQL (procedures, functions e packages):
+1. **Extração de Código:** Recupera o código-fonte exato e assinaturas de parâmetros com tipos e modos (IN/OUT).
+2. **Matriz CRUD Técnica:** Mapeia entidades acessadas para leitura (`SELECT`) vs mutação de estado (`INSERT`, `UPDATE`, `DELETE`, `MERGE`).
+3. **Rastreamento de Chamadas:** Identifica pacotes de sistema (`DBMS_OUTPUT`, `UTL_FILE`, `DBMS_SQL`, etc.) e rotinas de negócio externas chamadas.
+4. **Decomposição de Lógica e Regras:** Extrai regras de validação, fluxos de exceção, estratégia transacional (COMMIT/ROLLBACK) e gera diagrama Mermaid (`flowchart TD`).
+5. **Dossiê Funcional:** Produz especificação em Markdown pronta para documentação ou migração.
+
+```bash
+leai workflow run reverse-procedure PRC_ATUALIZA_SALARIO --output ./docs/especificacao_prc_salario.md
 ```

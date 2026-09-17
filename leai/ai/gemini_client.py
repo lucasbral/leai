@@ -47,6 +47,11 @@ class GeminiClient(BaseLLMClient):
         base_url: str | None = None,
         temperature: float = 0.2,
         timeout: float = 300.0,
+        num_ctx: int | None = None,
+        max_tokens: int | None = None,
+        top_p: float | None = None,
+        keep_alive: str | None = None,
+        options: dict[str, Any] | None = None,
     ):
         super().__init__(
             api_key=api_key or "",
@@ -54,7 +59,24 @@ class GeminiClient(BaseLLMClient):
             base_url=(base_url or "https://generativelanguage.googleapis.com/v1beta").rstrip("/"),
             temperature=temperature,
             timeout=timeout,
+            num_ctx=num_ctx,
+            max_tokens=max_tokens,
+            top_p=top_p,
+            keep_alive=keep_alive,
+            options=options,
         )
+
+    def _build_generation_config(self, response_mime_type: str | None = None) -> dict[str, Any]:
+        cfg: dict[str, Any] = {
+            "temperature": self.temperature,
+        }
+        if response_mime_type:
+            cfg["responseMimeType"] = response_mime_type
+        if self.max_tokens is not None:
+            cfg["maxOutputTokens"] = self.max_tokens
+        if self.top_p is not None:
+            cfg["topP"] = self.top_p
+        return cfg
 
     def _send_request(self, prompt: str, system_prompt: str | None = None, response_mime_type: str = "text/plain") -> str:
         if not self.api_key:
@@ -72,10 +94,7 @@ class GeminiClient(BaseLLMClient):
                     "parts": [{"text": prompt}],
                 }
             ],
-            "generationConfig": {
-                "temperature": self.temperature,
-                "responseMimeType": response_mime_type,
-            },
+            "generationConfig": self._build_generation_config(response_mime_type=response_mime_type),
         }
 
         if system_prompt:
@@ -172,9 +191,7 @@ class GeminiClient(BaseLLMClient):
 
         payload: dict[str, Any] = {
             "contents": gemini_contents,
-            "generationConfig": {
-                "temperature": self.temperature,
-            },
+            "generationConfig": self._build_generation_config(),
         }
         if system_prompt:
             payload["systemInstruction"] = {
@@ -301,9 +318,7 @@ class GeminiClient(BaseLLMClient):
 
         payload: dict[str, Any] = {
             "contents": gemini_contents,
-            "generationConfig": {
-                "temperature": self.temperature,
-            },
+            "generationConfig": self._build_generation_config(),
         }
 
         if tools:
@@ -385,6 +400,169 @@ class GeminiClient(BaseLLMClient):
                     time.sleep(2.0 * (attempt + 1))
                     continue
                 raise RuntimeError(f"Connection error with Gemini: {exc.reason}") from exc
+
+    def stream_chat_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        system_prompt: str | None = None,
+        tool_choice_mode: str = "auto",
+        on_token: Any = None,
+        on_thought: Any = None,
+    ) -> tuple[str | None, list[dict[str, Any]]]:
+        if not self.api_key:
+            raise ValueError("Gemini API key (GEMINI_API_KEY) is not configured.")
+
+        url = f"{self.base_url}/models/{self.model}:streamGenerateContent?alt=sse&key={self.api_key}"
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "LEAI-CLI",
+        }
+
+        gemini_contents = []
+        for m in messages:
+            role = m.get("role")
+            if role == "user":
+                txt = (m.get("content") or "").strip()
+                if txt:
+                    gemini_contents.append(
+                        {
+                            "role": "user",
+                            "parts": [{"text": txt}],
+                        }
+                    )
+            elif role == "assistant":
+                parts = []
+                if m.get("content"):
+                    parts.append({"text": m["content"]})
+                if m.get("tool_calls"):
+                    for tc in m["tool_calls"]:
+                        fn = tc.get("function", {})
+                        args = fn.get("arguments", {})
+                        if isinstance(args, str):
+                            try:
+                                args = json.loads(args)
+                            except Exception:
+                                args = {}
+                        fc_part: dict[str, Any] = {
+                            "functionCall": {
+                                "name": fn.get("name") or tc.get("name"),
+                                "args": args,
+                            }
+                        }
+                        ts = tc.get("thought_signature") or fn.get("thought_signature")
+                        if ts:
+                            fc_part["thoughtSignature"] = ts
+                        parts.append(fc_part)
+                if parts:
+                    gemini_contents.append(
+                        {
+                            "role": "model",
+                            "parts": parts,
+                        }
+                    )
+            elif role == "tool":
+                raw_c = m.get("content", "")
+                try:
+                    resp_obj = json.loads(raw_c) if isinstance(raw_c, str) else raw_c
+                except Exception:
+                    resp_obj = {"output": raw_c}
+                gemini_contents.append(
+                    {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "functionResponse": {
+                                    "name": m.get("name", "tool"),
+                                    "response": {"output": resp_obj},
+                                }
+                            }
+                        ],
+                    }
+                )
+
+        payload: dict[str, Any] = {
+            "contents": gemini_contents,
+            "generationConfig": self._build_generation_config(),
+        }
+
+        if tools:
+            payload["tools"] = _convert_tools_to_gemini(tools)
+            gemini_mode = {"auto": "AUTO", "required": "ANY", "none": "NONE"}.get(tool_choice_mode, "AUTO")
+            payload["toolConfig"] = {"functionCallingConfig": {"mode": gemini_mode}}
+
+        if system_prompt:
+            payload["systemInstruction"] = {
+                "parts": [{"text": system_prompt}],
+            }
+
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+
+        collected_text: list[str] = []
+        tool_calls: list[dict[str, Any]] = []
+
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                for raw_line in resp:
+                    line = raw_line.decode("utf-8").strip()
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data_str = line[5:].strip()
+                    try:
+                        chunk_json = json.loads(data_str)
+                        usage = chunk_json.get("usageMetadata", {})
+                        if usage:
+                            self.record_usage(
+                                prompt_tokens=usage.get("promptTokenCount", 0),
+                                completion_tokens=usage.get("candidatesTokenCount", 0),
+                                total_tokens=usage.get("totalTokenCount"),
+                            )
+                        candidates = chunk_json.get("candidates", [])
+                        if not candidates:
+                            continue
+                        cand_content = candidates[0].get("content", {})
+                        parts = cand_content.get("parts", [])
+                        for p in parts:
+                            if "text" in p:
+                                t_val = p["text"]
+                                is_thought = bool(p.get("thought") or p.get("thoughtSignature"))
+                                if is_thought:
+                                    if on_thought and callable(on_thought):
+                                        on_thought(t_val)
+                                    elif on_token and callable(on_token):
+                                        on_token(t_val)
+                                else:
+                                    collected_text.append(t_val)
+                                    if on_token and callable(on_token):
+                                        on_token(t_val)
+                            if "functionCall" in p:
+                                fc = p["functionCall"]
+                                tc_dict = {
+                                    "id": f"call_{fc.get('name', 'fn')}",
+                                    "name": fc.get("name", ""),
+                                    "arguments": fc.get("args", {}),
+                                }
+                                ts = p.get("thoughtSignature") or p.get("thought_signature")
+                                if ts:
+                                    tc_dict["thought_signature"] = ts
+                                    if on_thought and callable(on_thought):
+                                        on_thought(ts)
+                                tool_calls.append(tc_dict)
+                    except Exception:
+                        continue
+        except Exception:
+            # Fallback to synchronous execution
+            if not collected_text and not tool_calls:
+                return self.generate_chat_with_tools(messages, tools=tools, system_prompt=system_prompt, tool_choice_mode=tool_choice_mode)
+
+        full_content = "\n".join(collected_text).strip() if collected_text else None
+        if not tool_calls and full_content and tools:
+            from leai.ai.openai_client import extract_embedded_tool_calls
+
+            full_content, tool_calls = extract_embedded_tool_calls(full_content, tools=tools)
+
+        return full_content, tool_calls
 
     def list_models(self) -> list[dict[str, str]]:
         if not self.api_key:

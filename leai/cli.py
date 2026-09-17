@@ -256,52 +256,16 @@ def init(
     console.print("[dim]Edit the file with your Oracle credentials and AI keys before running 'leai extract'.[/dim]")
 
 
-@app.command()
-def check(
-    config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
-) -> None:
-    """Validates the configuration file, tests Oracle connection, and checks AI providers."""
-    console.print(f"[cyan]Checking configuration file:[/cyan] [bold]{config}[/bold]...")
-    try:
-        cfg = load_config(config)
-        schemas_info = ", ".join(cfg.schemas) if cfg.schemas else "None"
-        console.print(f"[green]✓ Valid configuration![/green] (Configured schemas: [bold]{schemas_info}[/bold])")
-    except ConfigError as exc:
-        console.print(f"[red]✗ Configuration error:[/red] {exc}")
-        raise typer.Exit(code=1)
-
-    # 1. Verify Oracle database connection
-    if cfg.dsn:
-        console.print("\n[cyan]Testing Oracle database connection...[/cyan]")
-        try:
-            conn = oracledb.connect(**_build_connect_kwargs(cfg.dsn))
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM v$version WHERE ROWNUM = 1")
-            ver = cursor.fetchone()
-            ver_str = ver[0] if ver else "Oracle Database"
-            conn.close()
-            console.print(f"[green]✓ Connection to Oracle successful![/green] ([dim]{ver_str}[/dim])")
-        except Exception as exc:
-            console.print(f"[red]✗ Failed to connect to Oracle:[/red] {exc}")
-    else:
-        console.print("\n[yellow]! DSN not configured. Online extraction operations will not be available.[/yellow]")
-
-    # 2. Verify AI Provider
-    default_prov = cfg.ai.default_provider or "openai"
-    console.print(f"\n[cyan]Verifying default AI provider ([bold yellow]{default_prov}[/bold yellow])...[/cyan]")
-    try:
-        client = get_llm_client(cfg)
-        console.print(f"[green]✓ AI client initialized successfully![/green] (Model: [bold green]{client.model}[/bold green])")
-    except Exception as exc:
-        console.print(f"[yellow]! Warning during AI initialization:[/yellow] {exc}")
-
-
 @app.command(name="doctor")
 def doctor(
     config: Path = typer.Option(Path("leai.yml"), "--config", "-c", help="Path to leai.yml"),
 ) -> None:
-    """Pre-flight diagnostic health check (alias for 'check'). Validates Oracle connection, config, and AI."""
-    check(config=config)
+    """Pre-flight diagnostic health check across Oracle, AI, Storage (SeaweedFS), Git, and local stores."""
+    from leai.doctor import run_diagnostics
+
+    success = run_diagnostics(config=config, console=console)
+    if not success:
+        raise typer.Exit(code=1)
 
 
 @app.command()

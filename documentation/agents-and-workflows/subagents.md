@@ -45,8 +45,8 @@ leai agent run patch_generator "Gere um script DDL seguro para adicionar a colun
 
 | Papel / ID | Nome do Especialista | Descrição e Foco de Atuação | Ferramentas Permitidas |
 | :--- | :--- | :--- | :--- |
-| **`catalog_researcher`** | Pesquisador de Catálogo | Especialista em exploração de esquemas, localização de tabelas, colunas, sinônimos e constraints. | `search_database_objects`, `view_object_definition`, `get_glossary_terms` |
-| **`plsql_analyst`** | Analista de PL/SQL | Análise estática, reversão e interpretação cirúrgica de regras em procedures, packages e triggers com compressão de tokens. | `view_object_definition`, `search_database_objects` |
-| **`lineage_auditor`** | Auditor de Linhagem e Impacto | Avaliação de impacto em cascata e cálculo de risco para migrações e alterações estruturais. | `trace_object_lineage`, `search_database_objects` |
-| **`patch_generator`** | Engenheiro de Refatoração e Patches | Formulação de scripts DDL, migrações seguras e correções semânticas de código. | `view_object_definition`, `trace_object_lineage` |
-| **`doc_annotator`** | Especialista em Documentação | Elaboração de documentações de negócio e glossários técnicos alinhados com o domínio. | `view_object_definition`, `get_glossary_terms` |
+| **`catalog_researcher`** | Pesquisador de Catálogo | Especialista em exploração de esquemas, localização de tabelas, colunas, sinônimos e constraints. | `get_table_schema`, `search_catalog`, `lookup_business_term` |
+| **`plsql_analyst`** | Analista de PL/SQL | Análise estática, reversão e interpretação de rotinas PL/SQL, diagnósticos de sargabilidade, compatibilidade Oracle e tuning de SQL. | `get_subprogram_source`, `grep_plsql_code`, `get_table_schema`, `explain_and_tune_sql`, `validate_oracle_sql` |
+| **`lineage_auditor`** | Auditor de Linhagem e Impacto | Avaliação de impacto em cascata, cálculo de score de risco e grafo de dependências para migrações. | `trace_object_lineage`, `search_catalog`, `get_table_schema` |
+| **`patch_generator`** | Engenheiro de Refatoração e Patches | Formulação de scripts DDL com validação de compatibilidade Oracle, migrações seguras e scripts de rollback. | `get_table_schema`, `get_subprogram_source`, `grep_plsql_code`, `validate_oracle_sql`, `explain_and_tune_sql` |
+| **`doc_annotator`** | Especialista em Documentação | Elaboração de documentações de negócio e glossários técnicos alinhados com o domínio. | `get_table_schema`, `get_subprogram_source`, `lookup_business_term` |

@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from leai.annotations import ensure_annotation_stub
-from leai.config import load_config
+from leai.config import ConfigError, load_config, resolve_config_path
 from leai.docs import (
     MANUAL_END,
     MANUAL_START,
@@ -110,6 +110,72 @@ class ConfigAndDocsTests(unittest.TestCase):
             cfg_all.schemas = ["HADES"]
             self.assertFalse(cfg_all.is_all_schemas)
             self.assertEqual(cfg_all.schema_name, "HADES")
+
+    def test_resolve_config_path_direct_and_explicit_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            existing_cfg = root / "custom.yml"
+            existing_cfg.write_text("schemas: ['TEST']\n", encoding="utf-8")
+
+            # 1. Existing file resolves directly
+            self.assertEqual(resolve_config_path(existing_cfg), existing_cfg.resolve())
+
+            # 2. Non-existing explicit file raises ConfigError immediately
+            with self.assertRaises(ConfigError) as ctx:
+                resolve_config_path(root / "non_existing.yml")
+            self.assertIn("Config file not found", str(ctx.exception))
+
+    def test_resolve_config_path_fallback_to_user_home(self):
+        import os
+        from unittest.mock import patch
+
+        orig_cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmp_home, tempfile.TemporaryDirectory() as tmp_cwd:
+            home_path = Path(tmp_home)
+            cwd_path = Path(tmp_cwd)
+
+            try:
+                os.chdir(cwd_path)
+
+                # Scenario A: ~/leai/leai.yml exists
+                leai_workspace = home_path / "leai"
+                leai_workspace.mkdir(parents=True)
+                cfg_in_home_leai = leai_workspace / "leai.yml"
+                cfg_in_home_leai.write_text("schemas: ['HOME_LEAI']\n", encoding="utf-8")
+
+                with patch("pathlib.Path.home", return_value=home_path):
+                    # When run from empty cwd where ./leai.yml does not exist
+                    resolved = resolve_config_path("leai.yml")
+                    self.assertEqual(resolved, cfg_in_home_leai.resolve())
+
+                    # Test load_config also uses the home fallback and anchors relative directories to it
+                    cfg = load_config("leai.yml")
+                    self.assertEqual(cfg.schemas, ["HOME_LEAI"])
+                    self.assertEqual(cfg.rawPath, (leai_workspace / "raw").resolve())
+
+                # Scenario B: fallback to ~/.leai/leai.yml if ~/leai/leai.yml does not exist
+                cfg_in_home_leai.unlink()
+                leai_dot_dir = home_path / ".leai"
+                leai_dot_dir.mkdir(parents=True)
+                cfg_in_dot_leai = leai_dot_dir / "leai.yml"
+                cfg_in_dot_leai.write_text("schemas: ['DOT_LEAI']\n", encoding="utf-8")
+
+                with patch("pathlib.Path.home", return_value=home_path):
+                    resolved = resolve_config_path("leai.yml")
+                    self.assertEqual(resolved, cfg_in_dot_leai.resolve())
+
+                    cfg = load_config("leai.yml")
+                    self.assertEqual(cfg.schemas, ["DOT_LEAI"])
+                    self.assertEqual(cfg.rawPath, (leai_dot_dir / "raw").resolve())
+
+                # Scenario C: nowhere found raises ConfigError
+                cfg_in_dot_leai.unlink()
+                with patch("pathlib.Path.home", return_value=home_path):
+                    with self.assertRaises(ConfigError) as ctx:
+                        resolve_config_path("leai.yml")
+                    self.assertIn("Searched in current directory", str(ctx.exception))
+            finally:
+                os.chdir(orig_cwd)
 
     def test_multi_schema_pipeline_generates_isolated_folders(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -106,6 +106,11 @@ class AnthropicClient(BaseLLMClient):
         base_url: str | None = None,
         temperature: float = 0.2,
         timeout: float = 300.0,
+        num_ctx: int | None = None,
+        max_tokens: int | None = None,
+        top_p: float | None = None,
+        keep_alive: str | None = None,
+        options: dict[str, Any] | None = None,
     ):
         super().__init__(
             api_key=api_key or "",
@@ -113,6 +118,11 @@ class AnthropicClient(BaseLLMClient):
             base_url=(base_url or "https://api.anthropic.com/v1").rstrip("/"),
             temperature=temperature,
             timeout=timeout,
+            num_ctx=num_ctx,
+            max_tokens=max_tokens,
+            top_p=top_p,
+            keep_alive=keep_alive,
+            options=options,
         )
 
     def _send_request(self, prompt: str, system_prompt: str | None = None) -> str:
@@ -129,10 +139,12 @@ class AnthropicClient(BaseLLMClient):
 
         payload: dict[str, Any] = {
             "model": self.model,
-            "max_tokens": 4096,
+            "max_tokens": self.max_tokens or 4096,
             "temperature": self.temperature,
             "messages": [{"role": "user", "content": prompt}],
         }
+        if self.top_p is not None:
+            payload["top_p"] = self.top_p
 
         if system_prompt:
             payload["system"] = system_prompt
@@ -208,10 +220,12 @@ class AnthropicClient(BaseLLMClient):
 
         payload: dict[str, Any] = {
             "model": self.model,
-            "max_tokens": 4096,
+            "max_tokens": self.max_tokens or 4096,
             "temperature": self.temperature,
             "messages": anthropic_msgs,
         }
+        if self.top_p is not None:
+            payload["top_p"] = self.top_p
 
         if tools:
             payload["tools"] = _convert_tools_to_anthropic(tools)
@@ -291,11 +305,13 @@ class AnthropicClient(BaseLLMClient):
 
         payload: dict[str, Any] = {
             "model": self.model,
-            "max_tokens": 4096,
+            "max_tokens": self.max_tokens or 4096,
             "temperature": self.temperature,
             "messages": anthropic_msgs,
             "stream": True,
         }
+        if self.top_p is not None:
+            payload["top_p"] = self.top_p
 
         if system_prompt:
             payload["system"] = system_prompt
@@ -343,6 +359,139 @@ class AnthropicClient(BaseLLMClient):
                 return full_res
 
         return "".join(collected_text)
+
+    def stream_chat_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        system_prompt: str | None = None,
+        tool_choice_mode: str = "auto",
+        on_token: Any = None,
+        on_thought: Any = None,
+    ) -> tuple[str | None, list[dict[str, Any]]]:
+        if not self.api_key:
+            raise ValueError("Anthropic API key (ANTHROPIC_API_KEY) is not configured.")
+
+        url = f"{self.base_url}/messages"
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "User-Agent": "LEAI-CLI",
+        }
+
+        anthropic_msgs = _convert_messages_to_anthropic(messages)
+        if not anthropic_msgs:
+            anthropic_msgs = [{"role": "user", "content": "Hello"}]
+
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": self.max_tokens or 4096,
+            "temperature": self.temperature,
+            "messages": anthropic_msgs,
+            "stream": True,
+        }
+        if self.top_p is not None:
+            payload["top_p"] = self.top_p
+
+        if tools:
+            payload["tools"] = _convert_tools_to_anthropic(tools)
+            if tool_choice_mode == "required":
+                payload["tool_choice"] = {"type": "any"}
+            elif tool_choice_mode == "none":
+                payload.pop("tools", None)
+            else:
+                payload["tool_choice"] = {"type": "auto"}
+
+        if system_prompt:
+            payload["system"] = system_prompt
+
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+
+        collected_text: list[str] = []
+        tool_calls: list[dict[str, Any]] = []
+        current_tool: dict[str, Any] | None = None
+        current_tool_json_parts: list[str] = []
+
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                for raw_line in resp:
+                    line = raw_line.decode("utf-8").strip()
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data_str = line[5:].strip()
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        chunk_json = json.loads(data_str)
+                        ev_type = chunk_json.get("type")
+
+                        if ev_type == "message_start":
+                            msg_obj = chunk_json.get("message", {})
+                            m_usage = msg_obj.get("usage", {})
+                            if m_usage:
+                                self.record_usage(prompt_tokens=m_usage.get("input_tokens", 0))
+
+                        elif ev_type == "content_block_start":
+                            cb = chunk_json.get("content_block", {})
+                            if cb.get("type") == "tool_use":
+                                current_tool = {
+                                    "id": cb.get("id", f"call_{cb.get('name')}"),
+                                    "name": cb.get("name", ""),
+                                }
+                                current_tool_json_parts = []
+
+                        elif ev_type == "content_block_delta":
+                            delta = chunk_json.get("delta", {})
+                            d_type = delta.get("type")
+                            if d_type == "text_delta":
+                                txt = delta.get("text", "")
+                                if txt:
+                                    collected_text.append(txt)
+                                    if on_token and callable(on_token):
+                                        on_token(txt)
+                            elif d_type == "thinking_delta":
+                                th = delta.get("thinking", "")
+                                if th:
+                                    if on_thought and callable(on_thought):
+                                        on_thought(th)
+                                    elif on_token and callable(on_token):
+                                        on_token(th)
+                            elif d_type == "input_json_delta":
+                                p_json = delta.get("partial_json", "")
+                                if p_json:
+                                    current_tool_json_parts.append(p_json)
+
+                        elif ev_type == "content_block_stop":
+                            if current_tool:
+                                full_json_str = "".join(current_tool_json_parts)
+                                try:
+                                    parsed_args = json.loads(full_json_str) if full_json_str.strip() else {}
+                                except Exception:
+                                    parsed_args = {}
+                                tool_calls.append(
+                                    {
+                                        "id": current_tool["id"],
+                                        "name": current_tool["name"],
+                                        "arguments": parsed_args,
+                                    }
+                                )
+                                current_tool = None
+                                current_tool_json_parts = []
+
+                        elif ev_type == "message_delta":
+                            d_usage = chunk_json.get("usage", {})
+                            if d_usage:
+                                self.record_usage(completion_tokens=d_usage.get("output_tokens", 0))
+                    except Exception:
+                        continue
+        except Exception:
+            if not collected_text and not tool_calls:
+                return self.generate_chat_with_tools(messages, tools=tools, system_prompt=system_prompt, tool_choice_mode=tool_choice_mode)
+
+        full_content = "\n".join(collected_text).strip() if collected_text else None
+        return full_content, tool_calls
 
     def list_models(self) -> list[dict[str, str]]:
         if not self.api_key:

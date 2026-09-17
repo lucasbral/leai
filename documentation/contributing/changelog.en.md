@@ -2,6 +2,18 @@
 
 All notable changes to the **LEAI** project are documented here.
 
+## [0.3.5] — 2026
+
+### 🚀 SQL Performance Tuning, Strict Oracle Dialect Validation, Reverse-Engineering Workflow & Thought Streaming
+* **Query Tuning & Explanation Tool (`explain_and_tune_sql`):** Static heuristic analysis for SQL queries identifying sargability pitfalls (`TRUNC`, `TO_CHAR`, `UPPER`, `NVL`), Full Table Scan (FTS) risks, `NOT IN` subquery `NULL` traps, correlated scalar subqueries (N+1 effect), compound index column ordering (equality filters placed before range filters), and AI-driven query rewrite recommendations.
+* **Strict Oracle Dialect Validator (`validate_oracle_sql`):** Dedicated tool to enforce Oracle Database SQL compliance by catching and correcting non-Oracle constructs (`LIMIT/OFFSET` -> `ROWNUM`/`FETCH FIRST`, `BOOLEAN` -> `CHAR(1)`, `ILIKE` -> `UPPER`/`REGEXP_LIKE`, `IFNULL` -> `NVL`, `DATEADD` -> date arithmetic, `GETDATE` -> `SYSDATE`, `AUTO_INCREMENT` -> `IDENTITY`/Sequence, `+` string concatenation -> `||`) and cross-validating tables/columns against loaded schemas.
+* **Autonomous Reverse-Engineering Workflow (`reverse-procedure`):** New 5-stage automated pipeline (`leai workflow run reverse-procedure <TARGET>`, aliases: `reverse`, `decomp`) to decompile stored procedures, functions, and packages: extracts source code, synthesizes a CRUD matrix (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`), traces system packages (`DBMS_OUTPUT`, `UTL_FILE`) and external routine calls, decomposes business logic into discrete rules, and outputs Mermaid flowcharts (`flowchart TD`) with comprehensive functional specifications in Markdown.
+* **Real-Time Streaming with Tool Calling & Thought/Reasoning Tokens (`on_thought`):** Native support for token-by-token streaming during tool calling iterations (`stream_chat_with_tools`), streaming internal reasoning blocks (`<think>` / `reasoning_content` in DeepSeek-R1/Qwen 2.5/Ollama, `thought: true` in Gemini, and `thinking_delta` in Claude) to the terminal and Web Studio via SSE (`event: thought`).
+* **Local Model Inference Optimization:** Support for `num_ctx`, `keep_alive`, `max_tokens`, `top_p`, and `options` in `leai.yml` for Ollama and LM Studio, preventing silent prompt truncation on extensive schemas.
+* **Subagent Specialist Upgrades:** `plsql_analyst` and `patch_generator` updated with access to `explain_and_tune_sql` and `validate_oracle_sql`.
+
+---
+
 ## [0.3.4] — 2026
 
 ### 🛡️ Anti-Hallucination Guardrails, Resilient Tool Call Parser & English System Prompts

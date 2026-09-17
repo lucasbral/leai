@@ -114,6 +114,11 @@ class OpenAICompatibleClient(BaseLLMClient):
         base_url: str | None = None,
         temperature: float = 0.2,
         timeout: float = 300.0,
+        num_ctx: int | None = None,
+        max_tokens: int | None = None,
+        top_p: float | None = None,
+        keep_alive: str | None = None,
+        options: dict[str, Any] | None = None,
     ):
         super().__init__(
             api_key=api_key or "",
@@ -121,7 +126,63 @@ class OpenAICompatibleClient(BaseLLMClient):
             base_url=(base_url or "https://api.openai.com/v1").rstrip("/"),
             temperature=temperature,
             timeout=timeout,
+            num_ctx=num_ctx,
+            max_tokens=max_tokens,
+            top_p=top_p,
+            keep_alive=keep_alive,
+            options=options,
         )
+
+    def _build_payload(
+        self,
+        messages: list[dict[str, Any]],
+        stream: bool = False,
+        response_format_json: bool = False,
+        tools: list[dict[str, Any]] | None = None,
+        tool_choice_mode: str = "auto",
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": self.temperature,
+        }
+        if self.max_tokens is not None:
+            payload["max_tokens"] = self.max_tokens
+        if self.top_p is not None:
+            payload["top_p"] = self.top_p
+
+        is_ollama = "ollama" in (self.base_url or "").lower() or (self.base_url or "").startswith("http://localhost:11434")
+
+        # Injetar opções específicas para Ollama / vLLM / backends locais
+        local_options = dict(self.options) if self.options else {}
+        if self.num_ctx is not None:
+            local_options["num_ctx"] = self.num_ctx
+        if self.top_p is not None and "top_p" not in local_options:
+            local_options["top_p"] = self.top_p
+        if self.temperature is not None and "temperature" not in local_options:
+            local_options["temperature"] = self.temperature
+
+        if local_options:
+            payload["options"] = local_options
+
+        if self.keep_alive is not None:
+            payload["keep_alive"] = self.keep_alive
+
+        if response_format_json and not is_ollama:
+            payload["response_format"] = {"type": "json_object"}
+
+        if stream:
+            payload["stream"] = True
+            payload["stream_options"] = {"include_usage": True}
+
+        if tools:
+            payload["tools"] = tools
+            if tool_choice_mode == "required":
+                payload["tool_choice"] = "required"
+            elif tool_choice_mode == "none":
+                payload["tool_choice"] = "none"
+
+        return payload
 
     def _send_request(self, messages: list[dict[str, str]], response_format_json: bool = False) -> str:
         url = f"{self.base_url}/chat/completions"
@@ -132,15 +193,7 @@ class OpenAICompatibleClient(BaseLLMClient):
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        payload: dict[str, Any] = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": self.temperature,
-        }
-
-        if response_format_json and "ollama" not in (self.base_url or "").lower():
-            # Most OpenAI-compatible APIs support response_format type: json_object
-            payload["response_format"] = {"type": "json_object"}
+        payload = self._build_payload(messages, response_format_json=response_format_json)
 
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
@@ -220,13 +273,7 @@ class OpenAICompatibleClient(BaseLLMClient):
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        payload: dict[str, Any] = {
-            "model": self.model,
-            "messages": all_msgs,
-            "temperature": self.temperature,
-            "stream": True,
-            "stream_options": {"include_usage": True},
-        }
+        payload = self._build_payload(all_msgs, stream=True)
 
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
@@ -299,17 +346,7 @@ class OpenAICompatibleClient(BaseLLMClient):
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        payload: dict[str, Any] = {
-            "model": self.model,
-            "messages": all_msgs,
-            "temperature": self.temperature,
-        }
-        if tools:
-            payload["tools"] = tools
-            if tool_choice_mode == "required":
-                payload["tool_choice"] = "required"
-            elif tool_choice_mode == "none":
-                payload["tool_choice"] = "none"
+        payload = self._build_payload(all_msgs, tools=tools, tool_choice_mode=tool_choice_mode)
 
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
@@ -363,6 +400,137 @@ class OpenAICompatibleClient(BaseLLMClient):
             raise RuntimeError(f"AI API error ({self.base_url} HTTP {exc.code}): {err_body}") from exc
         except urllib.error.URLError as exc:
             raise RuntimeError(f"Connection error with AI provider ({self.base_url}): {exc.reason}") from exc
+
+    def stream_chat_with_tools(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        system_prompt: str | None = None,
+        tool_choice_mode: str = "auto",
+        on_token: Any = None,
+        on_thought: Any = None,
+    ) -> tuple[str | None, list[dict[str, Any]]]:
+        """Streams chat completions processing SSE events with live tool calling and thought/reasoning deltas."""
+        all_msgs = []
+        if system_prompt:
+            all_msgs.append({"role": "system", "content": system_prompt})
+        all_msgs.extend(messages)
+
+        url = f"{self.base_url}/chat/completions"
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "LEAI-CLI",
+        }
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        payload = self._build_payload(all_msgs, stream=True, tools=tools, tool_choice_mode=tool_choice_mode)
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+
+        collected_text: list[str] = []
+        collected_reasoning: list[str] = []
+        accumulated_tcs: dict[int, dict[str, Any]] = {}
+        usage_found = False
+
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                for raw_line in resp:
+                    line = raw_line.decode("utf-8").strip()
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data_str = line[5:].strip()
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        chunk_json = json.loads(data_str)
+                        # Check usage
+                        if "usage" in chunk_json and chunk_json["usage"]:
+                            u = chunk_json["usage"]
+                            self.record_usage(
+                                prompt_tokens=u.get("prompt_tokens", 0),
+                                completion_tokens=u.get("completion_tokens", 0),
+                                total_tokens=u.get("total_tokens"),
+                            )
+                            usage_found = True
+
+                        choices = chunk_json.get("choices", [])
+                        if not choices:
+                            continue
+
+                        delta = choices[0].get("delta", {})
+
+                        # 1. Process reasoning/thought tokens (e.g. DeepSeek-R1, Qwen Reasoning)
+                        r_content = delta.get("reasoning_content") or delta.get("reasoning") or ""
+                        if r_content:
+                            collected_reasoning.append(r_content)
+                            if on_thought and callable(on_thought):
+                                on_thought(r_content)
+                            elif on_token and callable(on_token):
+                                on_token(r_content)
+
+                        # 2. Process regular content
+                        c_content = delta.get("content") or ""
+                        if c_content:
+                            collected_text.append(c_content)
+                            if on_token and callable(on_token):
+                                on_token(c_content)
+
+                        # 3. Process incremental tool call deltas
+                        raw_tcs = delta.get("tool_calls", [])
+                        for tc_delta in raw_tcs:
+                            idx = tc_delta.get("index", 0)
+                            if idx not in accumulated_tcs:
+                                accumulated_tcs[idx] = {
+                                    "id": tc_delta.get("id") or f"call_{idx}",
+                                    "name": "",
+                                    "arguments": "",
+                                }
+                            if tc_delta.get("id"):
+                                accumulated_tcs[idx]["id"] = tc_delta["id"]
+                            fn_chunk = tc_delta.get("function", {})
+                            if fn_chunk.get("name"):
+                                accumulated_tcs[idx]["name"] += fn_chunk["name"]
+                            if fn_chunk.get("arguments"):
+                                accumulated_tcs[idx]["arguments"] += fn_chunk["arguments"]
+                    except Exception:
+                        continue
+        except Exception:
+            # Fallback to standard synchronous generate_chat_with_tools if stream fails
+            if not collected_text and not accumulated_tcs:
+                return self.generate_chat_with_tools(messages, tools=tools, system_prompt=system_prompt, tool_choice_mode=tool_choice_mode)
+
+        # Consolidate parsed tool calls
+        final_tool_calls: list[dict[str, Any]] = []
+        for idx in sorted(accumulated_tcs.keys()):
+            tc_data = accumulated_tcs[idx]
+            raw_args = tc_data.get("arguments", "{}")
+            try:
+                parsed_args = json.loads(raw_args) if isinstance(raw_args, str) and raw_args.strip() else {}
+            except Exception:
+                parsed_args = {}
+            fn_name = tc_data.get("name", "").strip()
+            if fn_name:
+                final_tool_calls.append(
+                    {
+                        "id": tc_data.get("id", f"call_{fn_name}"),
+                        "name": fn_name,
+                        "arguments": parsed_args,
+                    }
+                )
+
+        full_content = "".join(collected_text).strip() if collected_text else None
+
+        # Fallback for models outputting embedded tool calls in text during streaming
+        if not final_tool_calls and full_content and tools:
+            full_content, final_tool_calls = extract_embedded_tool_calls(full_content, tools=tools)
+
+        if not usage_found and full_content:
+            est_prompt = (len(system_prompt or "") + sum(len(m.get("content", "")) for m in messages)) // 4
+            est_comp = len(full_content) // 4
+            self.record_usage(prompt_tokens=est_prompt, completion_tokens=est_comp, total_tokens=est_prompt + est_comp)
+
+        return full_content, final_tool_calls
 
     def list_models(self) -> list[dict[str, str]]:
         url = f"{self.base_url}/models"

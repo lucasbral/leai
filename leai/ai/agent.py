@@ -105,6 +105,7 @@ class AgentExecutionEngine:
         on_tool_start: Callable[[str, dict[str, Any], int], None] | None = None,
         on_tool_end: Callable[[str, str, str, float], None] | None = None,
         on_token: Callable[[str], None] | None = None,
+        on_thought: Callable[[str], None] | None = None,
     ) -> str:
         """Executes the autonomous agent reasoning loop with tool calling up to MAX_AGENT_ITERATIONS."""
         sys_prompt = (system_prompt or AGENT_SYSTEM_PROMPT).strip()
@@ -116,13 +117,30 @@ class AgentExecutionEngine:
             # Enforce tool execution on the first iteration to eliminate unverified head-answers
             tool_mode = "required" if iteration == 1 else "auto"
 
-            # Call LLM with tool definitions
-            content, tool_calls = self.client.generate_chat_with_tools(
-                working_messages,
-                tools=DATABASE_TOOLS_DEFINITIONS,
-                system_prompt=sys_prompt,
-                tool_choice_mode=tool_mode,
-            )
+            # Call LLM with tool definitions and streaming / thought support
+            res = None
+            if hasattr(self.client, "stream_chat_with_tools") and callable(self.client.stream_chat_with_tools):
+                try:
+                    res = self.client.stream_chat_with_tools(
+                        working_messages,
+                        tools=DATABASE_TOOLS_DEFINITIONS,
+                        system_prompt=sys_prompt,
+                        tool_choice_mode=tool_mode,
+                        on_token=on_token,
+                        on_thought=on_thought,
+                    )
+                except Exception:
+                    res = None
+
+            if isinstance(res, tuple) and len(res) == 2:
+                content, tool_calls = res
+            else:
+                content, tool_calls = self.client.generate_chat_with_tools(
+                    working_messages,
+                    tools=DATABASE_TOOLS_DEFINITIONS,
+                    system_prompt=sys_prompt,
+                    tool_choice_mode=tool_mode,
+                )
 
             # If no tool calls were requested, check if model hallucinated meta-commentary on turn 1
             if not tool_calls:
@@ -167,8 +185,6 @@ class AgentExecutionEngine:
                     # Try streaming chat directly
                     if hasattr(self.client, "stream_chat") and callable(self.client.stream_chat):
                         content = self.client.stream_chat(working_messages, system_prompt=sys_prompt, on_chunk=on_token)
-                elif on_token and callable(on_token) and content:
-                    on_token(content)
                 res = content or "Could not obtain a response from the model."
                 if content:
                     working_messages.append({"role": "assistant", "content": content})

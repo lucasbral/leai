@@ -104,7 +104,7 @@ SUBAGENT_REGISTRY: dict[str, SubagentConfig] = {
         name="PL/SQL & Logic Analyst",
         description="Deep analysis and reverse engineering of procedures, functions, packages, and triggers.",
         system_prompt=PLSQL_ANALYST_PROMPT,
-        allowed_tool_names=["get_subprogram_source", "grep_plsql_code", "get_table_schema"],
+        allowed_tool_names=["get_subprogram_source", "grep_plsql_code", "get_table_schema", "explain_and_tune_sql", "validate_oracle_sql"],
         max_iterations=6,
     ),
     "lineage_auditor": SubagentConfig(
@@ -120,7 +120,7 @@ SUBAGENT_REGISTRY: dict[str, SubagentConfig] = {
         name="Safe Patch & Code Generator",
         description="Generates compilable PL/SQL routines, exception handling, unit tests, and rollback scripts.",
         system_prompt=PATCH_GENERATOR_PROMPT,
-        allowed_tool_names=["get_table_schema", "get_subprogram_source", "grep_plsql_code"],
+        allowed_tool_names=["get_table_schema", "get_subprogram_source", "grep_plsql_code", "validate_oracle_sql", "explain_and_tune_sql"],
         max_iterations=5,
     ),
     "doc_annotator": SubagentConfig(
@@ -182,6 +182,7 @@ class SubagentRunner:
         on_token: Callable[[str], None] | None = None,
         on_tool_start: Callable[[str, dict[str, Any], int], None] | None = None,
         on_tool_end: Callable[[str, str, str, float], None] | None = None,
+        on_thought: Callable[[str], None] | None = None,
     ) -> str:
         """Runs the subagent loop on the isolated task."""
         tools = self.filter_tools()
@@ -197,12 +198,29 @@ class SubagentRunner:
         for iteration in range(1, self.max_iterations + 1):
             tool_mode = "required" if iteration == 1 and tools else "auto"
 
-            content, tool_calls = self.client.generate_chat_with_tools(
-                working_messages,
-                tools=tools,
-                system_prompt=sys_prompt,
-                tool_choice_mode=tool_mode,
-            )
+            res = None
+            if hasattr(self.client, "stream_chat_with_tools") and callable(self.client.stream_chat_with_tools):
+                try:
+                    res = self.client.stream_chat_with_tools(
+                        working_messages,
+                        tools=tools,
+                        system_prompt=sys_prompt,
+                        tool_choice_mode=tool_mode,
+                        on_token=on_token,
+                        on_thought=on_thought,
+                    )
+                except Exception:
+                    res = None
+
+            if isinstance(res, tuple) and len(res) == 2:
+                content, tool_calls = res
+            else:
+                content, tool_calls = self.client.generate_chat_with_tools(
+                    working_messages,
+                    tools=tools,
+                    system_prompt=sys_prompt,
+                    tool_choice_mode=tool_mode,
+                )
 
             if not tool_calls:
                 if iteration == 1 and not tools_ran and content and tools:
@@ -236,8 +254,6 @@ class SubagentRunner:
                 if not tools_ran and not content:
                     if hasattr(self.client, "stream_chat") and callable(self.client.stream_chat):
                         content = self.client.stream_chat(working_messages, system_prompt=sys_prompt, on_chunk=on_token)
-                elif on_token and callable(on_token) and content:
-                    on_token(content)
                 return content or "No response from specialist."
 
             tools_ran = True
@@ -333,6 +349,7 @@ def execute_subagent(
     on_token: Callable[[str], None] | None = None,
     on_tool_start: Callable[[str, dict[str, Any], int], None] | None = None,
     on_tool_end: Callable[[str, str, str, float], None] | None = None,
+    on_thought: Callable[[str], None] | None = None,
 ) -> str:
     """Dispatches a task to the requested subagent specialist and returns the output."""
     cfg = SUBAGENT_REGISTRY.get(role)
@@ -347,4 +364,10 @@ def execute_subagent(
         client=client,
         max_iterations=max_iterations,
     )
-    return runner.run(task=task, on_token=on_token, on_tool_start=on_tool_start, on_tool_end=on_tool_end)
+    return runner.run(
+        task=task,
+        on_token=on_token,
+        on_tool_start=on_tool_start,
+        on_tool_end=on_tool_end,
+        on_thought=on_thought,
+    )

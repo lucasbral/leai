@@ -81,24 +81,32 @@ ai:
     ollama:
       base_url: "http://localhost:11434/v1"
       model: "qwen2.5-coder:latest"
+      num_ctx: 16384         # Janela de contexto em tokens (padrão seguro do LEAI: 16384). Ajuste para 32768 se tiver VRAM disponível.
+      keep_alive: "15m"      # Mantém o modelo aquecido na VRAM (ex: "5m", "30m", "-1" para ilimitado, "0" para descarregar)
       temperature: 0.1       # Sobrescreve a temperatura especificamente para o Ollama
       timeout: 300.0         # Sobrescreve o timeout especificamente para o Ollama
+      options:               # Parâmetros avançados repassados ao Ollama / llama.cpp
+        repeat_penalty: 1.1
     local:
       base_url: "http://localhost:1234/v1" # Exemplo: LM Studio, vLLM, LocalAI
       model: "qwen2.5"
+      num_ctx: 16384
       temperature: 0.1
       timeout: 180.0
     openai:
       api_key: "${OPENAI_API_KEY}"
       model: "gpt-4o-mini"
+      max_tokens: 4096
       temperature: 0.2
       timeout: 120.0
     gemini:
       api_key: "${GEMINI_API_KEY}"
       model: "gemini-2.5-flash"
+      max_tokens: 8192
     anthropic:
       api_key: "${ANTHROPIC_API_KEY}"
       model: "claude-3-5-sonnet-20241022"
+      max_tokens: 4096
     deepseek:
       api_key: "${DEEPSEEK_API_KEY}"
       base_url: "https://api.deepseek.com/v1"

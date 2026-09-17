@@ -124,6 +124,7 @@ class ChatSession:
         on_tool_start: Callable[[str, dict[str, Any]], None] | None = None,
         on_tool_end: Callable[[str, str], None] | None = None,
         on_token: Callable[[str], None] | None = None,
+        on_thought: Callable[[str], None] | None = None,
     ) -> tuple[str, list[str]]:
         """Processes user input, runs agent tool execution loop, and retrieves AI response."""
         # 1. Update RAG context with detected focal entities (without dumping entire catalog into tokens)
@@ -161,6 +162,7 @@ class ChatSession:
             on_tool_start=on_tool_start,
             on_tool_end=on_tool_end,
             on_token=on_token,
+            on_thought=on_thought,
         )
         self.add_assistant_message(reply)
 

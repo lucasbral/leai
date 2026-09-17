@@ -43,7 +43,7 @@ leai workflow run impact CUSTOMERS_TB --output ./customers_impact_report.md
 
 ---
 
-### 2. `safe-refactor` (Alias: `refactor`)
+### 2. `safe-refactor` (Alias: `refactor`, `patch`)
 Coordinates a safe, phased schema or package refactor:
 1. Audits existing constraints, indexes, and subprograms.
 2. Flags breaking call sites across dependent packages.
@@ -52,4 +52,18 @@ Coordinates a safe, phased schema or package refactor:
 
 ```bash
 leai workflow run refactor PKG_BILLING -p claude
+```
+
+---
+
+### 3. `reverse-procedure` (Alias: `reverse`, `decomp`)
+Performs automated reverse engineering and generates complete functional specifications for PL/SQL routines (procedures, functions, and packages):
+1. **Source Code Extraction:** Extracts authentic PL/SQL definitions and parses parameter interfaces (types and IN/OUT modes).
+2. **Technical CRUD Matrix:** Classifies entities accessed for queries (`SELECT`) vs data modifications (`INSERT`, `UPDATE`, `DELETE`, `MERGE`).
+3. **Call Tree & Package Lineage:** Traces outgoing system packages (`DBMS_OUTPUT`, `UTL_FILE`, etc.) and external business procedures.
+4. **Business Logic Decomposition:** Deconstructs validation rules, branches, calculations, exception handlers, and outputs a Mermaid flowchart (`flowchart TD`).
+5. **Specification Dossier:** Assembles a structured Markdown specification ready for documentation, audit, or service migration.
+
+```bash
+leai workflow run reverse-procedure PRC_UPDATE_SALARY --output ./docs/salary_proc_spec.md
 ```

@@ -29,7 +29,7 @@ leai init -f --lang pt-BR
 
 ---
 
-## 2. `leai doctor` (ou `leai check`)
+## 2. `leai doctor`
 
 Executa uma bateria preventiva de testes automatizados para garantir a integridade do ambiente.
 
@@ -46,13 +46,13 @@ leai doctor
 ### O que o `doctor` valida:
 * **Conectividade:** Estabelece conexão com o listener do Oracle Database e valida versão em `v$version`.
 * **Permissões de Catálogo:** Valida acesso de leitura em `ALL_TABLES`, `ALL_TAB_COLUMNS`, `ALL_CONSTRAINTS`, `ALL_SOURCE` e `ALL_SYNONYMS`.
-* **Diretórios do Pipeline:** Verifica existência e permissão de escrita em `rawPath`, `annotationsPath` e `docPath`.
-* **Armazenamento S3:** Testa conectividade e bucket do SeaweedFS caso configurado.
+* **Diretórios do Pipeline:** Verifica existência e permissão de escrita em `rawPath`, `annotationsPath`, `docPath` e `updates_log_path`.
+* **Armazenamento S3:** Testa conectividade e bucket do SeaweedFS caso configurado, com dicas de troubleshooting em caso de falha.
 * **Modelos de IA:** Verifica se as credenciais do provedor de IA estão ativas e o modelo pronto para responder.
 * **GitOps:** Valida branch ativa e sincronização com repositório remoto Git/GitLab.
 
 > [!TIP]
-> O diagnóstico também pode ser executado diretamente de dentro do terminal interativo (`leai chat`) digitando `/doctor` ou `/check`.
+> O diagnóstico também pode ser executado diretamente de dentro do terminal interativo (`leai chat`) digitando `/doctor`.
 
 ---
 

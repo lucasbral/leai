@@ -81,10 +81,10 @@ ai:
                 """,
                 encoding="utf-8",
             )
-            result = self.runner.invoke(app, ["check", "--config", str(cfg_file)])
+            result = self.runner.invoke(app, ["doctor", "--config", str(cfg_file)])
             self.assertEqual(result.exit_code, 0)
-            self.assertIn("Valid configuration!", result.output)
-            self.assertIn("DSN not configured", result.output)
+            self.assertIn("Diagnóstico de Ambiente LEAI", result.output)
+            self.assertIn("Configuração:", result.output)
 
     def test_annotate_and_compile_with_summary_panel(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -327,9 +327,9 @@ ai:
     def test_check_command_invalid_config(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             non_existent = Path(tmpdir) / "does_not_exist.yml"
-            result = self.runner.invoke(app, ["check", "--config", str(non_existent)])
+            result = self.runner.invoke(app, ["doctor", "--config", str(non_existent)])
             self.assertEqual(result.exit_code, 1)
-            self.assertIn("Configuration error", result.output)
+            self.assertIn("Erro Crítico na Configuração", result.output)
 
     @patch("leai.cli.oracledb.connect")
     @patch("leai.cli.fetch_available_schemas")
@@ -526,14 +526,14 @@ docPath: "{(base / "docs").as_posix()}"
             self.assertIn("Web Studio Running", result.output)
             self.assertTrue(mock_start_server.called)
 
-    @patch("leai.cli.check")
-    def test_doctor_command_alias(self, mock_check):
+    @patch("leai.doctor.run_diagnostics", return_value=True)
+    def test_doctor_command_alias(self, mock_doctor):
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg_file = Path(tmpdir) / "leai.yml"
             cfg_file.write_text("schemas:\n  - HR\n", encoding="utf-8")
             result = self.runner.invoke(app, ["doctor", "-c", str(cfg_file)])
             self.assertEqual(result.exit_code, 0)
-            mock_check.assert_called_once_with(config=cfg_file)
+            mock_doctor.assert_called_once()
 
     @patch("leai.cli.oracledb.connect")
     @patch("leai.cli.fetch_schema_metadata")

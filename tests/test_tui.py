@@ -515,10 +515,11 @@ class TuiUnitTests(unittest.TestCase):
         self.assertEqual(_format_tokens(2450, 450), "2.5k (↑450)")
         self.assertEqual(_format_tokens(1_500_000, 250_000), "1.5M (↑250.0k)")
 
-    def test_session_slash_check(self):
+    def test_session_slash_doctor(self):
         session = InteractiveTUISession([self.schema], self.config, self.mock_client)
-        res = session.handle_slash_command("/check")
-        self.assertTrue(res)
+        with patch("leai.doctor.run_diagnostics", return_value=True):
+            res = session.handle_slash_command("/doctor")
+            self.assertTrue(res)
 
     def test_session_slash_init(self):
         session = InteractiveTUISession([self.schema], self.config, self.mock_client)
@@ -840,9 +841,7 @@ class TuiUnitTests(unittest.TestCase):
         session = InteractiveTUISession([self.schema], self.config, self.mock_client)
         res1 = session.handle_slash_command("/doctor")
         self.assertTrue(res1)
-        res2 = session.handle_slash_command("/check")
-        self.assertTrue(res2)
-        self.assertEqual(mock_doctor.call_count, 2)
+        mock_doctor.assert_called_once()
 
     @patch("leai.tui.session.InteractiveTUISession._run_update")
     def test_session_update_command(self, mock_update):
@@ -921,6 +920,99 @@ class TuiUnitTests(unittest.TestCase):
             # 4. /rule del
             self.assertTrue(session.handle_slash_command("/rule del TERMO_TUI"))
             self.assertNotIn("TERMO_TUI", gloss_file.read_text(encoding="utf-8"))
+
+    def test_completer_new_features(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            cfg = self.config.model_copy()
+            cfg.annotationsPath = base / "annotations"
+            cfg.annotationsPath.mkdir(parents=True, exist_ok=True)
+            from leai.glossary import add_or_update_term
+            from leai.models import GlossaryTerm
+
+            add_or_update_term(
+                cfg.annotationsPath, GlossaryTerm(term="USUARIOS_ATIVOS", definition="Regra de usuarios ativos", tags=["rh"])
+            )
+
+            completer = LeaiCompleter([self.schema], config=cfg)
+
+            # 1. New Slash Commands
+            doc = Document(text="/tu", cursor_position=3)
+            res = [c.text for c in completer.get_completions(doc, CompleteEvent())]
+            self.assertIn("/tune", res)
+
+            doc_val = Document(text="/val", cursor_position=4)
+            res_val = [c.text for c in completer.get_completions(doc_val, CompleteEvent())]
+            self.assertIn("/validate", res_val)
+
+            doc_th = Document(text="/th", cursor_position=3)
+            res_th = [c.text for c in completer.get_completions(doc_th, CompleteEvent())]
+            self.assertIn("/thoughts", res_th)
+
+            # 2. Sub-arguments
+            doc_th_sub = Document(text="/thoughts ", cursor_position=10)
+            res_th_sub = [c.text for c in completer.get_completions(doc_th_sub, CompleteEvent())]
+            self.assertIn("on", res_th_sub)
+            self.assertIn("off", res_th_sub)
+
+            doc_wf_sub = Document(text="/workflow ", cursor_position=10)
+            res_wf_sub = [c.text for c in completer.get_completions(doc_wf_sub, CompleteEvent())]
+            self.assertIn("reverse-procedure", res_wf_sub)
+
+            # 3. # Mention (Glossary)
+            doc_hash = Document(text="#US", cursor_position=3)
+            res_hash = [c.text for c in completer.get_completions(doc_hash, CompleteEvent())]
+            self.assertIn("#USUARIOS_ATIVOS", res_hash)
+
+            # 4. @ Mention with Icons
+            doc_at = Document(text="@EMP", cursor_position=4)
+            completions_at = list(completer.get_completions(doc_at, CompleteEvent()))
+            texts_at = [c.text for c in completions_at]
+            self.assertIn("@EMPLOYEES", texts_at)
+            meta_at = [c.display_meta for c in completions_at if c.text == "@EMPLOYEES"]
+            self.assertTrue(any("📋" in str(m) for m in meta_at))
+
+    def test_session_tune_command(self):
+        session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+        with patch.object(session, "_run_tune_sql") as mock_tune:
+            res = session.handle_slash_command("/tune SELECT * FROM EMPLOYEES WHERE TRUNC(NAME) = 'TEST'")
+            self.assertTrue(res)
+            mock_tune.assert_called_once_with("SELECT * FROM EMPLOYEES WHERE TRUNC(NAME) = 'TEST'")
+
+    def test_session_validate_command(self):
+        session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+        with patch.object(session, "_run_validate_sql") as mock_validate:
+            res = session.handle_slash_command("/validate SELECT * FROM EMPLOYEES LIMIT 10")
+            self.assertTrue(res)
+            mock_validate.assert_called_once_with("SELECT * FROM EMPLOYEES LIMIT 10")
+
+    def test_session_thoughts_toggle_and_toolbar(self):
+        session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+        self.assertTrue(session.show_thoughts)
+
+        # Toggle off
+        session.handle_slash_command("/thoughts off")
+        self.assertFalse(session.show_thoughts)
+        tb_off = session._get_bottom_toolbar()
+        self.assertIn("thoughts:off", tb_off.value)
+
+        # Toggle on
+        session.handle_slash_command("/thoughts on")
+        self.assertTrue(session.show_thoughts)
+        tb_on = session._get_bottom_toolbar()
+        self.assertIn("thoughts:on", tb_on.value)
+
+    @patch("leai.tui.session.get_llm_client")
+    def test_session_provider_switch(self, mock_get_client):
+        mock_new_client = MagicMock()
+        mock_new_client.model = "gemini-2.5-flash"
+        mock_get_client.return_value = mock_new_client
+
+        session = InteractiveTUISession([self.schema], self.config, self.mock_client)
+        res = session.handle_slash_command("/provider gemini")
+        self.assertTrue(res)
+        self.assertEqual(session.provider_name, "gemini")
+        self.assertEqual(session.client, mock_new_client)
 
 
 if __name__ == "__main__":

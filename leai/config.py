@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -27,6 +30,11 @@ class AIProviderConfig(BaseModel):
     model: str | None = None
     temperature: float | None = None
     timeout: float | None = None
+    num_ctx: int | None = None
+    max_tokens: int | None = None
+    top_p: float | None = None
+    keep_alive: str | None = None
+    options: dict[str, Any] = Field(default_factory=dict)
 
 
 class AIConfig(BaseModel):
@@ -34,6 +42,10 @@ class AIConfig(BaseModel):
     default_provider: str = "openai"
     temperature: float = 0.2
     timeout: float = 300.0
+    num_ctx: int | None = None
+    max_tokens: int | None = None
+    top_p: float | None = None
+    keep_alive: str | None = None
     max_history_turns: int = 15
     max_agent_iterations: int = 10
     max_subagent_iterations: int = 5
@@ -115,11 +127,43 @@ def expand_env_vars(text: str) -> str:
     return os.path.expandvars(text)
 
 
-def load_config(config_path: Path) -> LeaiConfig:
-    if not config_path.exists():
+def resolve_config_path(config_path: Path | str = Path("leai.yml")) -> Path:
+    """Resolves configuration file path with fallback to user home directories (~/leai/leai.yml, ~/.leai/leai.yml)."""
+    path = Path(config_path).expanduser()
+    if path.exists():
+        return path.resolve()
+
+    # If the user explicitly passed a non-default path (e.g. custom filename or directory), do not fallback
+    is_default_target = path.name == "leai.yml" and len(path.parts) == 1
+
+    if not is_default_target:
         raise ConfigError(f"Config file not found: {config_path}")
 
-    raw_text = config_path.read_text(encoding="utf-8")
+    # Search in user directories
+    home = Path.home()
+    candidates = [
+        home / "leai" / "leai.yml",
+        home / ".leai" / "leai.yml",
+    ]
+
+    for cand in candidates:
+        if cand.exists():
+            from rich.console import Console
+
+            Console(stderr=True).print(f"[dim]ℹ Usando configuração do usuário: {cand.resolve()}[/dim]")
+            return cand.resolve()
+
+    raise ConfigError(
+        f"Config file not found: {config_path}. "
+        f"Searched in current directory ({Path.cwd()}) and user home (~/leai/leai.yml, ~/.leai/leai.yml). "
+        f"Run 'leai init' to create one."
+    )
+
+
+def load_config(config_path: Path | str = Path("leai.yml")) -> LeaiConfig:
+    resolved_path = resolve_config_path(config_path)
+
+    raw_text = resolved_path.read_text(encoding="utf-8")
     expanded_text = expand_env_vars(raw_text)
     raw = yaml.safe_load(expanded_text)
     if not isinstance(raw, dict):
@@ -178,11 +222,11 @@ def load_config(config_path: Path) -> LeaiConfig:
     except Exception as exc:  # pydantic provides detailed message
         raise ConfigError(f"Invalid config file: {exc}") from exc
 
-    config.rawPath = (config_path.parent / config.rawPath).resolve()
-    config.docPath = (config_path.parent / config.docPath).resolve()
-    config.annotationsPath = (config_path.parent / config.annotationsPath).resolve()
+    config.rawPath = (resolved_path.parent / config.rawPath).resolve()
+    config.docPath = (resolved_path.parent / config.docPath).resolve()
+    config.annotationsPath = (resolved_path.parent / config.annotationsPath).resolve()
     if not config.updates_log_path.is_absolute():
-        config.updates_log_path = (config_path.parent / config.updates_log_path).resolve()
+        config.updates_log_path = (resolved_path.parent / config.updates_log_path).resolve()
     config.include = [item.upper() for item in config.include]
     config.exclude = [item.upper() for item in config.exclude]
     config.object_types = [item.lower() for item in config.object_types]

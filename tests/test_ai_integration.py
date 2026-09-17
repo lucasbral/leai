@@ -113,10 +113,73 @@ class AIIntegrationTests(unittest.TestCase):
         client_ollama = get_llm_client(cfg, provider_override="ollama")
         self.assertEqual(client_ollama.model, "qwen2.5-coder:latest")
         self.assertEqual(client_ollama.base_url, "http://localhost:11434/v1")
+        self.assertEqual(client_ollama.num_ctx, 16384)
 
         client_local = get_llm_client(cfg, provider_override="local")
         self.assertEqual(client_local.model, "qwen2.5")
         self.assertEqual(client_local.base_url, "http://localhost:1234/v1")
+        self.assertEqual(client_local.num_ctx, 16384)
+
+    def test_llm_factory_resolves_inference_options_and_overrides(self):
+        cfg = LeaiConfig(
+            dsn="",
+            schemas=["TEST"],
+            ai=AIConfig(
+                default_provider="ollama",
+                num_ctx=8192,
+                max_tokens=2048,
+                top_p=0.9,
+                keep_alive="10m",
+                providers={
+                    "ollama": AIProviderConfig(
+                        num_ctx=32768,
+                        keep_alive="30m",
+                        options={"repeat_penalty": 1.15, "top_k": 40},
+                    ),
+                    "gemini": AIProviderConfig(
+                        api_key="test-gem",
+                        max_tokens=8192,
+                        top_p=0.95,
+                    ),
+                    "anthropic": AIProviderConfig(
+                        api_key="test-ant",
+                        max_tokens=4096,
+                    ),
+                },
+            ),
+        )
+
+        client_ollama = get_llm_client(cfg, provider_override="ollama")
+        self.assertEqual(client_ollama.num_ctx, 32768)
+        self.assertEqual(client_ollama.keep_alive, "30m")
+        self.assertEqual(client_ollama.max_tokens, 2048)  # Herdou do global
+        self.assertEqual(client_ollama.top_p, 0.9)  # Herdou do global
+        self.assertEqual(client_ollama.options.get("repeat_penalty"), 1.15)
+        self.assertEqual(client_ollama.options.get("top_k"), 40)
+
+        # Verificar montagem do payload HTTP do Ollama
+        payload = client_ollama._build_payload([{"role": "user", "content": "Olá"}])
+        self.assertEqual(payload["max_tokens"], 2048)
+        self.assertEqual(payload["top_p"], 0.9)
+        self.assertEqual(payload["keep_alive"], "30m")
+        self.assertIn("options", payload)
+        self.assertEqual(payload["options"]["num_ctx"], 32768)
+        self.assertEqual(payload["options"]["repeat_penalty"], 1.15)
+        self.assertEqual(payload["options"]["top_k"], 40)
+
+        # Verificar Gemini
+        client_gem = get_llm_client(cfg, provider_override="gemini")
+        self.assertEqual(client_gem.max_tokens, 8192)
+        self.assertEqual(client_gem.top_p, 0.95)
+        gem_cfg = client_gem._build_generation_config(response_mime_type="application/json")
+        self.assertEqual(gem_cfg["maxOutputTokens"], 8192)
+        self.assertEqual(gem_cfg["topP"], 0.95)
+        self.assertEqual(gem_cfg["responseMimeType"], "application/json")
+
+        # Verificar Anthropic
+        client_ant = get_llm_client(cfg, provider_override="anthropic")
+        self.assertEqual(client_ant.max_tokens, 4096)
+        self.assertEqual(client_ant.top_p, 0.9)  # Herdou do global
 
     def test_enrich_table_preserves_existing_when_not_overwrite(self):
         table = TableMeta(
@@ -222,10 +285,127 @@ class AIIntegrationTests(unittest.TestCase):
 
             saved_ann_file = ann_dir / "tables" / "CARGOS.yml"
             self.assertTrue(saved_ann_file.exists())
-
             loaded = load_annotation(saved_ann_file)
             self.assertEqual(loaded.description, "Tabela de cargos e funções")
             self.assertEqual(loaded.columns.get("CODIGO"), "Código identificador do cargo")
+
+    def test_openai_stream_chat_with_tools_and_reasoning(self):
+        from unittest.mock import MagicMock, patch
+
+        client = OpenAICompatibleClient(api_key="test-key", model="qwen-2.5")
+
+        import json
+
+        # Mock SSE response stream from OpenAI / Ollama compatible endpoint
+        sse_lines = [
+            b"data: " + json.dumps({"choices": [{"delta": {"reasoning_content": "Pensando na consulta...\n"}}]}).encode("utf-8") + b"\n\n",
+            b"data: "
+            + json.dumps(
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call_123",
+                                        "type": "function",
+                                        "function": {"name": "get_table_schema", "arguments": '{"table'},
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ).encode("utf-8")
+            + b"\n\n",
+            b"data: "
+            + json.dumps(
+                {"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"arguments": '_name": "RH.FUNCIONARIOS"}'}}]}}]}
+            ).encode("utf-8")
+            + b"\n\n",
+            b"data: [DONE]\n\n",
+        ]
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.__enter__.return_value = sse_lines
+
+        captured_thoughts = []
+        captured_tokens = []
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            content, tool_calls = client.stream_chat_with_tools(
+                messages=[{"role": "user", "content": "Mostre RH.FUNCIONARIOS"}],
+                on_thought=lambda th: captured_thoughts.append(th),
+                on_token=lambda tok: captured_tokens.append(tok),
+            )
+
+        self.assertEqual("".join(captured_thoughts), "Pensando na consulta...\n")
+        self.assertEqual(len(tool_calls), 1)
+        self.assertEqual(tool_calls[0]["name"], "get_table_schema")
+        self.assertEqual(tool_calls[0]["arguments"], {"table_name": "RH.FUNCIONARIOS"})
+
+    def test_gemini_stream_chat_with_tools_and_thought(self):
+        from unittest.mock import MagicMock, patch
+
+        client = GeminiClient(api_key="test-key", model="gemini-2.0-flash")
+
+        # Mock SSE response from Gemini streamGenerateContent?alt=sse
+        sse_lines = [
+            b'data: {"candidates": [{"content": {"parts": [{"thought": true, "text": "Analyzing schema structure..."}]}}]}\n\n',
+            b'data: {"candidates": [{"content": {"parts": [{"functionCall": {"name": "search_column_comments", "args": {"query": "CPF"}}}]}}]}\n\n',
+        ]
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.__enter__.return_value = sse_lines
+
+        captured_thoughts = []
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            content, tool_calls = client.stream_chat_with_tools(
+                messages=[{"role": "user", "content": "Busque colunas de CPF"}],
+                on_thought=lambda th: captured_thoughts.append(th),
+            )
+
+        self.assertEqual("".join(captured_thoughts), "Analyzing schema structure...")
+        self.assertEqual(len(tool_calls), 1)
+        self.assertEqual(tool_calls[0]["name"], "search_column_comments")
+        self.assertEqual(tool_calls[0]["arguments"], {"query": "CPF"})
+
+    def test_anthropic_stream_chat_with_tools_and_thinking(self):
+        from unittest.mock import MagicMock, patch
+
+        client = AnthropicClient(api_key="test-key", model="claude-3-7-sonnet")
+
+        # Mock SSE response from Anthropic stream
+        sse_lines = [
+            b'data: {"type": "content_block_start", "index": 0, "content_block": {"type": "thinking"}}\n\n',
+            b'data: {"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": "Investigating dependencies..."}}\n\n',
+            b'data: {"type": "content_block_stop", "index": 0}\n\n',
+            b'data: {"type": "content_block_start", "index": 1, "content_block": {"type": "tool_use", "id": "toolu_abc", "name": "trace_object_lineage"}}\n\n',
+            b'data: {"type": "content_block_delta", "index": 1, "delta": {"type": "input_json_delta", "partial_json": "{\\"object_name\\": \\"PACK_FOLHA\\"}"}}\n\n',
+            b'data: {"type": "content_block_stop", "index": 1}\n\n',
+            b'data: {"type": "message_stop"}\n\n',
+        ]
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.__enter__.return_value = sse_lines
+
+        captured_thoughts = []
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            content, tool_calls = client.stream_chat_with_tools(
+                messages=[{"role": "user", "content": "Verifique PACK_FOLHA"}],
+                on_thought=lambda th: captured_thoughts.append(th),
+            )
+
+        self.assertEqual("".join(captured_thoughts), "Investigating dependencies...")
+        self.assertEqual(len(tool_calls), 1)
+        self.assertEqual(tool_calls[0]["name"], "trace_object_lineage")
+        self.assertEqual(tool_calls[0]["arguments"], {"object_name": "PACK_FOLHA"})
 
 
 if __name__ == "__main__":

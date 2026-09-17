@@ -2,6 +2,18 @@
 
 Todas as alterações notáveis no projeto **LEAI** são documentadas nesta página.
 
+## [0.3.5] — 2026
+
+### 🚀 Otimização de Queries (Tuning), Validação Oracle Estrita, Workflow de Engenharia Reversa e Streaming com Raciocínio
+* **Ferramenta de Otimização e Explicação de Queries (`explain_and_tune_sql`):** Análise estática avançada de consultas SQL com identificação de sargabilidade (`TRUNC`, `TO_CHAR`, `UPPER`, `NVL`), riscos de Full Table Scan (FTS), subconsultas `NOT IN` com armadilha de valores `NULL`, subconsultas correlacionadas escalares (efeito N+1), ordenação de índices compostos (colunas de igualdade antes de faixas) e sugestão de reescrita em SQL otimizado assistido por IA.
+* **Validador de Dialeto e Compatibilidade Oracle (`validate_oracle_sql`):** Ferramenta dedicada para garantir estrita aderência ao dialeto Oracle Database, identificando e corrigindo construções incompatíveis de outros dialetos (`LIMIT/OFFSET` -> `ROWNUM`/`FETCH FIRST`, `BOOLEAN` -> `CHAR(1)`, `ILIKE` -> `UPPER`/`REGEXP_LIKE`, `IFNULL` -> `NVL`, `DATEADD` -> aritmética de datas, `GETDATE` -> `SYSDATE`, `AUTO_INCREMENT` -> `IDENTITY`/Sequence, `+` concatenação -> `||`) e validando tabelas/colunas contra os metadados dos schemas.
+* **Workflow Autônomo de Engenharia Reversa (`reverse-procedure`):** Novo pipeline de 5 passos (`leai workflow run reverse-procedure <TARGET>`, aliases: `reverse`, `decomp`) para descompilação de procedures, functions e packages: extrai o código fonte, sintetiza matriz CRUD (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`), mapeia chamadas externas e pacotes de sistema (`DBMS_OUTPUT`, `UTL_FILE`), decompõe regras de validação/negócio e gera diagramas de fluxo em formato Mermaid (`flowchart TD`) com relatório funcional completo.
+* **Streaming em Tempo Real com Tool Calling & Tokens de Raciocínio (`on_thought`):** Suporte nativo a streaming token a token durante as rodadas de tool calling (`stream_chat_with_tools`), processando e emitindo em tempo real blocos de raciocínio interno (`<think>` / `reasoning_content` no DeepSeek-R1/Qwen 2.5/Ollama, `thought: true` no Gemini e `thinking_delta` no Claude) no terminal e no Web Studio via SSE (`event: thought`).
+* **Configurações Avançadas de Inferência de Modelos Locais:** Suporte a parâmetros `num_ctx`, `keep_alive`, `max_tokens`, `top_p` e `options` no `leai.yml` para Ollama e LM Studio, prevenindo truncamento silencioso em schemas com DDLs extensos.
+* **Atualização dos Subagentes Especialistas:** `plsql_analyst` e `patch_generator` foram equipados com acesso a `explain_and_tune_sql` e `validate_oracle_sql`.
+
+---
+
 ## [0.3.4] — 2026
 
 ### 🛡️ Blindagem Anti-Alucinação, Parser Resiliente de Tools e Padronização de Prompts em Inglês

@@ -45,8 +45,8 @@ leai agent run patch_generator "Produce a zero-downtime DDL script to add LAST_S
 
 | Role / ID | Specialist Name | Scope & Purpose | Permitted Tools |
 | :--- | :--- | :--- | :--- |
-| **`catalog_researcher`** | Catalog Researcher | Catalog discovery, resolving synonyms, constraints, foreign keys, and column types. | `search_database_objects`, `view_object_definition`, `get_glossary_terms` |
-| **`plsql_analyst`** | PL/SQL Analyst | Static analysis and decompilation of business rules in procedures, packages, and triggers with token compression. | `view_object_definition`, `search_database_objects` |
-| **`lineage_auditor`** | Lineage & Impact Auditor | Cascading dependency mapping and risk rating for planned schema refactors. | `trace_object_lineage`, `search_database_objects` |
-| **`patch_generator`** | Patch & Refactor Engineer | Generates safe DDL migrations, rollback scripts, and semantic code updates. | `view_object_definition`, `trace_object_lineage` |
-| **`doc_annotator`** | Documentation Annotator | Generates domain-aligned business documentation and glossary terminology. | `view_object_definition`, `get_glossary_terms` |
+| **`catalog_researcher`** | Catalog Researcher | Catalog discovery, resolving synonyms, constraints, foreign keys, and column types. | `get_table_schema`, `search_catalog`, `lookup_business_term` |
+| **`plsql_analyst`** | PL/SQL Analyst | Static analysis, reverse engineering routines, sargability diagnostics, Oracle dialect validation, and SQL tuning. | `get_subprogram_source`, `grep_plsql_code`, `get_table_schema`, `explain_and_tune_sql`, `validate_oracle_sql` |
+| **`lineage_auditor`** | Lineage & Impact Auditor | Cascading dependency mapping and risk rating for planned schema refactors. | `trace_object_lineage`, `search_catalog`, `get_table_schema` |
+| **`patch_generator`** | Patch & Refactor Engineer | Generates safe DDL migrations, Oracle dialect checks, rollback scripts, and semantic code updates. | `get_table_schema`, `get_subprogram_source`, `grep_plsql_code`, `validate_oracle_sql`, `explain_and_tune_sql` |
+| **`doc_annotator`** | Documentation Annotator | Generates domain-aligned business documentation and glossary terminology. | `get_table_schema`, `get_subprogram_source`, `lookup_business_term` |

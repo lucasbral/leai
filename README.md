@@ -91,10 +91,14 @@ When running `leai chat` or `leai ask`, the assistant uses an autonomous **Tool-
 
 | Tool Name | Parameters | Purpose |
 | :--- | :--- | :--- |
-| **`search_database_objects`** | `query`, `object_type` | Global catalog search across tables, views, packages, procedures, and synonyms. |
-| **`view_object_definition`** | `schema`, `object_name` | Retrieves technical DDL or PL/SQL body with surgical semantic compression. |
-| **`trace_object_lineage`** | `object_name`, `depth` | Traces multi-level upstream dependencies and downstream consumers with risk rating. |
-| **`get_glossary_terms`** | `term` | Queries team-defined business rules and canonical SQL predicates. |
+| **`search_catalog`** | `query`, `object_types`, `schema` | Fast text and regex search across tables, views, procedures, packages, functions, and synonyms. |
+| **`get_table_schema`** | `table_name`, `schema` | Full table/view DDL inspection: column data types, nullable constraints, PKs, FKs, unique keys, check constraints, and indexes. |
+| **`get_subprogram_source`** | `package_name`, `subprogram_name` | Surgical extraction of standalone procedure/function or specific subprogram inside a package with semantic compression. |
+| **`grep_plsql_code`** | `pattern`, `object_name`, `schema` | Fast regex code search across all stored PL/SQL bodies without reading entire packages. |
+| **`trace_object_lineage`** | `object_name`, `schema`, `depth`, `direction` | Multi-level upstream/downstream dependency graph with automated refactoring risk score (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`). |
+| **`explain_and_tune_sql`** | `sql_query`, `detailed` | Evaluates sargability, non-sargable functions (`TRUNC`, `NVL`, `UPPER`), FTS risks, `NOT IN` NULL pitfalls, compound index ordering, and AI query rewrites. |
+| **`validate_oracle_sql`** | `sql_query`, `target_schema` | Validates Oracle dialect compliance, blocks non-Oracle constructs (`LIMIT`, `BOOLEAN`, `ILIKE`, `IFNULL`, `+` concat), and checks against schema catalog. |
+| **`lookup_business_term`** | `query`, `tag` | Searches domain glossary for canonical business definitions, calculation rules, and canonical SQL predicates. |
 
 ---
 
@@ -161,12 +165,17 @@ ai:
       base_url: "http://localhost:11434/v1"
       model: "qwen2.5-coder:latest"
       temperature: 0.1
+      num_ctx: 32768              # Context window size for Ollama (prevents truncation on large DDLs)
+      keep_alive: "1h"            # Keep model memory resident
     local:
       base_url: "http://localhost:1234/v1" # LM Studio, vLLM, LocalAI
       model: "qwen2.5"
+      num_ctx: 32768
+      max_tokens: 4096
     openai:
       api_key: "${OPENAI_API_KEY}"
       model: "gpt-4o-mini"
+      max_tokens: 4096
     gemini:
       api_key: "${GEMINI_API_KEY}"
       model: "gemini-2.5-flash"
@@ -367,24 +376,30 @@ Executes isolated technical personas with restricted, laser-focused database too
 
 | Subagent Role | Specialist Title | Focus & Permitted Tools |
 | :--- | :--- | :--- |
-| **`catalog_researcher`** | Catalog Researcher | Explores schema entities, synonyms, column types. Tools: `search`, `view`, `glossary`. |
-| **`plsql_analyst`** | PL/SQL Analyst | Reverse engineers routines with semantic compression. Tools: `view`, `search`. |
-| **`lineage_auditor`** | Lineage Auditor | Evaluates cascading risk and impact before refactoring. Tools: `trace`, `search`. |
-| **`patch_generator`** | Patch Engineer | Generates zero-downtime DDL migration scripts and rollbacks. Tools: `view`, `trace`. |
-| **`doc_annotator`** | Documentation Annotator | Generates domain-aligned business annotations. Tools: `view`, `glossary`. |
+| **`catalog_researcher`** | Catalog Researcher | Explores schema entities, synonyms, column types. Tools: `get_table_schema`, `search_catalog`, `lookup_business_term`. |
+| **`plsql_analyst`** | PL/SQL Analyst | Reverse engineers routines, algorithms, and SQL tuning. Tools: `get_subprogram_source`, `grep_plsql_code`, `get_table_schema`, `explain_and_tune_sql`, `validate_oracle_sql`. |
+| **`lineage_auditor`** | Lineage Auditor | Evaluates cascading risk and impact before refactoring. Tools: `trace_object_lineage`, `search_catalog`, `get_table_schema`. |
+| **`patch_generator`** | Patch Engineer | Generates zero-downtime DDL migration scripts and rollback plans. Tools: `get_table_schema`, `get_subprogram_source`, `grep_plsql_code`, `validate_oracle_sql`, `explain_and_tune_sql`. |
+| **`doc_annotator`** | Documentation Annotator | Generates domain-aligned business annotations. Tools: `get_table_schema`, `get_subprogram_source`, `lookup_business_term`. |
 
 ```bash
-leai agent run plsql_analyst "Explain the interest calculation algorithm in PKG_BILLING"
+leai agent run plsql_analyst "Explain the interest calculation algorithm in PKG_BILLING and suggest index tuning"
 ```
 
 ---
 
 ### 6. Autonomous Workflows (`leai workflow`)
 
-Multi-step orchestrated pipelines for high-risk engineering tasks:
+Multi-step orchestrated pipelines for high-risk engineering and reverse-engineering tasks:
 
-* `leai workflow list`: Lists available workflows (`impact-analysis`, `safe-refactor`).
+* `leai workflow list`: Lists available workflows (`impact-analysis`, `safe-refactor`, `reverse-procedure`).
 * `leai workflow run <NAME> <TARGET>`: Executes a workflow.
+
+| Workflow Name | Aliases | Description |
+| :--- | :--- | :--- |
+| **`impact-analysis`** | `impact`, `lineage` | 4-step impact assessment: entity resolution, graph exploration, risk calculation (`LOW` to `CRITICAL`), and Markdown dossier. |
+| **`safe-refactor`** | `refactor`, `patch` | 4-step phased refactoring plan, backward compatibility checks, semantic patch generation, and rollback script. |
+| **`reverse-procedure`** | `reverse`, `decomp` | 5-step PL/SQL reverse engineering: source extraction, CRUD access matrix (`SELECT`/`INSERT`/`UPDATE`/`DELETE`), outgoing routine/package calls, business validation rules, and Mermaid flowchart diagram. |
 
 ```bash
 # Comprehensive impact dossier before modifying a table
@@ -392,6 +407,9 @@ leai workflow run impact CUSTOMERS_TB --output ./customers_impact.md
 
 # Safe phased refactoring plan and DDL patch
 leai workflow run refactor PKG_BILLING -p claude
+
+# Decompile and specify business rules of a PL/SQL procedure with Mermaid diagram
+leai workflow run reverse-procedure PRC_ATUALIZA_SALARIO --output ./specs.md
 ```
 
 ---

@@ -29,30 +29,30 @@ leai init -f --lang en-US
 
 ---
 
-## 2. `leai doctor` (or `leai check`)
+## 2. `leai doctor`
 
-Runs automated pre-flight diagnostics to ensure your environment is fully operational for LEAI.
+Runs automated pre-flight health checks to ensure overall environment integrity.
 
 ```bash
 leai doctor
 ```
 
-### Parameters and Flags:
+### Parameters & Options:
 
 | Parameter / Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `-c`, `--config PATH` | Option | `leai.yml` | Path to `leai.yml`. |
 
-### What `doctor` checks:
-* **Network Connectivity:** Validates TCP connection to Oracle Database and queries `v$version`.
-* **Catalog Permissions:** Tests read access across Oracle system views: `ALL_TABLES`, `ALL_TAB_COLUMNS`, `ALL_CONSTRAINTS`, `ALL_SOURCE`, and `ALL_SYNONYMS`.
-* **Workspace Permissions:** Checks read and write access for `rawPath`, `annotationsPath`, and `docPath`.
-* **S3 Object Storage:** Verifies connection and bucket health for SeaweedFS if enabled.
-* **AI Provider Readiness:** Confirms active AI provider credentials and model responsiveness.
-* **GitOps Integration:** Validates Git repository status, active branch, and remote sync state.
+### What `doctor` validates:
+* **Connectivity:** Establishes connection to Oracle Database listener and checks version from `v$version`.
+* **Catalog Privileges:** Validates read access on `ALL_TABLES`, `ALL_TAB_COLUMNS`, `ALL_CONSTRAINTS`, `ALL_SOURCE`, and `ALL_SYNONYMS`.
+* **Pipeline Directories:** Verifies existence and write permissions for `rawPath`, `annotationsPath`, `docPath`, and `updates_log_path`.
+* **S3 Storage:** Tests SeaweedFS S3 connectivity and bucket when configured, providing troubleshooting tips on failure.
+* **AI Models:** Checks active AI provider credentials and verifies the model is ready.
+* **GitOps:** Validates active branch and remote Git synchronization status.
 
 > [!TIP]
-> Diagnostics can also be run directly inside the interactive copilot session (`leai chat`) by typing `/doctor` or `/check`.
+> Diagnostics can also be run directly inside the interactive copilot session (`leai chat`) by typing `/doctor`.
 
 ---
 

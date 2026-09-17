@@ -74,7 +74,7 @@ leai chat --web
 | `/audit [last\|session\|export]`| Auditoria | Inspeciona as chamadas de ferramentas da IA, latência e log da sessão. |
 | `/tools` | Auditoria | Exibe as entradas e saídas detalhadas das ferramentas do último turno. |
 | `/save [arquivo.md]` | Sessão | Exporta o histórico completo da conversa para arquivo Markdown. |
-| `/doctor` (ou `/check`) | Diagnóstico | Executa diagnóstico preventivo completo no Oracle, IA, Storage e Git. |
+| `/doctor` | Diagnóstico | Executa diagnóstico preventivo completo no Oracle, IA, Storage, Git e diretórios. |
 | `/init` | Configuração | Inicializa ou atualiza o arquivo de configuração `leai.yml`. |
 | `/clear` | Sessão | Limpa a memória conversacional e reinicia a tela. |
 | `/exit`, `/quit` | Sessão | Encerra a sessão do copilot. |
