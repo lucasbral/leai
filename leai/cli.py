@@ -27,7 +27,9 @@ if sys.platform == "win32":
 import typer
 from rich import box
 from rich.console import Console
+from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.rule import Rule
 from rich.table import Column, Table
 
 from leai.config import ConfigError, LeaiConfig, load_config
@@ -2018,7 +2020,11 @@ def run_agent_command(
             on_tool_end=_on_tool_end,
         )
         console.print()
-        console.print(Panel(reply, title=f"[bold green]✨ {spec.name} Output[/bold green]", border_style="green"))
+        console.print(Rule(f"[bold green]✨ {spec.name} Output[/bold green]", style="#45475a"))
+        console.print()
+        console.print(Markdown(reply, code_theme="monokai"))
+        console.print()
+        console.print(Rule(style="#45475a"))
     except Exception as exc:
         console.print(f"[red]Execution failed:[/red] {exc}")
         raise typer.Exit(code=1)
@@ -2128,13 +2134,17 @@ def run_workflow_command(
             on_step_end=_on_step_end,
         )
 
+        console.print()
         console.print(
-            Panel(
-                result.report_markdown,
-                title=f"[bold green]✨ {wf.name.upper()} Pipeline Completed ({result.total_duration_seconds}s)[/bold green]",
-                border_style="green",
+            Rule(
+                f"[bold green]✨ {wf.name.upper()} Pipeline Completed ({result.total_duration_seconds}s)[/bold green]",
+                style="#45475a",
             )
         )
+        console.print()
+        console.print(Markdown(result.report_markdown, code_theme="monokai"))
+        console.print()
+        console.print(Rule(style="#45475a"))
 
         if output or result.success:
             saved_path = result.export_report(output)

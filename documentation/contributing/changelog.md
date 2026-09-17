@@ -2,6 +2,16 @@
 
 Todas as alterações notáveis no projeto **LEAI** são documentadas nesta página.
 
+## [0.3.9] — 2026
+
+### 🖥️ Correção de Quebra de Palavras no Terminal & Renderização Markdown Limpa
+* **Renderização Nativa em Markdown para Workflows e Subagentes:**
+  * Corrigida a quebra incorreta de palavras e quebra de linhas no meio de termos (ex: `Reg\n\nras`, `rot ina`, `bloque io`, `P_ROW\n _NEW`, `V\n ANTAGENS`) na TUI e no CLI.
+  * O relatório de workflows autônomos (`/workflow run`, `leai workflow run`) e a saída de subagentes especializados (`/agent`, `leai agent run`) agora utilizam o renderizador Rich `Markdown` com realce de sintaxe Monokai entre divisórias sutis (`Rule`), eliminando o encapsulamento em `Panel` fechado que causava quebra de texto arbitrário em consoles Windows e terminais com larguras reduzidas.
+  * Facilidade total de seleção e cópia de código com o mouse, sem caracteres de borda vertical interferindo na formatação.
+
+---
+
 ## [0.3.8] — 2026
 
 ### 🛡️ Resiliência contra Diretórios Somente-Leitura e Fallback Multi-Camadas

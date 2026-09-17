@@ -2,6 +2,16 @@
 
 All notable changes to the **LEAI** project are documented here.
 
+## [0.3.9] — 2026
+
+### 🖥️ Terminal Word-Wrapping Fix & Clean Markdown Rendering
+* **Native Markdown Rendering for Workflows & Subagents:**
+  * Fixed mid-word line-wrapping and broken word splits (e.g. `Reg\n\nras`, `rot ina`, `bloque io`, `P_ROW\n _NEW`, `V\n ANTAGENS`) in both interactive TUI and CLI outputs.
+  * Autonomous workflow reports (`/workflow run`, `leai workflow run`) and specialized subagent replies (`/agent`, `leai agent run`) now render through Rich's native `Markdown` engine with Monokai syntax highlighting bordered by subtle horizontal `Rule` dividers, removing boxed `Panel` containers that caused premature word-splitting and wrapping glitches across Windows terminals.
+  * Clean mouse selection and copy-pasting without vertical box border interference.
+
+---
+
 ## [0.3.8] — 2026
 
 ### 🛡️ Read-Only / System Directory Resilience & Multi-Tier Fallback

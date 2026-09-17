@@ -725,8 +725,12 @@ class InteractiveTUISession:
                     on_tool_end=_on_sub_end,
                 )
                 console.print()
-                console.print(Panel(sub_reply, title=f"[bold green]✨ {spec.name}[/bold green]", border_style="green"))
+                console.print(f"[bold #a6e3a1]✨ {spec.name}[/bold #a6e3a1]")
+                console.print(Rule(style="#45475a"))
                 console.print()
+                console.print(Markdown(sub_reply, code_theme="monokai"))
+                console.print()
+                console.print(Rule(style="#313244"))
             except Exception as exc:
                 console.print(f"[red]Specialist error:[/red] {exc}")
             return True
@@ -781,13 +785,13 @@ class InteractiveTUISession:
                 res = wf.run(target=target_obj, on_step_start=_on_wf_start, on_step_end=_on_wf_end)
                 console.print()
                 console.print(
-                    Panel(
-                        res.report_markdown,
-                        title=f"[bold green]✨ {wf.name.upper()} Completed ({res.total_duration_seconds}s)[/bold green]",
-                        border_style="green",
-                    )
+                    f"[bold #a6e3a1]✨ {wf.name.upper()} Completed[/bold #a6e3a1] [dim #6c7086]({res.total_duration_seconds:.2f}s)[/dim #6c7086]"
                 )
+                console.print(Rule(style="#45475a"))
                 console.print()
+                console.print(Markdown(res.report_markdown, code_theme="monokai"))
+                console.print()
+                console.print(Rule(style="#313244"))
             except Exception as exc:
                 console.print(f"[red]Workflow error:[/red] {exc}")
             return True
