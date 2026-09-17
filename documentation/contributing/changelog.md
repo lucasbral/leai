@@ -4,7 +4,14 @@ Todas as alterações notáveis no projeto **LEAI** são documentadas nesta pág
 
 ## [0.3.5] — 2026
 
-### 🚀 Otimização de Queries (Tuning), Validação Oracle Estrita, Workflow de Engenharia Reversa e Streaming com Raciocínio
+### 🚀 Otimização de Queries (Tuning), Validação Oracle Estrita, Workflow de Engenharia Reversa, Streaming com Raciocínio e TUI Modernizada
+* **Modernização da TUI (Terminal Interativo Inspirado no Gemini CLI / Claude Code):**
+  * **Autocompletar com Prefixos Inteligentes:** Suporte a `@` para menções a objetos do banco com ícones representativos (`📋` Tabela, `📦` Package, `⚙️` Procedure, `👁️` View, etc.), `#` para menções a termos do glossário de regras de negócio (`glossary.yml`), e `/` para comandos de barra.
+  * **Barra de Status Inferior Dinâmica:** Rodapé do terminal exibindo em tempo real o provedor e modelo ativos, schema conectado, status de pensamento (`thoughts:on/off`) e atalho de ajuda.
+  * **Streaming e Painel de Pensamentos (`🧠 thoughts`):** Exibição em tempo real do raciocínio interno do modelo antes da resposta e novo comando `/thoughts [on|off]` para alternar a visualização.
+  * **Cards Visuais de Ferramentas:** Spinners animados e cronômetro em segundos durante a execução de ferramentas (`⚡ search_database_objects (0.34s)`).
+  * **Atalhos Multilinha:** Suporte a `Alt+Enter` e `Ctrl+J` para quebra de linha em consultas longas e envio com `Enter`.
+  * **Novos Comandos de Barra:** `/tune [sql]`, `/validate [sql]`, `/thoughts [on|off]`, `/provider [nome]` e expansão de `/workflow`.
 * **Ferramenta de Otimização e Explicação de Queries (`explain_and_tune_sql`):** Análise estática avançada de consultas SQL com identificação de sargabilidade (`TRUNC`, `TO_CHAR`, `UPPER`, `NVL`), riscos de Full Table Scan (FTS), subconsultas `NOT IN` com armadilha de valores `NULL`, subconsultas correlacionadas escalares (efeito N+1), ordenação de índices compostos (colunas de igualdade antes de faixas) e sugestão de reescrita em SQL otimizado assistido por IA.
 * **Validador de Dialeto e Compatibilidade Oracle (`validate_oracle_sql`):** Ferramenta dedicada para garantir estrita aderência ao dialeto Oracle Database, identificando e corrigindo construções incompatíveis de outros dialetos (`LIMIT/OFFSET` -> `ROWNUM`/`FETCH FIRST`, `BOOLEAN` -> `CHAR(1)`, `ILIKE` -> `UPPER`/`REGEXP_LIKE`, `IFNULL` -> `NVL`, `DATEADD` -> aritmética de datas, `GETDATE` -> `SYSDATE`, `AUTO_INCREMENT` -> `IDENTITY`/Sequence, `+` concatenação -> `||`) e validando tabelas/colunas contra os metadados dos schemas.
 * **Workflow Autônomo de Engenharia Reversa (`reverse-procedure`):** Novo pipeline de 5 passos (`leai workflow run reverse-procedure <TARGET>`, aliases: `reverse`, `decomp`) para descompilação de procedures, functions e packages: extrai o código fonte, sintetiza matriz CRUD (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`), mapeia chamadas externas e pacotes de sistema (`DBMS_OUTPUT`, `UTL_FILE`), decompõe regras de validação/negócio e gera diagramas de fluxo em formato Mermaid (`flowchart TD`) com relatório funcional completo.

@@ -321,18 +321,33 @@ Launches the interactive terminal copilot console with conversation memory, synt
 | `--no-cache` | Flag | `False` | Pure in-memory execution. |
 
 **In-Session Slash Commands:**
+* `/tune <sql>`: Analyze query sargability, FTS risks, compound indexes, and get AI tuning proposals.
+* `/validate <sql>`: Validate Oracle SQL dialect compliance and cross-check against schema catalog.
+* `/thoughts [on|off]`: Toggle live reasoning/thought token streaming in the terminal.
+* `/workflow <name> <obj>`: Execute autonomous workflows (`reverse-procedure`, `impact-analysis`, `safe-refactor`).
+* `/agent <role> <task>`: Run specialized subagents (`catalog_researcher`, `plsql_analyst`, `lineage_auditor`, etc.).
 * `/copy [all|code|N]`: Copy response or code block directly to OS clipboard.
 * `/doc [obj]`: In-terminal YAML annotation & documentation editor.
+* `/rule [list|add|del|find]`: Manage global domain glossary and canonical rules.
 * `/enrich [obj]`: Auto-enrich business rules with LLM.
 * `/compile [obj]`: Recompile Markdown docs (supports single object).
 * `/trace <obj>`: Inline dependency & impact X-ray with Mermaid.
 * `/tables`: List all catalog tables with column counts and primary keys.
 * `/schema [s]`: Show full overview of schema objects.
 * `/changes [d]`: Audit objects modified in last N days (Default: 7).
+* `/provider <p>`: Switch AI provider dynamically (`ollama`, `openai`, `gemini`, `anthropic`, `local`, etc.).
 * `/models [p]`: List available AI models returned by provider API.
+* `/model <p> [m]`: Switch AI model dynamically.
 * `/audit [last|session|export]`: Inspect AI tool call trace and latency.
 * `/tools`: Quick viewer for last turn's tool execution inputs/outputs.
 * `/save [file.md]`: Export current conversation transcript to Markdown.
+* `/clear`: Clear conversation memory and reset screen.
+* `/exit`, `/quit`: Exit interactive copilot session.
+
+**Smart Autocompletion Prefixes:**
+* `@`: Autocomplete catalog objects with icons (`📋 TABLE`, `📦 PACKAGE`, `⚙️ PROCEDURE`, `👁️ VIEW`, `⚡ TRIGGER`, `🔢 SEQUENCE`, `🔗 SYNONYM`).
+* `#`: Autocomplete business rules and canonical terms from the domain glossary.
+* `/`: Autocomplete slash commands and sub-arguments.
 
 #### `leai enrich`
 Invokes the LLM to inspect DDLs and draft automated business descriptions for undocumented entities.

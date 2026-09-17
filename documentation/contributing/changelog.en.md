@@ -4,7 +4,14 @@ All notable changes to the **LEAI** project are documented here.
 
 ## [0.3.5] — 2026
 
-### 🚀 SQL Performance Tuning, Strict Oracle Dialect Validation, Reverse-Engineering Workflow & Thought Streaming
+### 🚀 SQL Performance Tuning, Strict Oracle Dialect Validation, Reverse-Engineering Workflow, Thought Streaming & Modernized TUI
+* **Modernized Interactive Terminal TUI (Gemini CLI / Claude Code Experience):**
+  * **Smart Prefix Autocompletion:** Autocomplete database objects with type icons (`@` with `📋` Table, `📦` Package, `⚙️` Procedure, `👁️` View, etc.), business glossary rules (`#` for `glossary.yml`), and terminal slash commands (`/`).
+  * **Dynamic Bottom Status Toolbar:** Real-time bottom bar displaying active provider, model, connected schema, thought streaming toggle status (`thoughts:on/off`), and help shortcut.
+  * **Live Reasoning Streaming Panel (`🧠 thoughts`):** Real-time chain-of-thought display from reasoning models prior to final synthesis, with `/thoughts [on|off]` toggle.
+  * **Visual Tool Execution Cards:** Animated spinners and real-time execution duration timers during tool calling (`⚡ search_database_objects (0.34s)`).
+  * **Multiline Keybindings:** Use `Alt+Enter` or `Ctrl+J` to insert newlines for long queries and `Enter` to submit.
+  * **New In-Session Slash Commands:** `/tune [sql]`, `/validate [sql]`, `/thoughts [on|off]`, `/provider [name]`, and `/workflow` enhancements.
 * **Query Tuning & Explanation Tool (`explain_and_tune_sql`):** Static heuristic analysis for SQL queries identifying sargability pitfalls (`TRUNC`, `TO_CHAR`, `UPPER`, `NVL`), Full Table Scan (FTS) risks, `NOT IN` subquery `NULL` traps, correlated scalar subqueries (N+1 effect), compound index column ordering (equality filters placed before range filters), and AI-driven query rewrite recommendations.
 * **Strict Oracle Dialect Validator (`validate_oracle_sql`):** Dedicated tool to enforce Oracle Database SQL compliance by catching and correcting non-Oracle constructs (`LIMIT/OFFSET` -> `ROWNUM`/`FETCH FIRST`, `BOOLEAN` -> `CHAR(1)`, `ILIKE` -> `UPPER`/`REGEXP_LIKE`, `IFNULL` -> `NVL`, `DATEADD` -> date arithmetic, `GETDATE` -> `SYSDATE`, `AUTO_INCREMENT` -> `IDENTITY`/Sequence, `+` string concatenation -> `||`) and cross-validating tables/columns against loaded schemas.
 * **Autonomous Reverse-Engineering Workflow (`reverse-procedure`):** New 5-stage automated pipeline (`leai workflow run reverse-procedure <TARGET>`, aliases: `reverse`, `decomp`) to decompile stored procedures, functions, and packages: extracts source code, synthesizes a CRUD matrix (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `MERGE`), traces system packages (`DBMS_OUTPUT`, `UTL_FILE`) and external routine calls, decomposes business logic into discrete rules, and outputs Mermaid flowcharts (`flowchart TD`) with comprehensive functional specifications in Markdown.
