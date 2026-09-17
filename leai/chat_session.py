@@ -38,6 +38,7 @@ class ChatSession:
         self.last_rag_context: str = ""
         self.last_working_messages: list[dict[str, Any]] = []
         self.last_tool_audits: list[Any] = []
+        self.last_action_badges: list[str] = []
         self.agent_engine = AgentExecutionEngine(
             schemas=schemas,
             config=config,
@@ -127,9 +128,16 @@ class ChatSession:
         on_thought: Callable[[str], None] | None = None,
     ) -> tuple[str, list[str]]:
         """Processes user input, runs agent tool execution loop, and retrieves AI response."""
+        # 0. Process inline directives (@objects, #rules, /directives)
+        from leai.ai.directives import process_inline_directives
+
+        proc_directives = process_inline_directives(user_input, self.schemas, self.config, client=self.client)
+        self.last_action_badges = list(proc_directives.action_badges)
+
         # 1. Update RAG context with detected focal entities (without dumping entire catalog into tokens)
-        rag_context, detected = build_rag_context(user_input, self.schemas, self.config, include_catalog=False)
-        for entity in detected:
+        rag_context, detected = build_rag_context(proc_directives.clean_prompt, self.schemas, self.config, include_catalog=False)
+        all_detected = sorted(set(detected).union(proc_directives.detected_objects))
+        for entity in all_detected:
             self.active_entities.add(entity)
 
         # 2. Assemble System Prompt with tools instruction + lightweight schema scope
@@ -149,6 +157,10 @@ class ChatSession:
         )
         if rag_context:
             combined_sys += f"\n\nFocal Context Dossier:\n{rag_context}"
+        if proc_directives.precomputed_context:
+            combined_sys += f"\n\n{proc_directives.precomputed_context}"
+        if proc_directives.system_overlay:
+            combined_sys += f"\n\n{proc_directives.system_overlay}"
         combined_sys += f"\n\n{lang_directive}"
 
         # 3. Add user message

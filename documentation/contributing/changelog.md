@@ -2,6 +2,21 @@
 
 Todas as alterações notáveis no projeto **LEAI** são documentadas nesta página.
 
+## [0.3.11] — 2026
+
+### ⚡ Arquitetura de Directivas em Linha (Inline Directives) & Análise no Chat
+* **Suporte a Directivas em Linha (`/trace`, `/tune`, `/validate`, `/rule`, `/plsql`, `/doc`, etc.) em Qualquer Posição do Prompt:**
+  * Implementado tokenizador e pré-processador de diretivas inspirado no **Antigravity CLI / 2.0**.
+  * Usuários podem combinar livremente menções a objetos (`@TABELA`, `@PACKAGE`), regras de negócio (`#REGRA`) e comandos slash (`/trace`, `/tune`, etc.) em frases conversacionais naturais (ex: `me explique @TGOVPE_EPB__VANTAGENS /trace`).
+* **Pré-computação Determinística de Linhagem e Risco de Mudança:**
+  * As diretivas `/trace` e `/lineage` agora calculam deterministicamente o grafo de dependências upstream/downstream e a **Classificação de Risco de Mudança** (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`).
+  * Em vez de apenas salvar arquivos externos em disco, o agente entrega a explicação funcional completa, blast radius e **diagramas Mermaid (`flowchart TD`)** diretamente na resposta do chat.
+* **Injeção de Personas Especializadas e Diagnóstico SQL:**
+  * Injeção contextual automática de diagnósticos sargáveis com `/tune`, validação de dialeto Oracle com `/validate`, filtros canônicos de negócio com `/rule` e personas especialistas (`/plsql`, `/doc`, `/patch`, `/impact`, `/catalog`).
+  * Badges visuais em tempo real no terminal TUI (`⚡ Directivas em linha identificadas: /trace`).
+
+---
+
 ## [0.3.10] — 2026
 
 ### 🌐 Internacionalização Completa do TUI & Modo Remoto SeaweedFS (`no_cache`)

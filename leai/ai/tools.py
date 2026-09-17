@@ -1583,9 +1583,14 @@ def trace_object_lineage(
         if d.source_name != obj_name and d.relation_type in ("PLSQL_DEPENDENCY", "TRIGGER_ON", "REFERENCED_BY", "CALLS_SUBPROGRAM")
     ]
 
+    from leai.docs import _calculate_risk_level
+
+    risk_level = _calculate_risk_level(len(trace_res.dependencies))
+
     result_payload: dict[str, Any] = {
         "focal_object": trace_res.focal_name or obj_name,
         "focal_type": trace_res.focal_type if trace_res.focal_type != "UNKNOWN" else ("SYNONYM" if syn_info else "UNKNOWN"),
+        "change_risk_level": risk_level,
         "total_connections": len(trace_res.dependencies),
         "upstream_parents": sorted(set(parents)),
         "downstream_children": sorted(set(children)),

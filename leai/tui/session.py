@@ -2581,6 +2581,13 @@ class InteractiveTUISession:
             )
         )
 
+        from leai.ai.directives import parse_prompt_tokens
+
+        prompt_tokens = parse_prompt_tokens(user_input)
+        if prompt_tokens.directives:
+            dirs_str = " ".join(f"[bold #cba6f7]/{d}[/bold #cba6f7]" for d in prompt_tokens.directives)
+            console.print(f"  [dim]⚡ Directivas em linha identificadas:[/dim] {dirs_str}")
+
         thought_chunks: list[str] = []
         thought_start_t = time.perf_counter()
         thought_printed = False
