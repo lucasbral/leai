@@ -407,6 +407,32 @@ class AIIntegrationTests(unittest.TestCase):
         self.assertEqual(tool_calls[0]["name"], "trace_object_lineage")
         self.assertEqual(tool_calls[0]["arguments"], {"object_name": "PACK_FOLHA"})
 
+    def test_iter_sse_lines_with_split_multibyte_utf8(self):
+        from leai.ai.base import iter_sse_lines
+
+        # Simulate raw byte chunks split across Portuguese accented characters and emojis
+        full_text = 'data: {"choices":[{"delta":{"content":"🎯 1. Regras de Negócio e PADRÃO para substituição com aspas duplas `<TABLE>`"}}\n\n'
+        raw_bytes = full_text.encode("utf-8")
+
+        # Split bytes into tiny 7-byte chunks (which will bisect multi-byte sequences)
+        chunks = [raw_bytes[i : i + 7] for i in range(0, len(raw_bytes), 7)]
+
+        class MockByteStream:
+            def __init__(self, data_chunks):
+                self.chunks = list(data_chunks)
+
+            def read(self, size=4096):
+                if not self.chunks:
+                    return b""
+                return self.chunks.pop(0)
+
+        stream = MockByteStream(chunks)
+        lines = list(iter_sse_lines(stream))
+
+        self.assertEqual(len(lines), 1)
+        self.assertTrue(lines[0].startswith("data:"))
+        self.assertIn("🎯 1. Regras de Negócio e PADRÃO para substituição com aspas duplas `<TABLE>`", lines[0])
+
 
 if __name__ == "__main__":
     unittest.main()

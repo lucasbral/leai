@@ -2,6 +2,18 @@
 
 All notable changes to the **LEAI** project are documented here.
 
+## [0.3.12] — 2026
+
+### 🛡️ Full SSE Streaming Resilience & Incremental Multi-Byte UTF-8 Decoding
+* **Multi-Byte Incremental UTF-8 Decoder (`iter_sse_lines`):**
+  * Fixed a critical issue where multi-byte UTF-8 accented characters (`ã`, `õ`, `ç`, `é`, `🎯`, `•`) bisected across TCP/HTTP SSE packets caused silent `UnicodeDecodeError` exceptions and dropped token chunks.
+  * Eliminated broken words and mid-word splits (e.g. `Reg\n\nras`, `HAD_SQL_PADRA O`, `substit uição`, `du plas`).
+  * Implemented `iter_sse_lines` with `codecs.getincrementaldecoder("utf-8")` across all LLM clients (`OpenAI`, `Gemini`, `Anthropic`, `Ollama`, `DeepSeek`, `Grok`).
+* **Strict Output Integrity & HTML Tag Escaping:**
+  * Added mandatory system prompt guidelines to wrap HTML/XML tags in backticks (e.g. \`<TABLE>\`, \`<TR>\`, \`<TD>\`), preventing Markdown renderers from misinterpreting unclosed tags as raw HTML block containers.
+
+---
+
 ## [0.3.11] — 2026
 
 ### ⚡ Inline Directives Architecture & In-Chat Lineage/Tuning Analysis

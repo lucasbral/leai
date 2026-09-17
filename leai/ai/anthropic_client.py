@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from leai.ai.base import BaseLLMClient
+from leai.ai.base import BaseLLMClient, iter_sse_lines
 
 
 def _convert_tools_to_anthropic(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -322,11 +322,10 @@ class AnthropicClient(BaseLLMClient):
         collected_text = []
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                for raw_line in resp:
-                    line = raw_line.decode("utf-8").strip()
-                    if not line or not line.startswith("data:"):
+                for line in iter_sse_lines(resp):
+                    if not line.startswith("data:"):
                         continue
-                    data_str = line[5:].strip()
+                    data_str = line[5:].lstrip()
                     try:
                         chunk_json = json.loads(data_str)
                         ev_type = chunk_json.get("type", "")
@@ -416,11 +415,10 @@ class AnthropicClient(BaseLLMClient):
 
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                for raw_line in resp:
-                    line = raw_line.decode("utf-8").strip()
-                    if not line or not line.startswith("data:"):
+                for line in iter_sse_lines(resp):
+                    if not line.startswith("data:"):
                         continue
-                    data_str = line[5:].strip()
+                    data_str = line[5:].lstrip()
                     if data_str == "[DONE]":
                         break
                     try:

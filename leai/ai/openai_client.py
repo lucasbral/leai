@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from leai.ai.base import BaseLLMClient
+from leai.ai.base import BaseLLMClient, iter_sse_lines
 
 
 def extract_embedded_tool_calls(content: str, tools: list[dict[str, Any]] | None = None) -> tuple[str | None, list[dict[str, Any]]]:
@@ -283,11 +283,10 @@ class OpenAICompatibleClient(BaseLLMClient):
 
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                for raw_line in resp:
-                    line = raw_line.decode("utf-8").strip()
-                    if not line or not line.startswith("data:"):
+                for line in iter_sse_lines(resp):
+                    if not line.startswith("data:"):
                         continue
-                    data_str = line[5:].strip()
+                    data_str = line[5:].lstrip()
                     if data_str == "[DONE]":
                         break
                     try:
@@ -435,11 +434,10 @@ class OpenAICompatibleClient(BaseLLMClient):
 
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                for raw_line in resp:
-                    line = raw_line.decode("utf-8").strip()
-                    if not line or not line.startswith("data:"):
+                for line in iter_sse_lines(resp):
+                    if not line.startswith("data:"):
                         continue
-                    data_str = line[5:].strip()
+                    data_str = line[5:].lstrip()
                     if data_str == "[DONE]":
                         break
                     try:

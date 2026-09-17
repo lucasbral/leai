@@ -1,7 +1,42 @@
 from __future__ import annotations
 
+import codecs
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from typing import Any
+
+
+def iter_sse_lines(resp: Any, chunk_size: int = 4096) -> Iterator[str]:
+    """Incrementally decodes an HTTP SSE byte response stream without dropping multibyte UTF-8 characters."""
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    buffer = ""
+    if hasattr(resp, "read") and callable(resp.read):
+        while True:
+            chunk = resp.read(chunk_size)
+            if not chunk:
+                break
+            buffer += decoder.decode(chunk)
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                line = line.rstrip("\r\n")
+                if line:
+                    yield line
+    else:
+        # Fallback for iterable mocks or line generators
+        for raw in resp:
+            raw_bytes = raw.encode("utf-8") if isinstance(raw, str) else raw
+            buffer += decoder.decode(raw_bytes)
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                line = line.rstrip("\r\n")
+                if line:
+                    yield line
+
+    trailing = decoder.decode(b"", final=True)
+    if trailing:
+        buffer += trailing
+    if buffer.strip():
+        yield buffer.rstrip("\r\n")
 
 
 class BaseLLMClient(ABC):

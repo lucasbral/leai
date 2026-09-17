@@ -91,14 +91,18 @@ def build_language_directive(lang: str | None = None) -> str:
     loc = normalize_locale(lang)
     if loc == "pt-BR":
         return (
-            "### TARGET OUTPUT LANGUAGE REQUIREMENT:\n"
-            "- All your generated descriptions, business rules, use cases, warnings, and conversational responses MUST be written in Portuguese (pt-BR).\n"
-            "- CRITICAL: Keep all technical database identifiers (table names, column names, data types, schema names, constraints, and PL/SQL keywords) in their exact original technical form. Do NOT translate technical identifiers."
+            "### TARGET OUTPUT LANGUAGE & FORMATTING REQUIREMENTS:\n"
+            "- All descriptions, business rules, use cases, warnings, and conversational responses MUST be written in fluent, grammatically correct Portuguese (pt-BR).\n"
+            "- OUTPUT INTEGRITY: Output continuous words without inserting spurious spaces, linebreaks, or splits inside words or identifiers (e.g. write 'Regras', 'substituição', 'duplas' as complete single words).\n"
+            "- HTML/TAG ESCAPING: When mentioning HTML/XML tags or tokens (like <TABLE>, <TR>, <TD>, <DIV>), ALWAYS enclose them in backticks (`<TABLE>`, `<TR>`, `<TD>`) to ensure Markdown parsers render them cleanly as inline code.\n"
+            "- TECHNICAL IDENTIFIERS: Keep all technical database identifiers (table names, column names, data types, schema names, constraints, and PL/SQL keywords) in their exact original technical form. Do NOT translate technical identifiers."
         )
     return (
-        "### TARGET OUTPUT LANGUAGE REQUIREMENT:\n"
-        "- All your generated descriptions, business rules, use cases, warnings, and conversational responses MUST be written in English (en-US).\n"
-        "- Keep all technical database identifiers (table names, column names, data types, schema names, constraints, and PL/SQL keywords) in their exact original technical form."
+        "### TARGET OUTPUT LANGUAGE & FORMATTING REQUIREMENTS:\n"
+        "- All descriptions, business rules, use cases, warnings, and conversational responses MUST be written in English (en-US).\n"
+        "- OUTPUT INTEGRITY: Output continuous words without inserting spurious spaces, linebreaks, or splits inside words or identifiers.\n"
+        "- HTML/TAG ESCAPING: When mentioning HTML/XML tags or tokens (like <TABLE>, <TR>, <TD>, <DIV>), ALWAYS enclose them in backticks (`<TABLE>`, `<TR>`, `<TD>`) to ensure Markdown parsers render them cleanly as inline code.\n"
+        "- TECHNICAL IDENTIFIERS: Keep all technical database identifiers (table names, column names, data types, schema names, constraints, and PL/SQL keywords) in their exact original technical form."
     )
 
 

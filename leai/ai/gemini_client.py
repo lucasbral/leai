@@ -7,7 +7,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from leai.ai.base import BaseLLMClient
+from leai.ai.base import BaseLLMClient, iter_sse_lines
 
 
 def _convert_schema_to_gemini(schema: dict[str, Any]) -> dict[str, Any]:
@@ -204,11 +204,10 @@ class GeminiClient(BaseLLMClient):
         collected_text = []
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                for raw_line in resp:
-                    line = raw_line.decode("utf-8").strip()
-                    if not line or not line.startswith("data:"):
+                for line in iter_sse_lines(resp):
+                    if not line.startswith("data:"):
                         continue
-                    data_str = line[5:].strip()
+                    data_str = line[5:].lstrip()
                     try:
                         chunk_json = json.loads(data_str)
                         usage = chunk_json.get("usageMetadata", {})
@@ -504,11 +503,10 @@ class GeminiClient(BaseLLMClient):
 
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                for raw_line in resp:
-                    line = raw_line.decode("utf-8").strip()
-                    if not line or not line.startswith("data:"):
+                for line in iter_sse_lines(resp):
+                    if not line.startswith("data:"):
                         continue
-                    data_str = line[5:].strip()
+                    data_str = line[5:].lstrip()
                     try:
                         chunk_json = json.loads(data_str)
                         usage = chunk_json.get("usageMetadata", {})
