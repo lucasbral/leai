@@ -557,3 +557,16 @@ class LeaiCompleter(Completer):
                         display_meta=meta_desc,
                     )
             return
+
+        # 4. /Slash commands within prompt
+        if word_before_cursor.startswith("/"):
+            query = word_before_cursor.lower()
+            for cmd, desc in SLASH_COMMANDS:
+                if cmd.lower().startswith(query):
+                    yield Completion(
+                        text=cmd,
+                        start_position=-len(word_before_cursor),
+                        display=cmd,
+                        display_meta=desc,
+                    )
+            return

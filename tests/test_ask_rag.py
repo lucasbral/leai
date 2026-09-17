@@ -68,11 +68,13 @@ class AskRAGTests(unittest.TestCase):
     def test_extract_entities_from_question(self):
         objects = {"FUNCIONARIOS", "DEPARTAMENTOS", "VW_FOLHA", "PKG_FOLHA"}
 
+        # Plain text questions without @ return empty list (letting tools handle discovery)
         q1 = "Quais views ou procedures consultam a tabela funcionarios e o que ela faz?"
         found1 = extract_entities_from_question(q1, objects)
-        self.assertIn("FUNCIONARIOS", found1)
+        self.assertEqual(found1, [])
 
-        q2 = "Como a PKG_FOLHA se relaciona com a tabela DEPARTAMENTOS?"
+        # Questions with explicit @ return the referenced objects
+        q2 = "Como a @PKG_FOLHA se relaciona com a tabela @DEPARTAMENTOS?"
         found2 = extract_entities_from_question(q2, objects)
         self.assertIn("PKG_FOLHA", found2)
         self.assertIn("DEPARTAMENTOS", found2)
@@ -81,27 +83,48 @@ class AskRAGTests(unittest.TestCase):
         found3 = extract_entities_from_question(q3, objects)
         self.assertEqual(found3, [])
 
-    def test_build_rag_context_with_focal_entity(self):
-        question = "Como funciona o fluxo da tabela FUNCIONARIOS e quem consome ela?"
-        context, entities = build_rag_context(question, [self.schema], self.cfg)
+    def test_extract_entities_strict_at_mention(self):
+        objects = {"FUNCIONARIOS", "DEPARTAMENTOS", "TABELA", "DATA", "RECADASTRAMENTO"}
+        top_objects = {"FUNCIONARIOS", "DEPARTAMENTOS"}
 
-        self.assertIn("FUNCIONARIOS", entities)
-        self.assertIn("### [RAG CONTEXT] TECHNICAL IMPACT & LINEAGE DOSSIER OF FOCAL ENTITIES:", context)
+        # When @ is used, return exclusively the @ mentioned object and ignore plain text words
+        q = "Na tabela @FUNCIONARIOS existe alguma coluna com a data de recadastramento ?"
+        found = extract_entities_from_question(q, objects, top_level_objects=top_objects)
+        self.assertEqual(found, ["FUNCIONARIOS"])
+
+    def test_disambiguation_table_vs_package_subprogram(self):
+        # Create a package that also contains a subprogram named FUNCIONARIOS and a procedure named TABELA
+        from leai.models import SubprogramMeta
+
+        pck_complex = CodeObjectMeta(
+            name="PCK_EP__BEFORE_CERG",
+            object_type="PACKAGE",
+            subprograms=[
+                SubprogramMeta(name="FUNCIONARIOS", package_name="PCK_EP__BEFORE_CERG", subprogram_type="PROCEDURE"),
+                SubprogramMeta(name="TABELA", package_name="PCK_EP__BEFORE_CERG", subprogram_type="PROCEDURE"),
+            ],
+            source=(
+                "PACKAGE BODY PCK_EP__BEFORE_CERG IS PROCEDURE FUNCIONARIOS IS BEGIN NULL; END; PROCEDURE TABELA IS BEGIN NULL; END; END;"
+            ),
+        )
+
+        schema_with_pck = SchemaMetadata(
+            schema_name="HR",
+            tables=[self.func_table, self.dep_table],
+            views=[self.vw_folha],
+            triggers=[self.trg_audit],
+            code_objects=[self.pkg_folha, pck_complex],
+        )
+
+        question = "Na tabela @FUNCIONARIOS existe alguma coluna com a data de recadastramento ?"
+        context, entities = build_rag_context(question, [schema_with_pck], self.cfg, include_catalog=False)
+
+        # Must focus strictly on Table FUNCIONARIOS
+        self.assertEqual(entities, ["FUNCIONARIOS"])
         self.assertIn("--- START OF FOCAL DOSSIER: FUNCIONARIOS ---", context)
-        self.assertIn("rag_metadata:", context)
-        self.assertIn("VW_FOLHA", context)
-        self.assertIn("TRG_FUNC_AUDIT", context)
-        self.assertIn("DEPARTAMENTOS", context)
-
-    def test_build_rag_context_fallback_general_schema(self):
-        question = "Me dê um panorama geral do banco de dados"
-        context, entities = build_rag_context(question, [self.schema], self.cfg)
-
-        self.assertEqual(entities, [])
-        self.assertNotIn("--- START OF FOCAL DOSSIER:", context)
-        self.assertIn("### [COMPACT SCHEMA CATALOG]", context)
-        self.assertIn("FUNCIONARIOS", context)
-        self.assertIn("DEPARTAMENTOS", context)
+        # Must NOT inject the package as a focal dossier or focal subprogram
+        self.assertNotIn("--- START OF FOCAL DOSSIER: PCK_EP__BEFORE_CERG ---", context)
+        self.assertNotIn("FOCAL PL/SQL SUBPROGRAM:", context)
 
 
 if __name__ == "__main__":

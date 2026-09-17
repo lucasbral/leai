@@ -44,14 +44,14 @@ class ChatSessionTests(unittest.TestCase):
         self.session = ChatSession(schemas=[self.schema], config=self.cfg, client=self.client)
 
     def test_chat_multi_turn_conversation_and_memory(self):
-        # Turn 1
-        reply1, detected1 = self.session.send("Explique a tabela FUNCIONARIOS")
+        # Turn 1 (explicit @ mention)
+        reply1, detected1 = self.session.send("Explique a tabela @FUNCIONARIOS")
         self.assertIn("FUNCIONARIOS", detected1)
         self.assertIn("FUNCIONARIOS", self.session.active_entities)
         self.assertEqual(len(self.session.messages), 2)
         self.assertEqual(self.session.messages[0]["role"], "user")
         self.assertEqual(self.session.messages[1]["role"], "assistant")
-        self.assertIn("Resposta simulada para: Explique a tabela FUNCIONARIOS", reply1)
+        self.assertIn("Resposta simulada para: Explique a tabela @FUNCIONARIOS", reply1)
 
         # Turn 2
         reply2, detected2 = self.session.send("E como calcular o salário?")
@@ -60,7 +60,7 @@ class ChatSessionTests(unittest.TestCase):
         self.assertEqual(len(self.client.last_messages), 3)  # user1, asst1, user2
 
     def test_chat_clear_memory(self):
-        self.session.send("Pergunta 1 sobre FUNCIONARIOS")
+        self.session.send("Pergunta 1 sobre @FUNCIONARIOS")
         self.assertTrue(len(self.session.messages) > 0)
         self.assertTrue(len(self.session.active_entities) > 0)
 
@@ -153,7 +153,7 @@ class ChatSessionTests(unittest.TestCase):
         from leai.audit import SessionAuditLogger, ToolExecutionAudit
 
         # 1. Send query to populate ChatSession context fields
-        reply, detected = self.session.send("Explique a tabela FUNCIONARIOS")
+        reply, detected = self.session.send("Explique a tabela @FUNCIONARIOS")
         self.assertTrue(len(self.session.last_system_prompt) > 0)
         self.assertIn("HR", self.session.last_system_prompt)
         self.assertTrue(len(self.session.last_working_messages) > 0)
@@ -177,7 +177,7 @@ class ChatSessionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             logger = SessionAuditLogger(log_dir=Path(tmp_dir))
             turn = logger.record_turn(
-                user_prompt="Explique a tabela FUNCIONARIOS",
+                user_prompt="Explique a tabela @FUNCIONARIOS",
                 ai_response=reply,
                 provider="mock",
                 model="mock-chat",

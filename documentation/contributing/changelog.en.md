@@ -2,6 +2,21 @@
 
 All notable changes to the **LEAI** project are documented here.
 
+## [0.3.7] — 2026
+
+### 🎯 100% Deterministic `@OBJECT` RAG Architecture & Dynamic Tool-Calling
+* **Elimination of Plain-Text Regex Heuristic Guessing:** Removed autonomous entity guessing from free natural language (`extract_entities_from_question`), preventing common vocabulary words (`table`, `view`, `procedure`, `column`, `date`, `user`, etc.) from colliding with homonymous internal routines in giant corporate packages.
+* **Strict Single/Focal Object Scoping on Explicit `@` Mentions:**
+  * When the user mentions `@OBJECT` (e.g. `In table @FUNCIONARIOS...`), the RAG engine scopes resolution **100% and exclusively to the mentioned object**, avoiding secondary entity pollution.
+  * Preserved full detailed dossier depth of up to **8,000 characters** per focal entity (columns, official `DBA_COL_COMMENTS`, primary/foreign keys, and immediate dependencies).
+* **Top-Level Object Precedence & Clean Disambiguation:** Tables and Views take absolute priority over internal package routines with matching names.
+* **Token Optimization & Latency Drop:**
+  * Natural language questions without `@` generate lean initial prompts (~400 tokens), preventing prompt bloat (reducing initial prompt size from 72k tokens down to < 1k tokens) and dramatically speeding up response time.
+  * The Agent utilizes native tools (`get_table_schema`, `search_column_comments`, `search_database_objects`, `trace_object_dependencies`, `explain_plsql_object`) dynamically and surgically on-demand.
+* **Package Skeleton Compression:** `extract_package_skeleton` synthesizes packages with over 15 routines using compact summaries to avoid token explosion.
+
+---
+
 ## [0.3.6] — 2026
 
 ### 🛠️ Non-Destructive `leai.yml` Layout Update & Smart Config Migration

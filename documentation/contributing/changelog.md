@@ -2,6 +2,21 @@
 
 Todas as alterações notáveis no projeto **LEAI** são documentadas nesta página.
 
+## [0.3.7] — 2026
+
+### 🎯 Arquitetura RAG 100% Determinística com `@OBJETO` & Tool-Calling Dinâmico
+* **Eliminação Total de Falsos Positivos por Heurísticas de Texto Livre:** Removida a adivinhação automática de entidades a partir de palavras soltas do texto (`extract_entities_from_question`), impedindo que termos comuns do vocabulário (`tabela`, `view`, `procedure`, `coluna`, `data`, `recadastramento`, etc.) casem com rotinas internas homônimas em pacotes gigantes corporativos.
+* **Foco Estrito e Exclusivo em Menções Explícitas com `@`:**
+  * Quando o usuário menciona `@OBJETO` (ex: `Na tabela @FUNCIONARIOS...`), o motor RAG restringe a resolução **100% e exclusivamente ao objeto selecionado**, sem injetar entidades secundárias do restante da frase.
+  * Mantido o limite rico de até **8.000 caracteres** por dossiê da entidade focal, trazendo a estrutura completa de colunas, comentários oficiais (`DBA_COL_COMMENTS`), chaves primárias/estrangeiras e dependências imediatas.
+* **Desambiguação e Precedência de Objetos de Primeiro Nível:** Tabelas e Views têm precedência absoluta sobre procedures internas de outros pacotes com o mesmo nome.
+* **Economia Extrema de Tokens & Baixa Latência:**
+  * Perguntas em linguagem natural sem `@` geram um prompt inicial ultra enxuto (~400 tokens), evitando inchaço de prompt (redução de 72k para < 1k tokens) e quedas drásticas no tempo de resposta.
+  * O Agente utiliza suas ferramentas dinâmicas nativas (`get_table_schema`, `search_column_comments`, `search_database_objects`, `trace_object_dependencies`, `explain_plsql_object`) sob demanda de forma cirúrgica.
+* **Compressão de Skeletons de Pacotes:** `extract_package_skeleton` sintetiza pacotes de mais de 15 rotinas com sumário compacto, evitando poluição de prompt.
+
+---
+
 ## [0.3.6] — 2026
 
 ### 🛠️ Atualização Não-Destrutiva de Layout do `leai.yml` & Migração Inteligente

@@ -138,6 +138,13 @@ class TuiUnitTests(unittest.TestCase):
         self.assertIn("session", texts)
         self.assertIn("export", texts)
 
+    def test_completer_inline_slash_commands(self):
+        completer = LeaiCompleter([self.schema])
+        doc = Document(text="Explique o comando /tu", cursor_position=22)
+        completions = list(completer.get_completions(doc, CompleteEvent()))
+        texts = [c.text for c in completions]
+        self.assertIn("/tune", texts)
+
     def test_completer_at_mentions(self):
         completer = LeaiCompleter([self.schema])
         doc = Document(text="Tell me about @DEP", cursor_position=18)

@@ -53,7 +53,7 @@ def extract_subprogram_block(package_source: str, subprogram_name: str) -> str |
     return None
 
 
-def extract_package_skeleton(package_source: str) -> str:
+def extract_package_skeleton(package_source: str, max_signatures: int = 15) -> str:
     """Generates a compact Package skeleton containing only subprogram signatures."""
     if not package_source:
         return ""
@@ -80,6 +80,11 @@ def extract_package_skeleton(package_source: str) -> str:
     if not lines:
         # If not matched by detailed regex, return first 1500 minified characters
         return minify_plsql_source(package_source)[:1500]
+
+    if len(lines) > max_signatures:
+        total = len(lines)
+        lines = lines[:max_signatures]
+        lines.append(f"  -- ... (+{total - max_signatures} more routines. Use tools to query specific subprograms)")
 
     return "PACKAGE SKELETON (Subprogram Signatures):\n" + "\n".join(lines)
 

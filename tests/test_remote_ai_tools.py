@@ -148,7 +148,7 @@ class TestRemoteAITools:
 
         with patch("leai.storage.SeaweedFSStorage.load_annotation", return_value=remote_ann):
             ctx, detected = build_rag_context(
-                question="Quais são as regras da tabela FUNCIONARIOS?",
+                question="Quais são as regras da tabela @FUNCIONARIOS?",
                 schemas=[schema],
                 config=cfg,
                 include_catalog=False,

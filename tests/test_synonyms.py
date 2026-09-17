@@ -56,7 +56,7 @@ class SynonymTests(unittest.TestCase):
         self.assertTrue(any("DBLINK_LEGADO" in (dep.details or "") for dep in trace_res.dependencies))
 
     def test_rag_identifies_and_resolves_synonym_in_question(self):
-        q = "Qual a estrutura de colunas do sinônimo FUNCIONARIOS?"
+        q = "Qual a estrutura de colunas do sinônimo @FUNCIONARIOS?"
         context, detected = build_rag_context(q, [self.schema_cadastro, self.schema_folha], self.cfg)
 
         self.assertIn("FUNCIONARIOS", detected)

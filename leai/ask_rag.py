@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from leai.annotations import load_annotation
 from leai.compression import (
@@ -15,19 +16,36 @@ from leai.models import CodeObjectMeta, SchemaMetadata
 from leai.raw import trace_raw_dependencies
 
 
-def extract_entities_from_question(question: str, available_objects: set[str]) -> list[str]:
-    """Identifies database object names present in the user question."""
-    found = []
-    # Sort in descending length order to prioritize longer/more specific names (e.g. PKG_PAYROLL_PROCESSING before PKG_PAYROLL)
-    sorted_candidates = sorted(available_objects, key=len, reverse=True)
+def extract_entities_from_question(
+    question: str,
+    available_objects: set[str],
+    top_level_objects: set[str] | None = None,
+) -> list[str]:
+    """Identifies database object names present in the user question strictly via explicit @ mentions."""
+    if not question:
+        return []
 
-    for obj_name in sorted_candidates:
-        if len(obj_name) < 2:
-            continue
-        pattern = rf"\b{re.escape(obj_name)}\b"
-        if re.search(pattern, question, re.IGNORECASE):
-            found.append(obj_name)
-    return found
+    # Check for explicit @mentions (e.g. @FUNCIONARIOS, @ERGON.FUNCIONARIOS, @PCK_FOLHA.CALCULA)
+    # The focal RAG context is generated strictly when the user explicitly selects/mentions an object with @.
+    explicit_mentions = re.findall(r"@([A-Za-z0-9_$#]+(?:\.[A-Za-z0-9_$#]+)?)", question)
+    if not explicit_mentions:
+        return []
+
+    found_mentions: list[str] = []
+    for m in explicit_mentions:
+        m_up = m.strip().upper()
+        candidate = m_up
+        if "." in m_up:
+            parts = m_up.split(".")
+            # Check if second part (e.g. TABLE from SCHEMA.TABLE) or full qualified name matches
+            if parts[1] in available_objects:
+                candidate = parts[1]
+            elif m_up in available_objects:
+                candidate = m_up
+        if candidate in available_objects and candidate not in found_mentions:
+            found_mentions.append(candidate)
+
+    return found_mentions
 
 
 def build_rag_context(
@@ -39,41 +57,62 @@ def build_rag_context(
     """Builds the contextual RAG payload combining compressed schema overview and detailed trace with PL/SQL minification."""
     # 1. Map all available object names, subprograms, and synonyms
     all_objects = set()
-    subprogram_to_package_map = {}
+    top_level_objects = set()
+    subprogram_to_package_map: dict[str, tuple[CodeObjectMeta, Any]] = {}
     synonym_map = {}
 
     for s in schemas:
         for t in s.tables:
-            all_objects.add(t.name.upper())
+            t_name = t.name.upper()
+            top_level_objects.add(t_name)
+            all_objects.add(t_name)
         for v in s.views:
-            all_objects.add(v.name.upper())
+            v_name = v.name.upper()
+            top_level_objects.add(v_name)
+            all_objects.add(v_name)
         for mv in s.mviews:
-            all_objects.add(mv.name.upper())
+            mv_name = mv.name.upper()
+            top_level_objects.add(mv_name)
+            all_objects.add(mv_name)
         for co in s.code_objects:
             co_name = co.name.upper()
+            top_level_objects.add(co_name)
             all_objects.add(co_name)
             for sp in co.subprograms:
                 sp_name = sp.name.upper()
                 all_objects.add(sp_name)
-                subprogram_to_package_map[sp_name] = (co, sp)
+                # Only map unqualified subprogram if it does not collide with a top-level object
+                if sp_name not in top_level_objects:
+                    subprogram_to_package_map[sp_name] = (co, sp)
+                # Always support qualified subprogram lookup PACKAGE.SUBPROGRAM
+                subprogram_to_package_map[f"{co_name}.{sp_name}"] = (co, sp)
+                all_objects.add(f"{co_name}.{sp_name}")
         for trg in s.triggers:
-            all_objects.add(trg.name.upper())
+            trg_name = trg.name.upper()
+            top_level_objects.add(trg_name)
+            all_objects.add(trg_name)
         for syn in s.synonyms:
             syn_name = syn.name.upper()
+            top_level_objects.add(syn_name)
             all_objects.add(syn_name)
             synonym_map[syn_name] = syn
 
-    detected_entities = extract_entities_from_question(question, all_objects)
+    detected_entities = extract_entities_from_question(
+        question,
+        all_objects,
+        top_level_objects=top_level_objects,
+    )
 
     context_parts = []
 
-    # 2. If internal subprograms were detected, surgically extract their code block
+    # 2. If internal subprograms were detected (and are not top-level objects), surgically extract their code block
     for entity in detected_entities:
-        if entity in subprogram_to_package_map:
+        if entity in subprogram_to_package_map and entity not in top_level_objects:
             co, sp = subprogram_to_package_map[entity]
-            sub_block = extract_subprogram_block(co.source, entity)
+            sub_name = entity.split(".")[-1] if "." in entity else entity
+            sub_block = extract_subprogram_block(co.source, sub_name)
             if sub_block:
-                skeleton = extract_package_skeleton(co.source)
+                skeleton = extract_package_skeleton(co.source, max_signatures=15)
                 context_parts.append(
                     f"### [FOCAL PL/SQL SUBPROGRAM: {entity} (PACKAGE {co.name})]\n"
                     f"{skeleton}\n\n"
@@ -83,9 +122,13 @@ def build_rag_context(
     # 3. If primary entities are detected, generate the trace and contextual dossier
     if detected_entities:
         context_parts.append("### [RAG CONTEXT] TECHNICAL IMPACT & LINEAGE DOSSIER OF FOCAL ENTITIES:")
-        for entity in detected_entities[:3]:  # Limit to 3 entities to avoid context overflow
-            # If the entity is a subprogram, trace its parent package
-            target_trace = subprogram_to_package_map[entity][0].name if entity in subprogram_to_package_map else entity
+        for entity in detected_entities[:2]:  # Limit to max 2 focal entities for pristine prompt focus
+            # If the entity is a subprogram not in top_level_objects, trace its parent package
+            if entity in subprogram_to_package_map and entity not in top_level_objects:
+                target_trace = subprogram_to_package_map[entity][0].name
+            else:
+                target_trace = entity
+
             trace_res = trace_raw_dependencies(schemas, target_trace, max_depth=1)
 
             if trace_res.focal_object or trace_res.focal_type != "UNKNOWN":
@@ -143,7 +186,7 @@ def build_rag_context(
                     else None
                 )
 
-                # Render dossier in Markdown with Mermaid and Frontmatter
+                # Render dossier in Markdown with Mermaid and Frontmatter (up to 8,000 chars preserved)
                 dossier_text = render_dossier_markdown(trace_res, annotation=ann)
                 if len(dossier_text) > 8000:
                     dossier_text = (
