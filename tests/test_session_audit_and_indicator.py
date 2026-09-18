@@ -3,13 +3,12 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from prompt_toolkit.formatted_text import HTML
 
-from leai.audit import SessionAuditLogger, ToolExecutionAudit, TurnAuditRecord
+from leai.audit import SessionAuditLogger, TurnAuditRecord
 from leai.config import LeaiConfig
 from leai.models import SchemaMetadata
-from leai.tui.completer import LeaiCompleter, get_slash_commands
+from leai.tui.completer import get_slash_commands
 from leai.tui.session import InteractiveTUISession
 
 
