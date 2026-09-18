@@ -12,6 +12,7 @@ from leai.models import SchemaMetadata
 def get_slash_commands() -> list[tuple[str, str]]:
     """Returns slash commands and their localized descriptions."""
     return [
+        ("/session", t("completer.cmd_session")),
         ("/doc", t("completer.cmd_doc")),
         ("/rule", t("completer.cmd_rule")),
         ("/tune", t("completer.cmd_tune")),
@@ -47,6 +48,7 @@ def get_slash_commands() -> list[tuple[str, str]]:
 
 
 SLASH_COMMANDS: list[tuple[str, str]] = [
+    ("/session", "Show active session details, token metrics, errors, and audit log file"),
     ("/doc", "Open in-terminal YAML annotation & documentation editor"),
     ("/rule", "Manage global business glossary and canonical domain rules"),
     ("/tune", "Analyze and tune SQL query (sargability, FTS risks, compound indexes)"),
@@ -509,6 +511,24 @@ class LeaiCompleter(Completer):
                                 start_position=-len(word_before_cursor),
                                 display=f_name,
                                 display_meta=f_meta,
+                            )
+                return
+
+            # Sub-argument completion for /session
+            if cmd_name in ("/session", "/sessions"):
+                if (len(parts) == 2 and not text.endswith(" ")) or (len(parts) == 1 and text.endswith(" ")):
+                    s_query = parts[1].lower() if len(parts) > 1 else ""
+                    session_options = [
+                        ("info", t("completer.session_info")),
+                        ("export", t("completer.session_export")),
+                    ]
+                    for s_opt, s_meta in session_options:
+                        if s_opt.startswith(s_query):
+                            yield Completion(
+                                text=s_opt,
+                                start_position=-len(word_before_cursor),
+                                display=s_opt,
+                                display_meta=s_meta,
                             )
                 return
 

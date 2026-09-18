@@ -42,6 +42,10 @@ class TurnAuditRecord(BaseModel):
     completion_tokens: int | None = None
     rag_entities: list[str] = Field(default_factory=list)
     tools_executed: list[ToolExecutionAudit] = Field(default_factory=list)
+    status: str = "success"
+    error: str | None = None
+    error_type: str | None = None
+    error_traceback: str | None = None
 
 
 class SessionAuditReport(BaseModel):
@@ -51,6 +55,7 @@ class SessionAuditReport(BaseModel):
     start_time: str
     last_updated: str
     total_turns: int = 0
+    total_errors: int = 0
     total_tool_calls: int = 0
     total_tokens: int = 0
     turns: list[TurnAuditRecord] = Field(default_factory=list)
@@ -101,23 +106,38 @@ class SessionAuditLogger:
         system_prompt: str = "",
         rag_context: str = "",
         messages: list[dict[str, Any]] | None = None,
+        status: str = "success",
+        error: str | None = None,
+        error_type: str | None = None,
+        error_traceback: str | None = None,
     ) -> TurnAuditRecord:
         """Records a new conversation turn and automatically flushes the session audit file."""
+        sys_p = system_prompt if isinstance(system_prompt, str) else ("" if system_prompt is None else str(system_prompt))
+        rag_c = rag_context if isinstance(rag_context, str) else ("" if rag_context is None else str(rag_context))
+        msgs_l = messages if isinstance(messages, list) else []
+        tools_l = tools_executed if isinstance(tools_executed, list) else []
+        entities_l = rag_entities if isinstance(rag_entities, list) else (list(rag_entities) if isinstance(rag_entities, (set, tuple)) else [])
+        toks_n = tokens_used if isinstance(tokens_used, int) else 0
+
         record = TurnAuditRecord(
             turn_id=str(len(self.turns) + 1),
-            user_prompt=user_prompt,
-            ai_response=ai_response,
-            system_prompt=system_prompt,
-            rag_context=rag_context,
-            messages=messages or [],
-            provider=provider,
-            model=model,
-            latency_seconds=round(latency_seconds, 3),
-            tokens_used=tokens_used,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            rag_entities=rag_entities or [],
-            tools_executed=tools_executed or [],
+            user_prompt=str(user_prompt or ""),
+            ai_response=str(ai_response or ""),
+            system_prompt=sys_p,
+            rag_context=rag_c,
+            messages=msgs_l,
+            provider=str(provider or ""),
+            model=str(model or ""),
+            latency_seconds=round(float(latency_seconds or 0.0), 3),
+            tokens_used=toks_n,
+            prompt_tokens=prompt_tokens if isinstance(prompt_tokens, int) else None,
+            completion_tokens=completion_tokens if isinstance(completion_tokens, int) else None,
+            rag_entities=entities_l,
+            tools_executed=tools_l,
+            status=status,
+            error=str(error) if error is not None else None,
+            error_type=str(error_type) if error_type is not None else None,
+            error_traceback=str(error_traceback) if error_traceback is not None else None,
         )
         self.turns.append(record)
         self._flush_to_disk()
@@ -132,6 +152,7 @@ class SessionAuditLogger:
         total_tools = sum(len(t.tools_executed) for t in self.turns)
         total_tokens = sum(t.tokens_used for t in self.turns)
         total_latency = sum(t.latency_seconds for t in self.turns)
+        total_errors = sum(1 for t in self.turns if t.status == "error" or t.error)
         tool_counts: dict[str, int] = {}
         for t in self.turns:
             for te in t.tools_executed:
@@ -141,6 +162,8 @@ class SessionAuditLogger:
             "session_id": self.session_id,
             "start_time": self.start_time,
             "total_turns": len(self.turns),
+            "total_errors": total_errors,
+            "has_errors": total_errors > 0,
             "total_tool_calls": total_tools,
             "total_tokens": total_tokens,
             "total_latency_seconds": round(total_latency, 2),
@@ -157,6 +180,7 @@ class SessionAuditLogger:
             start_time=self.start_time,
             last_updated=datetime.datetime.now().isoformat(),
             total_turns=len(self.turns),
+            total_errors=sum(1 for t in self.turns if t.status == "error" or t.error),
             total_tool_calls=sum(len(t.tools_executed) for t in self.turns),
             total_tokens=sum(t.tokens_used for t in self.turns),
             turns=self.turns,
@@ -178,6 +202,7 @@ class SessionAuditLogger:
             f"- **Generated At:** `{now}`",
             f"- **Started At:** `{self.start_time}`",
             f"- **Total Questions:** `{summary['total_turns']}`",
+            f"- **Total Errors / Exceptions:** `{summary['total_errors']}`",
             f"- **Total Tool Executions:** `{summary['total_tool_calls']}`",
             f"- **Total Tokens Consumed:** `{summary['total_tokens']:,}`",
             f"- **Total Latency:** `{summary['total_latency_seconds']}s`",
@@ -205,10 +230,17 @@ class SessionAuditLogger:
         lines.append("")
 
         for idx, turn in enumerate(self.turns, 1):
-            lines.append(f"### Turn {idx}: `{turn.timestamp}`")
+            status_icon = "❌ " if (turn.status == "error" or turn.error) else ""
+            lines.append(f"### {status_icon}Turn {idx}: `{turn.timestamp}`")
             lines.append(f'- **User Prompt:** *"{turn.user_prompt}"*')
             lines.append(f"- **AI Model:** `{turn.provider}:{turn.model}`")
             lines.append(f"- **Turn Latency:** `{turn.latency_seconds}s` • **Tokens:** `{turn.tokens_used:,}`")
+            if turn.status == "error" or turn.error:
+                lines.append(f"- **Status:** `ERROR` (`{turn.error_type or 'Exception'}`)")
+                lines.append(f"- **Error Message:** `{turn.error}`")
+                if turn.error_traceback:
+                    lines.append(f"\n```text\n{turn.error_traceback}\n```\n")
+
             if turn.rag_entities:
                 lines.append(f"- **RAG Injected Entities:** {', '.join(f'`{e}`' for e in turn.rag_entities)}")
             if turn.rag_context:
@@ -242,7 +274,7 @@ class SessionAuditLogger:
                     lines.append("")
 
             lines.append("#### 🤖 Final AI Response:")
-            lines.append(turn.ai_response)
+            lines.append(turn.ai_response or "*No response generated due to error.*")
             lines.append("")
             lines.append("---")
             lines.append("")

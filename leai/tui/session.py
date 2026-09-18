@@ -235,6 +235,8 @@ class InteractiveTUISession:
 
     def _get_bottom_toolbar(self) -> HTML:
         """Renders dynamic OpenCode bottom status bar with Catppuccin badges."""
+        sess_id = getattr(getattr(self, "audit_logger", None), "session_id", None) or "main"
+        short_sess = sess_id.split("_")[-1] if "_" in sess_id else sess_id[:6]
         schemas_count = len(self.schemas)
         schema_text = f"{schemas_count} schemas" if schemas_count > 1 else (self.schemas[0].schema_name if self.schemas else "None")
         msg_count = len(self.session.messages)
@@ -246,14 +248,23 @@ class InteractiveTUISession:
             else "<style fg='#6c7086'>🧠 thoughts:off</style>"
         )
 
+        total_errors = sum(
+            1
+            for t_turn in getattr(getattr(self, "audit_logger", None), "turns", [])
+            if getattr(t_turn, "status", "") == "error" or getattr(t_turn, "error", None)
+        )
+        err_badge = f" │ <style fg='#f38ba8'>⚠️ {total_errors} err</style>" if total_errors > 0 else ""
+
         return HTML(
             f" <b><style fg='#cba6f7'>✦ LEAI</style></b> │ "
+            f"{t('tui.toolbar_session')}: <b><style fg='#b4befe'>{short_sess}</style></b> │ "
             f"{t('tui.toolbar_schema')}: <b><style fg='#f9e2af'>{schema_text}</style></b> │ "
             f"{t('tui.toolbar_model')}: <b><style fg='#a6e3a1'>{self.provider_name.upper()}:{self.model_name}</style></b> │ "
             f"{th_status} │ "
             f"{t('tui.toolbar_latency')}: <style fg='#9399b2'>{latency_str}</style> │ "
             f"{t('tui.toolbar_history')}: <b>{msg_count}</b> msgs │ "
-            f"{t('tui.toolbar_tokens')}: <b><style fg='#89b4fa'>{tokens_str}</style></b> "
+            f"{t('tui.toolbar_tokens')}: <b><style fg='#89b4fa'>{tokens_str}</style></b>"
+            f"{err_badge} "
         )
 
     def _generate_starter_suggestions(self) -> list[str]:
@@ -807,6 +818,12 @@ class InteractiveTUISession:
             self._run_init(force=force)
             return True
 
+        if cmd in ("/session", "/sessions"):
+            sub_arg = parts[1].lower() if len(parts) > 1 else "info"
+            extra_arg = parts[2] if len(parts) > 2 else None
+            self._run_session_info(sub_arg, extra_arg)
+            return True
+
         if cmd in ("/audit", "/log", "/tools"):
             sub_arg = parts[1] if len(parts) > 1 else None
             extra_arg = parts[2] if len(parts) > 2 else None
@@ -823,6 +840,77 @@ class InteractiveTUISession:
 
         console.print(t("tui.cmd_unknown", cmd=cmd))
         return True
+
+    def _run_session_info(self, sub_cmd: str | None = None, arg: str | None = None) -> None:
+        """Displays rich active session information, token usage, errors, and log location."""
+        sub = (sub_cmd or "info").lower()
+        if sub in ("export", "save"):
+            target_path = Path(arg.strip()) if arg else None
+            is_json = target_path and target_path.suffix.lower() == ".json"
+            if is_json:
+                saved = self.audit_logger.export_json(target_path)
+            else:
+                saved = self.audit_logger.export_markdown(target_path)
+            console.print(t("tui.audit_exported", path=saved.resolve()))
+            return
+
+        summary = self.audit_logger.get_session_summary()
+        table = Table(show_header=True, header_style="bold #cba6f7", box=box.ROUNDED)
+        table.add_column(t("tui.session_col_metric"), style="bold #89b4fa", width=25)
+        table.add_column(t("tui.session_col_value"), style="bold white")
+
+        table.add_row(t("tui.session_row_id"), f"[bold #f9e2af]{summary['session_id']}[/bold #f9e2af]")
+        table.add_row(t("tui.session_row_start"), f"{summary['start_time']}")
+
+        msg_count = len(self.session.messages)
+        table.add_row(
+            t("tui.session_row_turns"),
+            f"[bold]{summary['total_turns']}[/bold] questions / [dim]{msg_count} messages[/dim]",
+        )
+
+        err_style = "bold red" if summary["total_errors"] > 0 else "green"
+        table.add_row(t("tui.session_row_errors"), f"[{err_style}]{summary['total_errors']}[/{err_style}]")
+
+        table.add_row(t("tui.session_row_tools"), f"[bold cyan]{summary['total_tool_calls']}[/bold cyan]")
+
+        tokens_fmt = _format_tokens(summary["total_tokens"], self.session.last_turn_tokens)
+        table.add_row(
+            t("tui.session_row_tokens"),
+            f"[bold #a6e3a1]{tokens_fmt}[/bold #a6e3a1] [dim]({summary['total_tokens']:,} total)[/dim]",
+        )
+
+        table.add_row(t("tui.session_row_latency"), f"{summary['total_latency_seconds']}s")
+        table.add_row(
+            t("tui.toolbar_model"),
+            f"[bold #a6e3a1]{self.provider_name.upper()}[/bold #a6e3a1] ({self.model_name})",
+        )
+        table.add_row(t("tui.session_row_logfile"), f"[dim #74c7ec]{summary['log_file']}[/dim #74c7ec]")
+
+        console.print()
+        console.print(
+            Panel(
+                table,
+                title=f"[bold #cba6f7]{t('tui.session_panel_title')}[/bold #cba6f7]",
+                box=box.ROUNDED,
+                border_style="#cba6f7",
+            )
+        )
+
+        if summary["tool_usage_breakdown"]:
+            t_table = Table(show_header=True, header_style="bold cyan", box=box.ROUNDED)
+            t_table.add_column("Tool Name", style="bold yellow")
+            t_table.add_column("Count", justify="right", style="green")
+            for t_name, count in sorted(summary["tool_usage_breakdown"].items(), key=lambda x: x[1], reverse=True):
+                t_table.add_row(t_name, str(count))
+            console.print(
+                Panel(
+                    t_table,
+                    title="[bold green]🛠️ Tool Usage Breakdown[/bold green]",
+                    box=box.ROUNDED,
+                    border_style="green",
+                )
+            )
+        console.print()
 
     def _run_copy(self, args: list[str]) -> None:
         """Copies the last AI assistant response or specific code block to OS clipboard."""
@@ -2630,17 +2718,62 @@ class InteractiveTUISession:
         def _on_token(token: str) -> None:
             streamed_chunks.append(token)
 
-        with console.status(
-            f"[#74c7ec]Pensando com [bold #f9e2af]{self.provider_name.upper()}[/bold #f9e2af] ([bold #a6e3a1]{self.client.model}[/bold #a6e3a1])...[/#74c7ec]",
-            spinner="dots",
-        ):
-            reply, detected = self.session.send(
-                user_input,
-                on_tool_start=_on_tool_start,
-                on_tool_end=_on_tool_end,
-                on_token=_on_token,
-                on_thought=_on_thought,
+        try:
+            with console.status(
+                f"[#74c7ec]Pensando com [bold #f9e2af]{self.provider_name.upper()}[/bold #f9e2af] ([bold #a6e3a1]{self.client.model}[/bold #a6e3a1])...[/#74c7ec]",
+                spinner="dots",
+            ):
+                reply, detected = self.session.send(
+                    user_input,
+                    on_tool_start=_on_tool_start,
+                    on_tool_end=_on_tool_end,
+                    on_token=_on_token,
+                    on_thought=_on_thought,
+                )
+        except Exception as exc:
+            import traceback
+
+            tb_str = traceback.format_exc()
+            self.last_latency = time.perf_counter() - start_t
+            self.last_ai_reply = ""
+            self.last_code_blocks = []
+
+            # Record failed turn in session audit logger
+            self.audit_logger.record_turn(
+                user_prompt=user_input,
+                ai_response="",
+                system_prompt=getattr(self.session, "last_system_prompt", ""),
+                rag_context=getattr(self.session, "last_rag_context", ""),
+                messages=getattr(self.session, "last_working_messages", []),
+                provider=self.provider_name,
+                model=self.client.model if self.client else "",
+                latency_seconds=self.last_latency,
+                tokens_used=self.session.last_turn_tokens or 0,
+                rag_entities=list(getattr(self.session, "active_entities", [])),
+                tools_executed=getattr(self.session, "last_tool_audits", []),
+                status="error",
+                error=str(exc),
+                error_type=exc.__class__.__name__,
+                error_traceback=tb_str,
             )
+
+            console.print()
+            err_msg = (
+                f"[bold red]✕ Erro ao comunicar com {self.provider_name.upper()} ({self.model_name}):[/bold red]\n"
+                f"[yellow]{exc}[/yellow]\n\n"
+                f"[dim]{t('tui.ai_error_hint')}[/dim]"
+            )
+            console.print(
+                Panel(
+                    err_msg,
+                    title=f"[bold red]{t('tui.ai_error_title')}[/bold red]",
+                    box=box.ROUNDED,
+                    border_style="red",
+                    padding=(0, 1),
+                )
+            )
+            return
+
         self.last_latency = time.perf_counter() - start_t
         self.last_ai_reply = reply
         self.last_code_blocks = extract_code_blocks(reply)
@@ -2673,6 +2806,7 @@ class InteractiveTUISession:
             tokens_used=self.session.last_turn_tokens or 0,
             rag_entities=detected,
             tools_executed=self.session.last_tool_audits,
+            status="success",
         )
 
         turn_tok_str = f" • {self.session.last_turn_tokens:,} tokens" if self.session.last_turn_tokens else ""

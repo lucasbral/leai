@@ -175,6 +175,7 @@ MESSAGES: dict[str, str] = {
     "tui.suggest_fk_lookup": "Encontre todas as chaves estrangeiras e objetos apontando para [bold #74c7ec]@{tbl}[/bold #74c7ec]",
     "tui.suggest_risk_summary": "Mostre um resumo das tabelas com maior pontuação de risco de mudança",
     # TUI Bottom Toolbar
+    "tui.toolbar_session": "sess",
     "tui.toolbar_schema": "Schema",
     "tui.toolbar_model": "Modelo",
     "tui.toolbar_latency": "Latência",
@@ -184,6 +185,20 @@ MESSAGES: dict[str, str] = {
     # TUI Commands
     "tui.cmd_exit_goodbye": "\n[yellow]✦ Até logo! Sessão encerrada.[/yellow]",
     "tui.cmd_clear_reset": "[dim]🧹 Tela e memória de contexto resetadas com sucesso.[/dim]\n",
+    # TUI Session Info & Error
+    "tui.session_panel_title": "✦ Informações da Sessão Ativa",
+    "tui.session_col_metric": "Métrica / Propriedade",
+    "tui.session_col_value": "Valor",
+    "tui.session_row_id": "ID da Sessão",
+    "tui.session_row_start": "Iniciada em",
+    "tui.session_row_turns": "Total de Turnos",
+    "tui.session_row_errors": "Erros / Falhas",
+    "tui.session_row_tools": "Chamadas de Ferramentas",
+    "tui.session_row_tokens": "Tokens Consumidos",
+    "tui.session_row_latency": "Latência Acumulada",
+    "tui.session_row_logfile": "Arquivo de Log",
+    "tui.ai_error_title": "⚠️ Falha na Execução da IA / Modelo",
+    "tui.ai_error_hint": "Dica: use [bold cyan]/provider[/bold cyan] para alternar provedor ou [bold cyan]/session[/bold cyan] para inspecionar o log.",
     # TUI Help Table
     "tui.help_title": "✦ Guia Interativo de Comandos do LEAI",
     "tui.help_col_command": "Comando",
@@ -201,6 +216,9 @@ MESSAGES: dict[str, str] = {
     "tui.schema_summary_col_type": "Tipo de Objeto",
     "tui.schema_summary_col_count": "Quantidade",
     # Completer Slash Commands
+    "completer.cmd_session": "Exibir identificador da sessão, métricas de tokens, erros e arquivo de log",
+    "completer.session_info": "Exibir resumo de métricas e status da sessão ativa",
+    "completer.session_export": "Exportar relatório de auditoria da sessão (Markdown ou JSON)",
     "completer.cmd_doc": "Abrir editor de documentação e anotações YAML no terminal",
     "completer.cmd_rule": "Gerenciar glossário global e regras canônicas de negócio",
     "completer.cmd_tune": "Analisar e otimizar consulta SQL (sargabilidade, FTS, índices compostos)",

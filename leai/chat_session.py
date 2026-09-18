@@ -39,6 +39,7 @@ class ChatSession:
         self.last_working_messages: list[dict[str, Any]] = []
         self.last_tool_audits: list[Any] = []
         self.last_action_badges: list[str] = []
+        self.last_error: str | None = None
         self.agent_engine = AgentExecutionEngine(
             schemas=schemas,
             config=config,
@@ -168,15 +169,24 @@ class ChatSession:
 
         # 4. Generate multi-turn response using the autonomous Agent Execution Engine
         tokens_before = self.client.total_tokens if (self.client and isinstance(getattr(self.client, "total_tokens", None), int)) else 0
-        reply = self.agent_engine.run(
-            self.messages,
-            system_prompt=combined_sys,
-            on_tool_start=on_tool_start,
-            on_tool_end=on_tool_end,
-            on_token=on_token,
-            on_thought=on_thought,
-        )
-        self.add_assistant_message(reply)
+        try:
+            reply = self.agent_engine.run(
+                self.messages,
+                system_prompt=combined_sys,
+                on_tool_start=on_tool_start,
+                on_tool_end=on_tool_end,
+                on_token=on_token,
+                on_thought=on_thought,
+            )
+            self.add_assistant_message(reply)
+            self.last_error = None
+        except Exception as exc:
+            self.last_error = str(exc)
+            self.last_system_prompt = combined_sys
+            self.last_rag_context = rag_context or ""
+            self.last_working_messages = list(getattr(self.agent_engine, "last_working_messages", []))
+            self.last_tool_audits = list(getattr(self.agent_engine, "last_tool_audits", []))
+            raise exc
 
         tokens_after = self.client.total_tokens if (self.client and isinstance(getattr(self.client, "total_tokens", None), int)) else 0
         diff = tokens_after - tokens_before

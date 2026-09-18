@@ -175,6 +175,7 @@ MESSAGES: dict[str, str] = {
     "tui.suggest_fk_lookup": "Find all foreign keys and connected objects pointing to [bold #74c7ec]@{tbl}[/bold #74c7ec]",
     "tui.suggest_risk_summary": "Show me a summary of tables with the highest change risk score",
     # TUI Bottom Toolbar
+    "tui.toolbar_session": "sess",
     "tui.toolbar_schema": "Schema",
     "tui.toolbar_model": "Model",
     "tui.toolbar_latency": "Latency",
@@ -184,6 +185,20 @@ MESSAGES: dict[str, str] = {
     # TUI Commands
     "tui.cmd_exit_goodbye": "\n[yellow]✦ Goodbye! Session ended.[/yellow]",
     "tui.cmd_clear_reset": "[dim]🧹 Screen and context memory reset successfully.[/dim]\n",
+    # TUI Session Info & Error
+    "tui.session_panel_title": "✦ Active Session Information",
+    "tui.session_col_metric": "Metric / Property",
+    "tui.session_col_value": "Value",
+    "tui.session_row_id": "Session ID",
+    "tui.session_row_start": "Started At",
+    "tui.session_row_turns": "Total Turns",
+    "tui.session_row_errors": "Errors / Exceptions",
+    "tui.session_row_tools": "Tool Calls",
+    "tui.session_row_tokens": "Tokens Consumed",
+    "tui.session_row_latency": "Total Latency",
+    "tui.session_row_logfile": "Audit Log File",
+    "tui.ai_error_title": "⚠️ AI Model Execution Error",
+    "tui.ai_error_hint": "Tip: use [bold cyan]/provider[/bold cyan] to switch providers or [bold cyan]/session[/bold cyan] to inspect the log.",
     # TUI Help Table
     "tui.help_title": "✦ LEAI Interactive Command Reference",
     "tui.help_col_command": "Command",
@@ -201,6 +216,9 @@ MESSAGES: dict[str, str] = {
     "tui.schema_summary_col_type": "Object Type",
     "tui.schema_summary_col_count": "Count",
     # Completer Slash Commands
+    "completer.cmd_session": "Show active session details, token metrics, errors, and audit log file",
+    "completer.session_info": "Show summary of active session metrics and status",
+    "completer.session_export": "Export session audit report (Markdown or JSON)",
     "completer.cmd_doc": "Open in-terminal YAML annotation & documentation editor",
     "completer.cmd_rule": "Manage global business glossary and canonical domain rules",
     "completer.cmd_tune": "Analyze and tune SQL query (sargability, FTS risks, compound indexes)",
