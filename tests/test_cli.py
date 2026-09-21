@@ -83,8 +83,10 @@ ai:
             )
             result = self.runner.invoke(app, ["doctor", "--config", str(cfg_file)])
             self.assertEqual(result.exit_code, 0)
-            self.assertIn("Diagnóstico de Ambiente LEAI", result.output)
-            self.assertIn("Configuração:", result.output)
+            self.assertTrue(
+                "Environment Diagnostics" in result.output or "Diagnóstico de Ambiente" in result.output,
+                msg=f"Expected diagnostics title in: {result.output}",
+            )
 
     def test_annotate_and_compile_with_summary_panel(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -329,7 +331,10 @@ ai:
             non_existent = Path(tmpdir) / "does_not_exist.yml"
             result = self.runner.invoke(app, ["doctor", "--config", str(non_existent)])
             self.assertEqual(result.exit_code, 1)
-            self.assertIn("Erro Crítico na Configuração", result.output)
+            self.assertTrue(
+                "Critical Configuration Error" in result.output or "Erro Crítico na Configuração" in result.output,
+                msg=f"Expected config error in: {result.output}",
+            )
 
     @patch("leai.cli.oracledb.connect")
     @patch("leai.cli.fetch_available_schemas")

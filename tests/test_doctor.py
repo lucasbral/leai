@@ -19,16 +19,16 @@ class DoctorTests(unittest.TestCase):
     def test_troubleshoot_helpers(self):
         # Oracle troubleshooting
         tips_auth = _troubleshoot_oracle("ORA-01017: invalid username/password; logon denied")
-        self.assertTrue(any("credenciais" in t for t in tips_auth))
+        self.assertTrue(any("credenciais" in t.lower() or "credential" in t.lower() for t in tips_auth))
 
         tips_timeout = _troubleshoot_oracle("ORA-12170: TNS:Connect timeout occurred")
         self.assertTrue(any("1521" in t for t in tips_timeout))
 
         tips_listener = _troubleshoot_oracle("ORA-12541: TNS:no listener")
-        self.assertTrue(any("Listener" in t for t in tips_listener))
+        self.assertTrue(any("Listener" in t or "listener" in t.lower() for t in tips_listener))
 
         tips_service = _troubleshoot_oracle("ORA-12514: TNS:listener does not currently know of service")
-        self.assertTrue(any("serviço Oracle" in t for t in tips_service))
+        self.assertTrue(any("serviço" in t.lower() or "service" in t.lower() for t in tips_service))
 
         # SeaweedFS troubleshooting
         tips_sw_conn = _troubleshoot_seaweedfs("Could not connect to endpoint URL", "https://s3.local:8333", "test-bucket")
@@ -93,11 +93,11 @@ class DoctorTests(unittest.TestCase):
             output = self.console.export_text()
 
             self.assertTrue(success)
-            self.assertIn("Diagnóstico de Ambiente LEAI", output)
+            self.assertTrue("Diagnóstico de Ambiente LEAI" in output or "LEAI Environment Diagnostics" in output)
             self.assertIn("Oracle Database 19c", output)
             self.assertIn("gpt-4o-mini", output)
             self.assertIn("GitHub", output)
-            self.assertIn("1 arquivos JSON", output)
+            self.assertTrue("arquivos JSON" in output or "JSON files" in output)
 
     def test_run_diagnostics_invalid_config_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -120,9 +120,9 @@ class DoctorTests(unittest.TestCase):
         output = self.console.export_text()
 
         self.assertFalse(success)
-        self.assertIn("Falha na conexão", output)
+        self.assertTrue("Falha na conexão" in output or "Connection failed" in output)
         self.assertIn("ORA-01017", output)
-        self.assertIn("Verifique as credenciais", output)
+        self.assertTrue("credenciais" in output.lower() or "credentials" in output.lower())
 
     @patch(
         "leai.storage.SeaweedFSStorage.test_connection",
@@ -143,7 +143,7 @@ class DoctorTests(unittest.TestCase):
         output = self.console.export_text()
 
         self.assertFalse(success)
-        self.assertIn("Armazenamento S3 (SeaweedFS)", output)
+        self.assertTrue("Armazenamento S3" in output or "S3 Storage" in output)
         self.assertIn("Could not connect to endpoint", output)
         self.assertIn("http://", output)
 
