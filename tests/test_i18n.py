@@ -237,3 +237,21 @@ def test_tui_localization_and_session():
 
     # Reset
     set_locale("en-US")
+
+
+def test_doc_editor_and_doctor_localization():
+    """Verify doc editor and doctor subsystem translations in en-US and pt-BR."""
+    # 1. English
+    set_locale("en-US")
+    assert "Database Objects Catalog" in t("doc_editor.catalog_title", total=10, filter="", page=1, total_pages=1)
+    assert "Diagnostics Result" in t("doctor.summary_success_title")
+    assert "Environment Diagnostics" in t("doctor.title")
+
+    # 2. Portuguese
+    set_locale("pt-BR")
+    assert "Catálogo de Objetos do Banco" in t("doc_editor.catalog_title", total=10, filter="", page=1, total_pages=1)
+    assert "Resultado do Diagnóstico" in t("doctor.summary_success_title")
+    assert "Diagnóstico de Ambiente LEAI" in t("doctor.title")
+
+    # Reset
+    set_locale("en-US")

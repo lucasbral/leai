@@ -13,6 +13,7 @@ from rich.table import Column, Table
 from leai.annotations import ensure_annotation_stub, load_annotation, save_annotation
 from leai.config import LeaiConfig
 from leai.docs import count_schema_objects, write_schema_docs
+from leai.i18n import t
 from leai.models import ObjectAnnotation, SchemaMetadata
 
 console = Console(legacy_windows=False)
@@ -43,9 +44,9 @@ def find_object_in_schemas(
         if target_schema and s.schema_name.upper() != target_schema:
             continue
 
-        for t in s.tables:
-            if t.name.upper() == target_obj:
-                return s, "tables", t
+        for t_tab in s.tables:
+            if t_tab.name.upper() == target_obj:
+                return s, "tables", t_tab
         for v in s.views:
             if v.name.upper() == target_obj:
                 return s, "views", v
@@ -134,25 +135,27 @@ def _collect_all_objects(
         s_name = s.schema_name or "MAIN"
 
         # Tables
-        for t in s.tables:
-            ann_file = resolve_annotation_path(config, s_name, "tables", t.name, is_multi)
+        for t_obj in s.tables:
+            ann_file = resolve_annotation_path(config, s_name, "tables", t_obj.name, is_multi)
             ann = load_annotation(ann_file) if ann_file.exists() else ObjectAnnotation()
-            cols = [c.name for c in t.columns]
+            cols = [c.name for c in t_obj.columns]
             pct, bar_str = _calculate_doc_completeness(ann, cols)
-            pk_str = f"PK: {', '.join(t.primary_keys)}" if t.primary_keys else "No PK"
+            pk_str = f"PK: {', '.join(t_obj.primary_keys)}" if t_obj.primary_keys else t("doc_editor.no_pk")
             items.append(
                 {
                     "schema": s_name,
                     "category": "tables",
                     "type": "TABLE",
-                    "name": t.name,
-                    "obj_meta": t,
+                    "name": t_obj.name,
+                    "obj_meta": t_obj,
                     "cols": cols,
-                    "details": f"{len(t.columns)} cols ({pk_str})",
+                    "details": f"{t('doc_editor.cols_count', count=len(t_obj.columns))} ({pk_str})",
                     "ann_file": ann_file,
                     "pct": pct,
                     "bar_str": bar_str,
-                    "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
+                    "status": f"[green]✓ {t('doc_editor.status_done')}[/green]"
+                    if pct == 100
+                    else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
                 }
             )
 
@@ -170,11 +173,13 @@ def _collect_all_objects(
                     "name": v.name,
                     "obj_meta": v,
                     "cols": cols,
-                    "details": f"{len(v.columns)} cols",
+                    "details": t("doc_editor.cols_count", count=len(v.columns)),
                     "ann_file": ann_file,
                     "pct": pct,
                     "bar_str": bar_str,
-                    "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
+                    "status": f"[green]✓ {t('doc_editor.status_done')}[/green]"
+                    if pct == 100
+                    else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
                 }
             )
 
@@ -192,11 +197,13 @@ def _collect_all_objects(
                     "name": mv.name,
                     "obj_meta": mv,
                     "cols": cols,
-                    "details": f"{len(mv.columns)} cols",
+                    "details": t("doc_editor.cols_count", count=len(mv.columns)),
                     "ann_file": ann_file,
                     "pct": pct,
                     "bar_str": bar_str,
-                    "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
+                    "status": f"[green]✓ {t('doc_editor.status_done')}[/green]"
+                    if pct == 100
+                    else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
                 }
             )
 
@@ -212,9 +219,9 @@ def _collect_all_objects(
             cols = [sp.name for sp in getattr(co, "subprograms", [])]
             pct, bar_str = _calculate_doc_completeness(ann, cols)
             if co.subprograms:
-                details = f"{len(co.subprograms)} routines"
+                details = t("doc_editor.routines_count", count=len(co.subprograms))
             elif co.source:
-                details = f"{len(co.source.splitlines())} lines"
+                details = t("doc_editor.lines_count", count=len(co.source.splitlines()))
             else:
                 details = "code"
             items.append(
@@ -229,7 +236,9 @@ def _collect_all_objects(
                     "ann_file": ann_file,
                     "pct": pct,
                     "bar_str": bar_str,
-                    "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
+                    "status": f"[green]✓ {t('doc_editor.status_done')}[/green]"
+                    if pct == 100
+                    else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
                 }
             )
 
@@ -250,7 +259,9 @@ def _collect_all_objects(
                     "ann_file": ann_file,
                     "pct": pct,
                     "bar_str": bar_str,
-                    "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
+                    "status": f"[green]✓ {t('doc_editor.status_done')}[/green]"
+                    if pct == 100
+                    else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
                 }
             )
 
@@ -271,7 +282,9 @@ def _collect_all_objects(
                     "ann_file": ann_file,
                     "pct": pct,
                     "bar_str": bar_str,
-                    "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
+                    "status": f"[green]✓ {t('doc_editor.status_done')}[/green]"
+                    if pct == 100
+                    else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
                 }
             )
 
@@ -292,7 +305,9 @@ def _collect_all_objects(
                     "ann_file": ann_file,
                     "pct": pct,
                     "bar_str": bar_str,
-                    "status": "[green]✓ Done[/green]" if pct == 100 else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
+                    "status": f"[green]✓ {t('doc_editor.status_done')}[/green]"
+                    if pct == 100
+                    else (f"[yellow]⚠️ {pct}%[/yellow]" if pct > 0 else "[red]❌ 0%[/red]"),
                 }
             )
 
@@ -328,19 +343,19 @@ def _render_catalog_table(
     start_idx = (curr_page - 1) * page_size
     page_items = filtered[start_idx : start_idx + page_size]
 
-    filter_info = f" • Filter: '[bold yellow]{search_filter}[/bold yellow]'" if search_filter else ""
+    filter_info = t("doc_editor.filter_info", filter=search_filter) if search_filter else ""
     table = Table(
-        title=f"[bold cyan]✦ Database Objects Catalog ({total_items} objects{filter_info}) • Page {curr_page}/{total_pages}[/bold cyan]",
+        title=t("doc_editor.catalog_title", total=total_items, filter=filter_info, page=curr_page, total_pages=total_pages),
         box=box.ROUNDED,
         header_style="bold cyan",
         expand=True,
     )
-    table.add_column("#", style="bold yellow", width=4, justify="right")
-    table.add_column("Schema", style="bold yellow", width=12)
-    table.add_column("Type", style="bold magenta", width=12)
-    table.add_column("Object Name", style="bold white", ratio=2)
-    table.add_column("Technical Details", style="dim", ratio=2)
-    table.add_column("Doc Status", justify="center", width=18)
+    table.add_column(t("doc_editor.col_num"), style="bold yellow", width=4, justify="right")
+    table.add_column(t("doc_editor.col_schema"), style="bold yellow", width=12)
+    table.add_column(t("doc_editor.col_type"), style="bold magenta", width=12)
+    table.add_column(t("doc_editor.col_name"), style="bold white", ratio=2)
+    table.add_column(t("doc_editor.col_details"), style="dim", ratio=2)
+    table.add_column(t("doc_editor.col_status"), justify="center", width=18)
 
     type_color_map = {
         "TABLE": "cyan",
@@ -393,7 +408,7 @@ class DocEditor:
         if not target_name:
             all_objects = _collect_all_objects(self.schemas, self.config)
             if not all_objects:
-                console.print("[yellow]! No database metadata loaded. Please run [bold cyan]/extract[/bold cyan] first.[/yellow]\n")
+                console.print(t("doc_editor.no_metadata"))
                 return False
 
             current_page = 1
@@ -403,20 +418,16 @@ class DocEditor:
                 table, page_items, total_pages = _render_catalog_table(all_objects, search_filter=current_filter, page=current_page)
                 console.print()
                 console.print(table)
-                console.print(
-                    "[dim]Actions: Enter [bold cyan]# (e.g. 1)[/bold cyan] to select • [bold cyan]<NAME>[/bold cyan] or [bold cyan]<SCHEMA.NAME>[/bold cyan] • "
-                    "Type text to search (e.g. [bold cyan]hr[/bold cyan], [bold cyan]table[/bold cyan], [bold cyan]pending[/bold cyan]) • "
-                    "[bold cyan]n[/bold cyan]/[bold cyan]p[/bold cyan] for next/prev page • [bold red]0[/bold red] to exit[/dim]"
-                )
+                console.print(t("doc_editor.actions_hint"))
 
                 try:
-                    user_choice = self.input_fn("Select object or action: ").strip()
+                    user_choice = self.input_fn(t("doc_editor.select_prompt")).strip()
                 except (EOFError, KeyboardInterrupt):
-                    console.print("\n[yellow]Documentation editing cancelled.[/yellow]")
+                    console.print(t("doc_editor.cancelled"))
                     return False
 
                 if not user_choice or user_choice in ("0", "q", "exit", "cancel"):
-                    console.print("[yellow]Exited documentation editor.[/yellow]\n")
+                    console.print(t("doc_editor.exited"))
                     return False
 
                 if user_choice.lower() in ("n", "next"):
@@ -439,7 +450,7 @@ class DocEditor:
                         target_name = f"{page_items[idx_val - 1]['schema']}.{page_items[idx_val - 1]['name']}"
                         break
                     else:
-                        console.print(f"[yellow]! Invalid index. Enter between 1 and {len(page_items)}.[/yellow]")
+                        console.print(t("doc_editor.invalid_index", total=len(page_items)))
                         continue
 
                 # Check if user typed an exact object name (or schema.name)
@@ -457,16 +468,14 @@ class DocEditor:
                 current_page = 1
 
         if not target_name:
-            console.print("[yellow]! No object specified.[/yellow]")
+            console.print(t("doc_editor.no_object_specified"))
             return False
 
         schema, category, obj_meta = find_object_in_schemas(target_name, self.schemas)
 
         if not schema or not category or not obj_meta:
-            console.print(f"[red]✕ Object '[bold]{target_name}[/bold]' not found in extracted schemas.[/red]")
-            console.print(
-                "[dim]Tip: Check available tables with [bold cyan]/tables[/bold cyan] or run [bold cyan]/extract[/bold cyan].[/dim]"
-            )
+            console.print(t("doc_editor.object_not_found", target=target_name))
+            console.print(t("doc_editor.object_not_found_tip"))
             return False
 
         s_name = schema.schema_name or self.config.schema_name or "MAIN"
@@ -514,14 +523,14 @@ class DocEditor:
 
             if choice in ("0", "q", "exit", "cancel"):
                 if dirty:
-                    confirm = self._prompt_text("You have unsaved changes. Discard and exit? [y/N]: ").strip().lower()
+                    confirm = self._prompt_text(t("doc_editor.unsaved_changes")).strip().lower()
                     if confirm not in ("y", "yes", "s", "sim"):
                         continue
-                console.print("[yellow]Exited documentation editor.[/yellow]\n")
+                console.print(t("doc_editor.exited"))
                 return False
 
             elif choice == "1":
-                new_desc = self._edit_multiline_text("Object Description", annotation.description)
+                new_desc = self._edit_multiline_text(t("doc_editor.field_description"), annotation.description)
                 if new_desc != annotation.description:
                     annotation.description = new_desc
                     dirty = True
@@ -531,10 +540,10 @@ class DocEditor:
                     if self._edit_columns_menu(annotation, cols, category):
                         dirty = True
                 else:
-                    console.print("[yellow]! This object type does not have column/subprogram items.[/yellow]")
+                    console.print(t("doc_editor.no_columns_routines"))
 
             elif choice == "3":
-                if self._edit_list_menu("Business Rules", annotation.business_rules):
+                if self._edit_list_menu(t("doc_editor.field_business_rules"), annotation.business_rules):
                     dirty = True
 
             elif choice == "4":
@@ -542,11 +551,11 @@ class DocEditor:
                     dirty = True
 
             elif choice == "5":
-                if self._edit_list_menu("Technical Warnings / Alerts", annotation.warnings):
+                if self._edit_list_menu(t("doc_editor.menu_5_warnings"), annotation.warnings):
                     dirty = True
 
             elif choice == "6":
-                if self._edit_list_menu("Related Objects", annotation.related_objects):
+                if self._edit_list_menu(t("doc_editor.menu_6_related"), annotation.related_objects):
                     dirty = True
 
             elif choice in ("7", "s", "save"):
@@ -562,7 +571,7 @@ class DocEditor:
 
                 # Prompt to compile markdown doc for this specific object
                 try:
-                    recompile = self._prompt_text(f"Recompile Markdown doc for {o_name} now? [Y/n]: ").strip().lower()
+                    recompile = self._prompt_text(t("doc_editor.recompile_prompt", obj=o_name)).strip().lower()
                 except Exception:
                     recompile = "y"
 
@@ -591,11 +600,11 @@ class DocEditor:
         desc_preview = (
             (annotation.description[:120] + "...")
             if len(annotation.description or "") > 120
-            else (annotation.description or "[dim italic]No description defined yet[/dim italic]")
+            else (annotation.description or f"[dim italic]{t('doc_editor.no_desc_defined')}[/dim italic]")
         )
         cols_annotated = sum(1 for c in cols if annotation.columns.get(c) and str(annotation.columns[c]).strip())
         rules_count = len(annotation.business_rules)
-        tags_str = ", ".join(annotation.tags) if annotation.tags else "[dim]None[/dim]"
+        tags_str = ", ".join(annotation.tags) if annotation.tags else f"[dim]{t('doc_editor.none_defined')}[/dim]"
 
         # Badges line
         badges = (
@@ -603,42 +612,42 @@ class DocEditor:
             f"[bold on #8839ef white] TYPE: {type_label} [/]  "
             f"[bold on #df8e1d black] OBJECT: {object_name} [/]"
         )
-        table.add_row("Context Badges", badges)
-        table.add_row("Doc Completeness", bar_str)
+        table.add_row(t("doc_editor.field_context_badges"), badges)
+        table.add_row(t("doc_editor.field_doc_completeness"), bar_str)
 
         # Technical details
         if hasattr(obj_meta, "primary_keys") and obj_meta.primary_keys:
-            table.add_row("Primary Keys", f"[bold yellow]{', '.join(obj_meta.primary_keys)}[/bold yellow]")
+            table.add_row(t("doc_editor.field_primary_keys"), f"[bold yellow]{', '.join(obj_meta.primary_keys)}[/bold yellow]")
         if hasattr(obj_meta, "foreign_keys") and obj_meta.foreign_keys:
-            table.add_row("Foreign Keys", f"[cyan]{len(obj_meta.foreign_keys)} FK constraints[/cyan]")
+            table.add_row(t("doc_editor.field_foreign_keys"), f"[cyan]{t('doc_editor.fk_constraints', count=len(obj_meta.foreign_keys))}[/cyan]")
         if hasattr(obj_meta, "last_ddl_time") and obj_meta.last_ddl_time:
-            table.add_row("Last DDL Time", f"[dim]{obj_meta.last_ddl_time}[/dim]")
+            table.add_row(t("doc_editor.field_last_ddl_time"), f"[dim]{obj_meta.last_ddl_time}[/dim]")
 
-        table.add_row("Annotation File", f"[dim]{ann_file}[/dim]")
-        table.add_row("Description", desc_preview)
+        table.add_row(t("doc_editor.field_annotation_file"), f"[dim]{ann_file}[/dim]")
+        table.add_row(t("doc_editor.field_description"), desc_preview)
         if cols:
-            item_label = "Subprograms" if category == "packages" else "Columns"
-            table.add_row(f"{item_label} Annotated", f"[bold green]{cols_annotated}[/bold green] / {len(cols)}")
-        table.add_row("Business Rules", f"[bold green]{rules_count}[/bold green] rules registered")
-        table.add_row("Tags / Domain", tags_str)
+            item_label = t("doc_editor.label_subprograms") if category == "packages" else t("doc_editor.label_columns")
+            table.add_row(t("doc_editor.field_annotated", label=item_label), f"[bold green]{cols_annotated}[/bold green] / {len(cols)}")
+        table.add_row(t("doc_editor.field_business_rules"), f"[bold green]{rules_count}[/bold green] {t('doc_editor.rules_registered_count', count='').strip()}")
+        table.add_row(t("doc_editor.field_tags_domain"), tags_str)
 
         menu_text = (
-            "[bold white]Select an action to edit:[/bold white]\n"
-            "  [bold cyan]1[/bold cyan] • 📝 Edit Main Object Description\n"
-            "  [bold cyan]2[/bold cyan] • 📊 Edit Column / Routine Comments\n"
-            "  [bold cyan]3[/bold cyan] • 📌 Edit Business Rules (Bullet Points)\n"
-            "  [bold cyan]4[/bold cyan] • 🏷️  Edit Tags & Functional Domain\n"
-            "  [bold cyan]5[/bold cyan] • ⚠️  Edit Technical Warnings / Alerts\n"
-            "  [bold cyan]6[/bold cyan] • 🔗 Edit Related Objects Lineage\n"
-            "  [bold green]7[/bold green] • 💾 [bold green]Preview YAML & Save Changes[/bold green]\n"
-            "  [bold red]0[/bold red] • ❌ Cancel & Back"
+            f"[bold white]{t('doc_editor.menu_header')}[/bold white]\n"
+            f"  [bold cyan]1[/bold cyan] • 📝 {t('doc_editor.menu_1_desc')}\n"
+            f"  [bold cyan]2[/bold cyan] • 📊 {t('doc_editor.menu_2_cols')}\n"
+            f"  [bold cyan]3[/bold cyan] • 📌 {t('doc_editor.menu_3_rules')}\n"
+            f"  [bold cyan]4[/bold cyan] • 🏷️  {t('doc_editor.menu_4_tags')}\n"
+            f"  [bold cyan]5[/bold cyan] • ⚠️  {t('doc_editor.menu_5_warnings')}\n"
+            f"  [bold cyan]6[/bold cyan] • 🔗 {t('doc_editor.menu_6_related')}\n"
+            f"  [bold green]7[/bold green] • 💾 [bold green]{t('doc_editor.menu_7_save')}[/bold green]\n"
+            f"  [bold red]0[/bold red] • ❌ {t('doc_editor.menu_0_back')}"
         )
 
         console.print()
         console.print(
             Panel(
                 table,
-                title=f"[bold cyan]✦ LEAI Documentation Studio • {schema_name}.{object_name} [{type_label}][/bold cyan]",
+                title=t("doc_editor.studio_title", schema=schema_name, obj=object_name, type=type_label),
                 border_style="cyan",
             )
         )
@@ -646,7 +655,7 @@ class DocEditor:
 
     def _prompt_menu_choice(self) -> str:
         try:
-            return self.input_fn("Option [1-7, 0]: ").strip()
+            return self.input_fn(t("doc_editor.prompt_option")).strip()
         except (EOFError, KeyboardInterrupt):
             return "0"
 
@@ -658,22 +667,22 @@ class DocEditor:
             return default
 
     def _edit_multiline_text(self, label: str, current_value: str | None) -> str:
-        console.print(f"\n[bold cyan]Edit {label}:[/bold cyan]")
+        console.print(f"\n[bold cyan]{t('doc_editor.edit_title', label=label)}[/bold cyan]")
         if current_value:
-            console.print(f"[dim]Current value:\n{current_value}[/dim]\n")
-        console.print("[dim](Type new description and press Enter. Leave blank to keep current)[/dim]")
-        new_val = self._prompt_text(f"New {label}: ", default=current_value or "")
+            console.print(f"[dim]{t('doc_editor.current_value')}\n{current_value}[/dim]\n")
+        console.print(f"[dim]{t('doc_editor.edit_desc_hint')}[/dim]")
+        new_val = self._prompt_text(t("doc_editor.new_label_prompt", label=label), default=current_value or "")
         return new_val.strip()
 
     def _edit_columns_menu(self, annotation: ObjectAnnotation, cols: list[str], category: str) -> bool:
-        item_label = "Routine" if category == "packages" else "Column"
+        item_label = t("doc_editor.label_routine") if category == "packages" else t("doc_editor.label_column")
         dirty = False
 
         while True:
-            table = Table(title=f"Annotate {item_label}s ({len(cols)} items)", box=box.ROUNDED)
-            table.add_column("#", style="dim", justify="right", width=4)
+            table = Table(title=t("doc_editor.annotate_cols_title", label=item_label, count=len(cols)), box=box.ROUNDED)
+            table.add_column(t("doc_editor.col_num"), style="dim", justify="right", width=4)
             table.add_column(item_label, style="bold yellow")
-            table.add_column("Business Description / Comment", style="white")
+            table.add_column(t("doc_editor.col_comment"), style="white")
 
             for idx, col in enumerate(cols, 1):
                 comment = annotation.columns.get(col, "")
@@ -682,10 +691,10 @@ class DocEditor:
 
             console.print()
             console.print(table)
-            console.print(f"[dim]Enter #{item_label} to edit (1-{len(cols)}), or 0 to finish:[/dim]")
+            console.print(f"[dim]{t('doc_editor.cols_action_hint', label=item_label, total=len(cols))}[/dim]")
 
-            choice = self._prompt_text(f"Select {item_label} #: ")
-            if choice in ("0", "q", "", "done", "back"):
+            choice = self._prompt_text(t("doc_editor.select_col_prompt", label=item_label))
+            if choice in ("0", "q", "", "done", "back", "voltar"):
                 break
 
             try:
@@ -693,82 +702,76 @@ class DocEditor:
                 if 1 <= idx <= len(cols):
                     target_col = cols[idx - 1]
                     cur_comment = annotation.columns.get(target_col, "")
-                    console.print(f"\n[cyan]Editing {item_label}:[/cyan] [bold yellow]{target_col}[/bold yellow]")
+                    console.print(f"\n[cyan]{t('doc_editor.editing_col', label=item_label)}[/cyan] [bold yellow]{target_col}[/bold yellow]")
                     if cur_comment:
-                        console.print(f"[dim]Current comment: {cur_comment}[/dim]")
-                    new_comment = self._prompt_text(f"Description for {target_col}: ", default=cur_comment)
+                        console.print(f"[dim]{t('doc_editor.current_comment', comment=cur_comment)}[/dim]")
+                    new_comment = self._prompt_text(t("doc_editor.col_desc_prompt", name=target_col), default=cur_comment)
                     annotation.columns[target_col] = new_comment.strip()
                     dirty = True
-                    console.print(f"[green]✓ Updated {target_col}[/green]")
+                    console.print(f"[green]✓ {t('doc_editor.col_updated', name=target_col)}[/green]")
             except ValueError:
-                console.print("[yellow]Invalid option. Enter a valid number.[/yellow]")
+                console.print(f"[yellow]{t('doc_editor.invalid_number')}[/yellow]")
 
         return dirty
 
     def _edit_list_menu(self, title: str, items_list: list[str]) -> bool:
         dirty = False
         while True:
-            table = Table(title=f"Edit {title} ({len(items_list)} registered)", box=box.ROUNDED)
-            table.add_column("#", style="dim", justify="right", width=4)
-            table.add_column("Content", style="white")
+            table = Table(title=t("doc_editor.edit_list_title", title=title, count=len(items_list)), box=box.ROUNDED)
+            table.add_column(t("doc_editor.col_num"), style="dim", justify="right", width=4)
+            table.add_column(t("doc_editor.col_content"), style="white")
 
             for idx, item in enumerate(items_list, 1):
                 table.add_row(str(idx), item)
 
             if not items_list:
-                table.add_row("-", "[dim italic]No entries yet[/dim italic]")
+                table.add_row("-", f"[dim italic]{t('doc_editor.no_entries_yet')}[/dim italic]")
 
             console.print()
             console.print(table)
-            console.print(
-                "[bold white]Actions:[/bold white] "
-                "[bold cyan][+] Add new[/bold cyan] • "
-                "[bold yellow][#] Edit existing[/bold yellow] • "
-                "[bold red][d#] Delete (e.g. d1)[/bold red] • "
-                "[bold green][0] Finish[/bold green]"
-            )
+            console.print(f"[bold white]{t('doc_editor.list_actions')}[/bold white]")
 
-            choice = self._prompt_text("Action: ").strip()
-            if choice in ("0", "q", "", "done", "back"):
+            choice = self._prompt_text(t("doc_editor.action_prompt")).strip()
+            if choice in ("0", "q", "", "done", "back", "voltar"):
                 break
 
             if choice in ("+", "add", "novo"):
-                new_item = self._prompt_text("Enter new item: ").strip()
+                new_item = self._prompt_text(t("doc_editor.enter_new_item")).strip()
                 if new_item:
                     items_list.append(new_item)
                     dirty = True
-                    console.print(f"[green]✓ Added item #{len(items_list)}[/green]")
+                    console.print(f"[green]✓ {t('doc_editor.added_item', num=len(items_list))}[/green]")
             elif choice.lower().startswith("d") and choice[1:].isdigit():
                 idx_to_del = int(choice[1:])
                 if 1 <= idx_to_del <= len(items_list):
                     removed = items_list.pop(idx_to_del - 1)
                     dirty = True
-                    console.print(f"[red]✓ Removed: {removed}[/red]")
+                    console.print(f"[red]✓ {t('doc_editor.removed_item', item=removed)}[/red]")
             elif choice.isdigit():
                 idx = int(choice)
                 if 1 <= idx <= len(items_list):
                     cur_val = items_list[idx - 1]
-                    console.print(f"[dim]Current: {cur_val}[/dim]")
-                    edited = self._prompt_text("New value: ", default=cur_val).strip()
+                    console.print(f"[dim]{t('doc_editor.current_item', val=cur_val)}[/dim]")
+                    edited = self._prompt_text(t("doc_editor.new_value_prompt"), default=cur_val).strip()
                     if edited:
                         items_list[idx - 1] = edited
                         dirty = True
-                        console.print(f"[green]✓ Updated item #{idx}[/green]")
+                        console.print(f"[green]✓ {t('doc_editor.updated_item', num=idx)}[/green]")
 
         return dirty
 
     def _edit_tags_menu(self, annotation: ObjectAnnotation) -> bool:
         current_tags = ", ".join(annotation.tags) if annotation.tags else ""
-        console.print("\n[bold cyan]Edit Tags / Functional Domain:[/bold cyan]")
+        console.print(f"\n[bold cyan]{t('doc_editor.edit_tags_title')}[/bold cyan]")
         if current_tags:
-            console.print(f"[dim]Current tags: {current_tags}[/dim]")
-        console.print("[dim](Enter tags separated by commas, e.g.: Core, Financeiro, Faturamento)[/dim]")
+            console.print(f"[dim]{t('doc_editor.current_tags', tags=current_tags)}[/dim]")
+        console.print(f"[dim]{t('doc_editor.tags_hint')}[/dim]")
 
-        new_tags_raw = self._prompt_text("Tags: ", default=current_tags)
-        parsed = [t.strip() for t in new_tags_raw.split(",") if t.strip()]
+        new_tags_raw = self._prompt_text(t("doc_editor.tags_prompt"), default=current_tags)
+        parsed = [t_item.strip() for t_item in new_tags_raw.split(",") if t_item.strip()]
         if parsed != annotation.tags:
             annotation.tags = parsed
-            console.print(f"[green]✓ Tags updated: {', '.join(parsed)}[/green]")
+            console.print(f"[green]✓ {t('doc_editor.tags_updated', tags=', '.join(parsed))}[/green]")
             return True
         return False
 
@@ -792,7 +795,7 @@ class DocEditor:
         console.print(
             Panel(
                 syntax,
-                title=f"[bold green]✓ Successfully Saved Annotation to {ann_file.name}[/bold green]",
+                title=f"[bold green]✓ {t('doc_editor.saved_success', filename=ann_file.name)}[/bold green]",
                 subtitle=sub_text,
                 border_style="green",
             )
@@ -815,9 +818,9 @@ class DocEditor:
                 transient=False,
             ) as progress:
                 desc = (
-                    f"Compiling [bold yellow]{target_obj_up}[/bold yellow]..."
+                    t("doc_editor.recompile_single", obj=target_obj_up)
                     if target_obj_up
-                    else f"Compiling [bold yellow]{schema.schema_name}[/bold yellow]..."
+                    else t("doc_editor.recompile_schema", schema=schema.schema_name)
                 )
                 comp_task = progress.add_task(desc, total=total_objs or 1)
 
@@ -827,7 +830,7 @@ class DocEditor:
                         comp_task,
                         completed=current,
                         total=total or 1,
-                        description=f"Compiling [bold yellow]{name}[/bold yellow] [[bold cyan]{pct}%[/bold cyan]] [dim]│ {cat}[/dim]",
+                        description=t("doc_editor.compiling_progress", name=name, pct=pct, cat=cat),
                     )
 
                 gen_md, gen_ann = write_schema_docs(
@@ -842,9 +845,9 @@ class DocEditor:
                 )
 
             if target_obj_up:
-                msg = f"[bold green]✓ Documentation updated:[/bold green] [cyan]{target_obj_up}.md[/cyan] recompiled in [bold cyan]{self.config.docPath}[/bold cyan]\n"
+                msg = f"[bold green]✓ {t('doc_editor.docs_updated_single', obj=target_obj_up, path=self.config.docPath)}[/bold green]\n"
             else:
-                msg = f"[bold green]✓ Documentation updated:[/bold green] [cyan]{len(gen_md)}[/cyan] Markdowns recompiled in [bold cyan]{self.config.docPath}[/bold cyan]\n"
+                msg = f"[bold green]✓ {t('doc_editor.docs_updated_multi', count=len(gen_md), path=self.config.docPath)}[/bold green]\n"
             console.print(msg)
         except Exception as exc:
-            console.print(f"[yellow]! Warning while recompiling docs:[/yellow] {exc}")
+            console.print(f"[yellow]! {t('doc_editor.recompile_warning', error=exc)}[/yellow]")

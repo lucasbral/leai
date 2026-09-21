@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from leai.config import ConfigError, LeaiConfig, load_config
+from leai.i18n import t
 
 
 def _troubleshoot_oracle(err_msg: str) -> list[str]:
@@ -16,17 +17,15 @@ def _troubleshoot_oracle(err_msg: str) -> list[str]:
     tips = []
     err_upper = err_msg.upper()
     if "ORA-01017" in err_upper or "INVALID USERNAME/PASSWORD" in err_upper:
-        tips.append("Verifique as credenciais no leai.yml ou .env (DB_USER e DB_PASS).")
+        tips.append(t("doctor.oracle_troubleshoot_creds"))
     elif "ORA-12170" in err_upper or "CONNECT TIMEOUT" in err_upper or "TIMED OUT" in err_upper:
-        tips.append(
-            "Tempo limite de conexão esgotado. Verifique se o host e a porta (1521) estão acessíveis da sua rede/VM (firewall/VPN)."
-        )
+        tips.append(t("doctor.oracle_troubleshoot_timeout"))
     elif "ORA-12541" in err_upper or "NO LISTENER" in err_upper:
-        tips.append("O Listener do Oracle não está respondendo na porta configurada (padrão: 1521).")
+        tips.append(t("doctor.oracle_troubleshoot_listener"))
     elif "ORA-12514" in err_upper or "LISTENER DOES NOT CURRENTLY KNOW OF SERVICE" in err_upper:
-        tips.append("O nome do serviço Oracle (DB_SERVICE ou SID) não foi reconhecido pelo Listener.")
+        tips.append(t("doctor.oracle_troubleshoot_service"))
     else:
-        tips.append("Confira a sintaxe da DSN: oracle://${DB_USER}:${DB_PASS}@${DB_HOST}:1521/${DB_SERVICE}")
+        tips.append(t("doctor.oracle_troubleshoot_syntax"))
     return tips
 
 
@@ -35,19 +34,19 @@ def _troubleshoot_seaweedfs(err_msg: str, endpoint: str, bucket: str) -> list[st
     tips = []
     err_upper = err_msg.upper()
     if "COULD NOT CONNECT" in err_upper or "CONNECTION REFUSED" in err_upper or "TIMED OUT" in err_upper:
-        tips.append(f"Não foi possível conectar ao endpoint: '{endpoint}'.")
+        tips.append(t("doctor.seaweed_troubleshoot_connect", endpoint=endpoint))
         if endpoint.startswith("https://"):
-            tips.append("Dica: Se o SeaweedFS rodar internamente sem certificado SSL, tente trocar para 'http://' no endpoint_url.")
-        tips.append("Dica: Verifique se a porta do SeaweedFS S3 está correta (ex: porta 8333 padrão, ou 9000).")
-        tips.append("Dica: Teste a resolução de DNS na VM: 'ping s3-host' ou adicione o IP no '/etc/hosts'.")
+            tips.append(t("doctor.seaweed_troubleshoot_ssl_hint"))
+        tips.append(t("doctor.seaweed_troubleshoot_port"))
+        tips.append(t("doctor.seaweed_troubleshoot_dns"))
     elif "SSL" in err_upper or "CERTIFICATE" in err_upper:
-        tips.append("Erro de validação do certificado SSL. Se for certificado interno/autoassinado, use 'http://' ou adicione a CA na VM.")
+        tips.append(t("doctor.seaweed_troubleshoot_ssl"))
     elif "ACCESSDENIED" in err_upper or "INVALIDACCESSKEYID" in err_upper or "SIGNATUREDOESNOTMATCH" in err_upper:
-        tips.append("Credenciais de acesso S3 recusadas. Verifique 'access_key' e 'secret_key' no leai.yml ou .env.")
+        tips.append(t("doctor.seaweed_troubleshoot_auth"))
     elif "NOSUCHBUCKET" in err_upper:
-        tips.append(f"O bucket '{bucket}' não existe. Habilite 'auto_create_bucket: true' no leai.yml para criá-lo automaticamente.")
+        tips.append(t("doctor.seaweed_troubleshoot_bucket", bucket=bucket))
     else:
-        tips.append("Verifique as configurações em 'storage.seaweedfs' no leai.yml.")
+        tips.append(t("doctor.seaweed_troubleshoot_generic"))
     return tips
 
 
@@ -56,12 +55,12 @@ def _troubleshoot_ai(err_msg: str, provider: str) -> list[str]:
     tips = []
     prov_lower = provider.lower()
     if prov_lower == "ollama":
-        tips.append("Certifique-se de que o daemon do Ollama está rodando ('ollama serve' ou 'systemctl status ollama').")
-        tips.append("Verifique se o modelo está baixado via 'ollama list' ou baixe com 'ollama pull <modelo>'.")
+        tips.append(t("doctor.ai_troubleshoot_ollama_daemon"))
+        tips.append(t("doctor.ai_troubleshoot_ollama_model"))
     elif prov_lower in ("openai", "gemini", "anthropic", "deepseek", "qwen"):
-        tips.append(f"Verifique se a chave de API ({prov_lower.upper()}_API_KEY) está configurada e é válida.")
+        tips.append(t("doctor.ai_troubleshoot_api_key", provider=prov_lower.upper()))
     elif prov_lower == "local":
-        tips.append("Verifique se o servidor de inferência local (LM Studio / vLLM / LocalAI) está ativo na URL configurada.")
+        tips.append(t("doctor.ai_troubleshoot_local"))
     return tips
 
 
@@ -75,8 +74,8 @@ def run_diagnostics(
         True if all critical checks passed without fatal errors, False otherwise.
     """
     out = console or Console()
-    out.print("\n[bold cyan]✦ Diagnóstico de Ambiente LEAI (doctor)[/bold cyan]")
-    out.print("[dim]Verificando configurações ativas, conectividade e subsistemas...[/dim]\n")
+    out.print(f"\n[bold cyan]{t('doctor.title')}[/bold cyan]")
+    out.print(f"[dim]{t('doctor.subtitle')}[/dim]\n")
 
     has_errors = False
     has_warnings = False
@@ -87,21 +86,21 @@ def run_diagnostics(
     try:
         if isinstance(config, LeaiConfig):
             cfg = config
-            out.print("[green]✓ Configuração:[/green] [bold]Instância carregada em memória[/bold]")
+            out.print(t("doctor.cfg_memory"))
         else:
             cfg = load_config(config)
-            out.print("[green]✓ Configuração:[/green] [bold]Arquivo validado com sucesso[/bold]")
+            out.print(t("doctor.cfg_file"))
 
-        schemas_str = ", ".join(cfg.schemas) if cfg.schemas else "Nenhum"
-        all_mode = " (Modo ALL schemas)" if cfg.is_all_schemas else ""
-        out.print(f"  [dim]• Schemas configurados:[/dim] [cyan]{schemas_str}[/cyan]{all_mode}")
-        out.print(f"  [dim]• Idioma ativo:[/dim] [cyan]{cfg.language}[/cyan]")
+        schemas_str = ", ".join(cfg.schemas) if cfg.schemas else t("doctor.none_schemas")
+        all_mode = t("doctor.all_mode") if cfg.is_all_schemas else ""
+        out.print(f"  [dim]• {t('doctor.schemas_configured')}[/dim] [cyan]{schemas_str}[/cyan]{all_mode}")
+        out.print(f"  [dim]• {t('doctor.active_language')}[/dim] [cyan]{cfg.language}[/cyan]")
     except ConfigError as exc:
-        out.print(f"[red]✗ Erro Crítico na Configuração:[/red] {exc}")
-        out.print("  [yellow]💡 Dica: Execute 'leai init' para criar um novo arquivo leai.yml válido.[/yellow]\n")
+        out.print(t("doctor.cfg_error", error=exc))
+        out.print(t("doctor.cfg_init_hint"))
         return False
     except Exception as exc:
-        out.print(f"[red]✗ Falha inesperada ao ler configuração:[/red] {exc}\n")
+        out.print(t("doctor.cfg_unexpected", error=exc))
         return False
 
     out.print()
@@ -122,18 +121,18 @@ def run_diagnostics(
             row = cur.fetchone()
             ver_str = row[0] if row else "Oracle Database"
             conn.close()
-            out.print("[green]✓ Banco de Dados Oracle:[/green] [bold]Conexão bem-sucedida![/bold]")
-            out.print(f"  [dim]• Versão:[/dim] [cyan]{ver_str}[/cyan]")
+            out.print(t("doctor.oracle_success"))
+            out.print(f"  [dim]• {t('doctor.oracle_version')}[/dim] [cyan]{ver_str}[/cyan]")
         except Exception as exc:
             has_errors = True
             err_str = str(exc).strip()
-            out.print("[red]✗ Banco de Dados Oracle:[/red] [bold red]Falha na conexão[/bold red]")
-            out.print(f"  [red]Erro:[/red] [white]{err_str}[/white]")
+            out.print(t("doctor.oracle_failed"))
+            out.print(f"  [red]{t('doctor.oracle_error_label')}[/red] [white]{err_str}[/white]")
             for tip in _troubleshoot_oracle(err_str):
-                out.print(f"  [yellow]💡 Dica:[/yellow] {tip}")
+                out.print(f"  [yellow]{t('doctor.oracle_tip_label')}[/yellow] {tip}")
     else:
         has_warnings = True
-        out.print("[yellow]! Banco de Dados Oracle:[/yellow] [dim]DSN não configurado (modo offline / documentação local)[/dim]")
+        out.print(t("doctor.oracle_offline"))
 
     out.print()
 
@@ -145,18 +144,16 @@ def run_diagnostics(
         from leai.ai import get_llm_client
 
         client = get_llm_client(cfg)
-        out.print(
-            f"[green]✓ Motor de IA ([bold yellow]{provider.upper()}[/bold yellow]):[/green] [bold]Cliente inicializado com sucesso[/bold]"
-        )
-        out.print(f"  [dim]• Modelo ativo:[/dim] [cyan]{client.model}[/cyan]")
-        out.print(f"  [dim]• Timeout:[/dim] [cyan]{cfg.ai.timeout}s[/cyan] | [dim]Temperatura:[/dim] [cyan]{cfg.ai.temperature}[/cyan]")
+        out.print(t("doctor.ai_client_success", provider=provider.upper()))
+        out.print(f"  [dim]• {t('doctor.ai_active_model')}[/dim] [cyan]{client.model}[/cyan]")
+        out.print(f"  [dim]• {t('doctor.ai_timeout_label')}[/dim] [cyan]{cfg.ai.timeout}s[/cyan] | [dim]{t('doctor.ai_temperature_label')}[/dim] [cyan]{cfg.ai.temperature}[/cyan]")
     except Exception as exc:
         has_warnings = True
         err_str = str(exc).strip()
-        out.print(f"[yellow]! Motor de IA ([bold]{provider.upper()}[/bold]):[/yellow] [bold yellow]Aviso na inicialização[/bold yellow]")
-        out.print(f"  [yellow]Detalhe:[/yellow] {err_str}")
+        out.print(t("doctor.ai_init_warning", provider=provider.upper()))
+        out.print(f"  [yellow]{t('doctor.ai_detail_label')}[/yellow] {err_str}")
         for tip in _troubleshoot_ai(err_str, provider):
-            out.print(f"  [dim]💡 Dica: {tip}[/dim]")
+            out.print(f"  [dim]{t('doctor.oracle_tip_label')} {tip}[/dim]")
 
     out.print()
 
@@ -172,28 +169,28 @@ def run_diagnostics(
             res = storage.test_connection()
             if res.get("success"):
                 objs = res.get("objects_found", 0)
-                out.print("[green]✓ Armazenamento S3 (SeaweedFS):[/green] [bold]Operacional[/bold]")
-                out.print(f"  [dim]• Endpoint:[/dim] [cyan]{sw_cfg.endpoint_url}[/cyan]")
-                out.print(f"  [dim]• Bucket:[/dim] [cyan]{sw_cfg.bucket}[/cyan] (Objetos detectados: [cyan]{objs}[/cyan])")
-                out.print(f"  [dim]• Modo No-Cache:[/dim] [cyan]{sw_cfg.no_cache}[/cyan]")
+                out.print(t("doctor.seaweed_success"))
+                out.print(f"  [dim]• {t('doctor.seaweed_endpoint')}[/dim] [cyan]{sw_cfg.endpoint_url}[/cyan]")
+                out.print(f"  [dim]• {t('doctor.seaweed_bucket')}[/dim] [cyan]{sw_cfg.bucket}[/cyan] ({t('doctor.seaweed_objects_found')} [cyan]{objs}[/cyan])")
+                out.print(f"  [dim]• {t('doctor.seaweed_nocache')}[/dim] [cyan]{sw_cfg.no_cache}[/cyan]")
             else:
                 has_errors = True
                 err_str = str(res.get("error", "Erro desconhecido")).strip()
-                out.print("[red]✗ Armazenamento S3 (SeaweedFS):[/red] [bold red]Falha na conexão[/bold red]")
-                out.print(f"  [dim]• Endpoint configurado:[/dim] [cyan]{sw_cfg.endpoint_url}[/cyan]")
-                out.print(f"  [dim]• Bucket:[/dim] [cyan]{sw_cfg.bucket}[/cyan]")
-                out.print(f"  [red]Erro:[/red] [white]{err_str}[/white]")
+                out.print(t("doctor.seaweed_failed"))
+                out.print(f"  [dim]• {t('doctor.seaweed_endpoint')}[/dim] [cyan]{sw_cfg.endpoint_url}[/cyan]")
+                out.print(f"  [dim]• {t('doctor.seaweed_bucket')}[/dim] [cyan]{sw_cfg.bucket}[/cyan]")
+                out.print(f"  [red]{t('doctor.oracle_error_label')}[/red] [white]{err_str}[/white]")
                 for tip in _troubleshoot_seaweedfs(err_str, sw_cfg.endpoint_url, sw_cfg.bucket):
-                    out.print(f"  [yellow]💡 Dica:[/yellow] {tip}")
+                    out.print(f"  [yellow]{t('doctor.oracle_tip_label')}[/yellow] {tip}")
         except Exception as exc:
             has_errors = True
             err_str = str(exc).strip()
-            out.print("[red]✗ Armazenamento S3 (SeaweedFS):[/red] [bold red]Falha ao testar serviço[/bold red]")
-            out.print(f"  [red]Erro:[/red] [white]{err_str}[/white]")
+            out.print(t("doctor.seaweed_test_error"))
+            out.print(f"  [red]{t('doctor.oracle_error_label')}[/red] [white]{err_str}[/white]")
             for tip in _troubleshoot_seaweedfs(err_str, sw_cfg.endpoint_url, sw_cfg.bucket):
-                out.print(f"  [yellow]💡 Dica:[/yellow] {tip}")
+                out.print(f"  [yellow]{t('doctor.oracle_tip_label')}[/yellow] {tip}")
     else:
-        out.print("[dim]• Armazenamento S3 (SeaweedFS): Desabilitado no leai.yml (usando apenas disco local)[/dim]")
+        out.print(t("doctor.seaweed_disabled"))
 
     out.print()
 
@@ -207,18 +204,18 @@ def run_diagnostics(
             git_info = get_git_status(fetch=False)
             if git_info.is_repo:
                 plat = git_info.platform_name
-                sync_desc = f"{git_info.behind} atrás do remoto" if git_info.behind > 0 else "sincronizado"
-                mod_desc = f"{len(git_info.modified_files)} arquivos alterados" if git_info.modified_files else "limpo"
-                out.print(f"[green]✓ Controle de Versão Git ({plat}):[/green] [bold]Ativo[/bold]")
+                sync_desc = t("doctor.git_behind_remote", count=git_info.behind) if git_info.behind > 0 else t("doctor.git_synced")
+                mod_desc = t("doctor.git_files_modified", count=len(git_info.modified_files)) if git_info.modified_files else t("doctor.git_clean")
+                out.print(t("doctor.git_active", platform=plat))
                 out.print(
-                    f"  [dim]• Branch:[/dim] [cyan]{git_info.branch}[/cyan] • [dim]Status:[/dim] [cyan]{sync_desc}[/cyan] • [dim]Modificados:[/dim] [cyan]{mod_desc}[/cyan]"
+                    f"  [dim]• {t('doctor.git_branch')}[/dim] [cyan]{git_info.branch}[/cyan] • [dim]{t('doctor.git_status')}[/dim] [cyan]{sync_desc}[/cyan] • [dim]{t('doctor.git_modified')}[/dim] [cyan]{mod_desc}[/cyan]"
                 )
             else:
-                out.print("[dim]• Controle de Versão Git: O diretório atual não é um repositório Git[/dim]")
+                out.print(t("doctor.git_not_repo"))
         except Exception as exc:
-            out.print(f"[dim]• Controle de Versão Git: Não disponível ({exc})[/dim]")
+            out.print(t("doctor.git_not_available", error=exc))
     else:
-        out.print("[dim]• Controle de Versão Git: Desabilitado na configuração[/dim]")
+        out.print(t("doctor.git_disabled"))
 
     out.print()
 
@@ -235,11 +232,11 @@ def run_diagnostics(
     doc_count = len(list(cfg.docPath.glob("**/*.md"))) if doc_exists else 0
     log_count = len(list(cfg.updates_log_path.glob("**/*.json"))) if log_exists else 0
 
-    out.print("[green]✓ Estrutura de Arquivos Locais:[/green]")
-    out.print(f"  [dim]• Raw Snapshots ({cfg.rawPath}):[/dim] [cyan]{raw_count}[/cyan] arquivos JSON")
-    out.print(f"  [dim]• Anotações ({cfg.annotationsPath}):[/dim] [cyan]{ann_count}[/cyan] arquivos YAML")
-    out.print(f"  [dim]• Documentação ({cfg.docPath}):[/dim] [cyan]{doc_count}[/cyan] arquivos Markdown")
-    out.print(f"  [dim]• Logs de Atualização ({cfg.updates_log_path}):[/dim] [cyan]{log_count}[/cyan] registros")
+    out.print(t("doctor.fs_title"))
+    out.print(f"  [dim]• {t('doctor.fs_raw', path=cfg.rawPath)}[/dim] [cyan]{t('doctor.fs_json_files', count=raw_count)}[/cyan]")
+    out.print(f"  [dim]• {t('doctor.fs_annotations', path=cfg.annotationsPath)}[/dim] [cyan]{t('doctor.fs_yaml_files', count=ann_count)}[/cyan]")
+    out.print(f"  [dim]• {t('doctor.fs_docs', path=cfg.docPath)}[/dim] [cyan]{t('doctor.fs_md_files', count=doc_count)}[/cyan]")
+    out.print(f"  [dim]• {t('doctor.fs_logs', path=cfg.updates_log_path)}[/dim] [cyan]{t('doctor.fs_records', count=log_count)}[/cyan]")
 
     # -------------------------------------------------------------------------
     # Summary
@@ -248,9 +245,8 @@ def run_diagnostics(
     if has_errors:
         out.print(
             Panel(
-                "[bold red]✗ O diagnóstico encontrou inconsistências ou falhas de conexão.[/bold red]\n"
-                "[dim]Verifique as mensagens de erro e as dicas acima para corrigir a configuração.[/dim]",
-                title="[bold red]Resultado do Diagnóstico[/bold red]",
+                t("doctor.summary_errors_body"),
+                title=t("doctor.summary_errors_title"),
                 box=ROUNDED,
                 border_style="red",
             )
@@ -259,9 +255,8 @@ def run_diagnostics(
     elif has_warnings:
         out.print(
             Panel(
-                "[bold yellow]! O ambiente está operacional, com alguns avisos leves ou serviços opcionais desligados.[/bold yellow]\n"
-                "[dim]LEAI está pronto para uso local ou operações offline.[/dim]",
-                title="[bold yellow]Resultado do Diagnóstico[/bold yellow]",
+                t("doctor.summary_warnings_body"),
+                title=t("doctor.summary_warnings_title"),
                 box=ROUNDED,
                 border_style="yellow",
             )
@@ -270,11 +265,11 @@ def run_diagnostics(
     else:
         out.print(
             Panel(
-                "[bold green]✓ Todos os subsistemas e conexões foram validados com 100% de sucesso![/bold green]\n"
-                "[dim]O LEAI está totalmente pronto para extração, chat e pipelines autônomos.[/dim]",
-                title="[bold green]Resultado do Diagnóstico[/bold green]",
+                t("doctor.summary_success_body"),
+                title=t("doctor.summary_success_title"),
                 box=ROUNDED,
                 border_style="green",
             )
         )
         return True
+

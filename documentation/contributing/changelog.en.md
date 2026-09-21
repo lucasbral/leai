@@ -2,6 +2,18 @@
 
 All notable changes to the **LEAI** project are documented here.
 
+## [0.3.14] — 2026
+
+### 🌐 Full Internationalization (DocEditor & Doctor)
+* **Complete Localization of TUI Documentation Studio (`doc_editor.py`):**
+  * Localized all object catalogs, pagination, live search filters, doc completeness meters, action menus (1-7 and 0), table headers, and interactive prompts for editing columns, routines, business rules, tags, and technical warnings.
+* **Complete Localization of Environment Diagnostics (`doctor.py`):**
+  * Fully translated subsystem diagnostic checks (Oracle, S3 SeaweedFS, Git, AI Providers), filesystem integrity summaries, and troubleshooting tips across Portuguese (`pt-BR`) and English (`en-US`).
+* **100% Translation Key Parity:**
+  * Strict 1:1 key parity verified between `pt-BR` and `en-US` locale dictionaries.
+
+---
+
 ## [0.3.12] — 2026
 
 ### 🛡️ Full SSE Streaming Resilience & Incremental Multi-Byte UTF-8 Decoding

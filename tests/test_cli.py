@@ -384,7 +384,10 @@ docPath: "{(base / "docs").as_posix()}"
             # Test doc command
             result_doc = self.runner.invoke(app, ["doc", "EMPLOYEES", "--config", str(cfg_file)], input="0\n")
             self.assertEqual(result_doc.exit_code, 0, msg=result_doc.output)
-            self.assertIn("LEAI Documentation Studio", result_doc.output)
+            self.assertTrue(
+                "Documentation Studio" in result_doc.output or "Studio de Documentação" in result_doc.output,
+                msg=f"Expected Studio title in output: {result_doc.output}",
+            )
 
     @patch("leai.cli.oracledb.connect")
     @patch("leai.cli.fetch_available_schemas")
