@@ -887,6 +887,7 @@ class TuiUnitTests(unittest.TestCase):
             cfg.rawPath = base / "raw"
             cfg.annotationsPath = base / "annotations"
             cfg.docPath = base / "docs"
+            cfg.updates_log_path = base / "logs" / "updates"
 
             session = InteractiveTUISession([self.schema], cfg, self.mock_client)
             session._run_update(["2h"])
@@ -897,6 +898,47 @@ class TuiUnitTests(unittest.TestCase):
             self.assertEqual(len(emp.columns), 2)
             self.assertTrue((base / "raw" / "HR" / "tables" / "NEW_TBL.json").exists())
             self.assertTrue((base / "annotations" / "HR" / "tables" / "NEW_TBL.yml").exists())
+            self.assertTrue((base / "logs" / "updates" / "latest.json").exists())
+            self.assertTrue((base / "logs" / "updates" / "latest.md").exists())
+
+    @patch("oracledb.connect")
+    @patch("leai.oracle.fetch_available_schemas", return_value=["HR"])
+    @patch("leai.oracle.fetch_schema_metadata")
+    @patch("leai.storage.SeaweedFSStorage.save_update_log")
+    @patch("leai.storage.SeaweedFSStorage.ensure_bucket_exists")
+    @patch("leai.storage.SeaweedFSStorage.sync_glossary")
+    @patch("leai.storage.SeaweedFSStorage.save_raw_schema")
+    def test_session_run_update_seaweedfs_audit_log(
+        self, mock_save_raw, mock_sync_gl, mock_ensure_bkt, mock_save_log, mock_fetch, mock_avail, mock_connect
+    ):
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
+
+        delta = SchemaMetadata(
+            schema_name="HR",
+            tables=[TableMeta(name="DELTA_TBL", columns=[ColumnMeta(name="ID", data_type="NUMBER", nullable=False)])],
+        )
+        mock_fetch.return_value = delta
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            cfg = self.config.model_copy()
+            cfg.dsn = "oracle://user:pass@localhost:1521/ORCL"
+            cfg.rawPath = base / "raw"
+            cfg.annotationsPath = base / "annotations"
+            cfg.docPath = base / "docs"
+            cfg.storage.seaweedfs.enabled = True
+            cfg.storage.seaweedfs.endpoint_url = "http://localhost:8333"
+            cfg.storage.seaweedfs.bucket = "leai-test"
+            cfg.storage.seaweedfs.no_cache = True
+
+            session = InteractiveTUISession([self.schema], cfg, self.mock_client)
+            session._run_update(["3d"])
+
+            mock_save_log.assert_called_once()
+            manifest_arg = mock_save_log.call_args[0][0]
+            self.assertIn("HR", manifest_arg["schemas"])
+            self.assertEqual(manifest_arg["total_modified_objects"], 1)
 
     def test_session_rule_slash_commands(self):
         with tempfile.TemporaryDirectory() as tmpdir:

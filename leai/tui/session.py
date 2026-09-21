@@ -1502,6 +1502,7 @@ class InteractiveTUISession:
         total_ann = 0
         total_md = 0
         total_modified = 0
+        schemas_modified_objects: dict[str, Any] = {}
 
         start_time = time.perf_counter()
         try:
@@ -1544,6 +1545,11 @@ class InteractiveTUISession:
                                     f"  [dim]• Schema [bold]{schema_name}[/bold]: no modifications in {time_desc} ({schema_dur:.1f}s).[/dim]"
                                 )
                                 continue
+
+                            from leai.updates_log import collect_modified_objects
+
+                            schemas_modified_objects[schema_name] = collect_modified_objects(schema_meta)
+                            total_modified += num_objs
 
                             console.print(
                                 f"  [green]✓[/green] Schema [bold yellow]{schema_name}[/bold yellow]: [bold green]{num_objs} modified object(s)[/bold green] found ({schema_dur:.1f}s)."
@@ -1631,6 +1637,40 @@ class InteractiveTUISession:
                 panel_lines.append(
                     f"[bold cyan]SeaweedFS S3:[/bold cyan] [bold green]{total_s3_uploaded}[/bold green] versioned • [dim]{total_s3_skipped} skipped[/dim] • Bucket: [bold]{update_cfg.storage.seaweedfs.bucket}[/bold]"
                 )
+
+            # 5. Generate and upload update audit log and manifest if enabled
+            should_log = getattr(update_cfg, "generate_update_log", True)
+            if should_log:
+                from leai.updates_log import build_update_manifest, render_update_markdown, save_update_log
+
+                sync_summary = {
+                    "s3_uploaded": total_s3_uploaded,
+                    "s3_skipped": total_s3_skipped,
+                    "annotations_synced": total_ann,
+                    "docs_compiled": total_md,
+                }
+                manifest = build_update_manifest(
+                    schemas_objects=schemas_modified_objects,
+                    time_window=time_desc,
+                    duration_seconds=elapsed,
+                    sync_summary=sync_summary,
+                )
+
+                if not is_no_cache:
+                    out_log_dir = getattr(update_cfg, "updates_log_path", Path("./logs/updates"))
+                    json_path, _, _, _ = save_update_log(manifest, out_log_dir)
+                    panel_lines.append(f"[bold]Update Audit Log:[/bold] {out_log_dir} ({json_path.name}, latest.json)")
+
+                if storage:
+                    try:
+                        md_content = render_update_markdown(manifest)
+                        storage.save_update_log(manifest, md_content)
+                        panel_lines.append(
+                            f"[bold cyan]SeaweedFS Audit Log:[/bold cyan] {update_cfg.storage.seaweedfs.bucket}/logs/updates/latest.json"
+                        )
+                    except Exception as exc:
+                        console.print(f"[yellow]Warning: Could not save update log to SeaweedFS: {exc}[/yellow]")
+
             panel_lines.append(f"[bold]Elapsed:[/bold] {elapsed:.2f}s • [dim]In-memory AI catalog refreshed.[/dim]")
 
             console.print(

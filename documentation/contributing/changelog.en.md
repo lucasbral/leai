@@ -2,6 +2,17 @@
 
 All notable changes to the **LEAI** project are documented here.
 
+## [0.3.15] — 2026
+
+### 📋 Audit Manifest Logs in TUI `/update` & Counter Fixes
+* **Automatic Audit Log Generation in TUI (`_run_update`):**
+  * The interactive `/update` command in the TUI now automatically builds update manifests (`latest.json`, `latest.md`, and `update_YYYYMMDD_HHMMSS.json`).
+  * Automatic upload of audit manifests to the SeaweedFS S3 bucket (`logs/updates/latest.json` and `latest.md`) as well as local disk `./logs/updates/` when not in remote-only mode.
+* **Modified Objects Summary Counter Fix:**
+  * Fixed accumulator count for `Modified Objects` in the final TUI update panel, ensuring exact reporting of modified database entities.
+
+---
+
 ## [0.3.14] — 2026
 
 ### 🌐 Full Internationalization (DocEditor & Doctor)

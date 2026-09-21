@@ -2,6 +2,17 @@
 
 Todas as alterações notáveis no projeto **LEAI** são documentadas nesta página.
 
+## [0.3.15] — 2026
+
+### 📋 Manifesto e Logs de Auditoria no TUI `/update` & Correção de Contadores
+* **Geração Automática de Logs de Auditoria no TUI (`_run_update`):**
+  * O comando `/update` executado no modo interativo TUI agora gera automaticamente os manifestos estruturados (`latest.json`, `latest.md` e `update_YYYYMMDD_HHMMSS.json`).
+  * Envio automático dos manifestos de auditoria para o bucket SeaweedFS S3 (`logs/updates/latest.json` e `latest.md`) e gravação local em `./logs/updates/` quando não em modo `remote-only`.
+* **Correção no Contador de Objetos Modificados do TUI:**
+  * Corrigida a contagem acumulativa de `Modified Objects` no painel de resumo final do `/update`, garantindo a exibição exata da quantidade de objetos alterados detectados.
+
+---
+
 ## [0.3.14] — 2026
 
 ### 🌐 Internacionalização Integral (DocEditor & Doctor)

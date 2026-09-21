@@ -18,6 +18,7 @@ leai.yml
 raw/
 docs/
 annotations/
+logs/
 .leai/
 .leai_sessions/
 *.log
