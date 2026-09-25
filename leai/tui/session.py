@@ -149,6 +149,11 @@ class InteractiveTUISession:
             """Inserts newline on Alt+Enter, Escape+Enter or Ctrl+J."""
             event.current_buffer.insert_text("\n")
 
+        @kb.add("enter")
+        def _(event):
+            """Submits the prompt."""
+            event.current_buffer.validate_and_handle()
+
         @kb.add("enter", filter=has_completions)
         def _(event):
             """Applies selected completion and adds trailing space without submitting the prompt."""
@@ -198,6 +203,7 @@ class InteractiveTUISession:
                     style=PT_STYLE,
                     auto_suggest=AutoSuggestFromHistory(),
                     complete_while_typing=True,
+                    multiline=True,
                     key_bindings=kb,
                 )
             except Exception:
@@ -210,6 +216,7 @@ class InteractiveTUISession:
                     style=PT_STYLE,
                     auto_suggest=AutoSuggestFromHistory(),
                     complete_while_typing=True,
+                    multiline=True,
                     key_bindings=kb,
                     input=DummyInput(),
                     output=DummyOutput(),
@@ -224,6 +231,7 @@ class InteractiveTUISession:
                 style=PT_STYLE,
                 auto_suggest=AutoSuggestFromHistory(),
                 complete_while_typing=True,
+                multiline=True,
                 key_bindings=kb,
                 input=DummyInput(),
                 output=DummyOutput(),
@@ -2698,16 +2706,7 @@ class InteractiveTUISession:
 
         # 1. Print User message in modern terminal format
         console.print()
-        console.print(
-            Panel(
-                f"[bold #cdd6f4]{user_input}[/bold #cdd6f4]",
-                title="[bold #89b4fa]👤 User[/bold #89b4fa]",
-                title_align="left",
-                border_style="#45475a",
-                box=box.ROUNDED,
-                padding=(0, 1),
-            )
-        )
+        console.print(f"\n[bold #89b4fa]User[/bold #89b4fa]\n[bold #cdd6f4]{user_input}[/bold #cdd6f4]")
 
         from leai.ai.directives import parse_prompt_tokens
 
@@ -2731,15 +2730,7 @@ class InteractiveTUISession:
                 dur_th = time.perf_counter() - thought_start_t
                 th_text = "".join(thought_chunks).strip()
                 if th_text and len(th_text) > 5:
-                    console.print(
-                        Panel(
-                            f"[dim italic #a6adc8]{th_text}[/dim italic #a6adc8]",
-                            title=f"[dim #b4befe]🧠 Raciocínio ({dur_th:.2f}s)[/dim #b4befe]",
-                            box=box.ROUNDED,
-                            border_style="#45475a",
-                            padding=(0, 1),
-                        )
-                    )
+                    console.print(f"[dim #b4befe]Raciocínio ({dur_th:.2f}s)[/dim #b4befe]\n[dim italic #a6adc8]{th_text}[/dim italic #a6adc8]\n")
                 thought_printed = True
                 thought_chunks.clear()
 
@@ -2803,15 +2794,7 @@ class InteractiveTUISession:
                 f"[yellow]{exc}[/yellow]\n\n"
                 f"[dim]{t('tui.ai_error_hint')}[/dim]"
             )
-            console.print(
-                Panel(
-                    err_msg,
-                    title=f"[bold red]{t('tui.ai_error_title')}[/bold red]",
-                    box=box.ROUNDED,
-                    border_style="red",
-                    padding=(0, 1),
-                )
-            )
+            console.print(f"[bold red]{t('tui.ai_error_title')}[/bold red]\n{err_msg}\n")
             return
 
         self.last_latency = time.perf_counter() - start_t
@@ -2823,15 +2806,7 @@ class InteractiveTUISession:
             dur_th = time.perf_counter() - thought_start_t
             th_text = "".join(thought_chunks).strip()
             if th_text and len(th_text) > 5:
-                console.print(
-                    Panel(
-                        f"[dim italic #a6adc8]{th_text}[/dim italic #a6adc8]",
-                        title=f"[dim #b4befe]🧠 Raciocínio ({dur_th:.2f}s)[/dim #b4befe]",
-                        box=box.ROUNDED,
-                        border_style="#45475a",
-                        padding=(0, 1),
-                    )
-                )
+                console.print(f"[dim #b4befe]Raciocínio ({dur_th:.2f}s)[/dim #b4befe]\n[dim italic #a6adc8]{th_text}[/dim italic #a6adc8]\n")
 
         # Record in Session Audit Logger
         turn_audit = self.audit_logger.record_turn(
