@@ -631,9 +631,7 @@ class InteractiveTUISession:
 
         if cmd in ("/provider", "/providers"):
             if len(parts) < 2:
-                console.print(
-                    t("tui.provider_active", provider=self.provider_name.upper(), model=self.client.model)
-                )
+                console.print(t("tui.provider_active", provider=self.provider_name.upper(), model=self.client.model))
                 console.print(t("tui.provider_usage"))
             else:
                 new_prov = parts[1].lower()
@@ -642,9 +640,7 @@ class InteractiveTUISession:
                     self.client = get_llm_client(self.config, provider_override=new_prov, model_override=new_model)
                     self.provider_name = new_prov
                     self.session.client = self.client
-                    console.print(
-                        t("tui.provider_switched", provider=new_prov.upper(), model=self.client.model)
-                    )
+                    console.print(t("tui.provider_switched", provider=new_prov.upper(), model=self.client.model))
                 except Exception as exc:
                     console.print(t("tui.provider_switch_failed", error=exc))
             return True
@@ -683,9 +679,7 @@ class InteractiveTUISession:
                     self.client = get_llm_client(self.config, provider_override=new_prov, model_override=new_model)
                     self.provider_name = new_prov
                     self.session.client = self.client
-                    console.print(
-                        t("tui.models_switched", provider=new_prov.upper(), model=self.client.model)
-                    )
+                    console.print(t("tui.models_switched", provider=new_prov.upper(), model=self.client.model))
                 except Exception as exc:
                     console.print(t("tui.provider_switch_failed", error=exc))
             return True
@@ -2730,7 +2724,9 @@ class InteractiveTUISession:
                 dur_th = time.perf_counter() - thought_start_t
                 th_text = "".join(thought_chunks).strip()
                 if th_text and len(th_text) > 5:
-                    console.print(f"[dim #b4befe]Raciocínio ({dur_th:.2f}s)[/dim #b4befe]\n[dim italic #a6adc8]{th_text}[/dim italic #a6adc8]\n")
+                    console.print(
+                        f"[dim #b4befe]Raciocínio ({dur_th:.2f}s)[/dim #b4befe]\n[dim italic #a6adc8]{th_text}[/dim italic #a6adc8]\n"
+                    )
                 thought_printed = True
                 thought_chunks.clear()
 
@@ -2806,7 +2802,9 @@ class InteractiveTUISession:
             dur_th = time.perf_counter() - thought_start_t
             th_text = "".join(thought_chunks).strip()
             if th_text and len(th_text) > 5:
-                console.print(f"[dim #b4befe]Raciocínio ({dur_th:.2f}s)[/dim #b4befe]\n[dim italic #a6adc8]{th_text}[/dim italic #a6adc8]\n")
+                console.print(
+                    f"[dim #b4befe]Raciocínio ({dur_th:.2f}s)[/dim #b4befe]\n[dim italic #a6adc8]{th_text}[/dim italic #a6adc8]\n"
+                )
 
         # Record in Session Audit Logger
         turn_audit = self.audit_logger.record_turn(
@@ -3004,7 +3002,9 @@ class InteractiveTUISession:
             table.add_row("Active Audit Log File", summary["log_file"])
 
             console.print()
-            console.print(Panel(table, title=f"[bold cyan]{t('tui.audit_session_title')}[/bold cyan]", box=box.ROUNDED, border_style="cyan"))
+            console.print(
+                Panel(table, title=f"[bold cyan]{t('tui.audit_session_title')}[/bold cyan]", box=box.ROUNDED, border_style="cyan")
+            )
 
             if summary["tool_usage_breakdown"]:
                 t_table = Table(show_header=True, header_style="bold cyan", box=box.ROUNDED)

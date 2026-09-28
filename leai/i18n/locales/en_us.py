@@ -564,4 +564,9 @@ MESSAGES: dict[str, str] = {
     "doctor.summary_warnings_body": "[bold yellow]! The environment is operational with mild warnings or optional services turned off.[/bold yellow]\n[dim]LEAI is ready for local use or offline operations.[/dim]",
     "doctor.summary_success_title": "[bold green]Diagnostics Result[/bold green]",
     "doctor.summary_success_body": "[bold green]✓ All subsystems and connections were validated with 100% success![/bold green]\n[dim]LEAI is fully ready for extraction, chat, and autonomous pipelines.[/dim]",
+    "doctor.wiki_title": "Wiki.js Integration",
+    "doctor.wiki_missing_credentials": "URL or Token is missing in configuration.",
+    "doctor.wiki_graphql_error": "GraphQL Error:",
+    "doctor.wiki_connected": "Connected successfully to Wiki.js API",
+    "doctor.wiki_failed": "Failed to connect to Wiki.js:",
 }

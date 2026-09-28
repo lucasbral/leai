@@ -116,7 +116,9 @@ class SessionAuditLogger:
         rag_c = rag_context if isinstance(rag_context, str) else ("" if rag_context is None else str(rag_context))
         msgs_l = messages if isinstance(messages, list) else []
         tools_l = tools_executed if isinstance(tools_executed, list) else []
-        entities_l = rag_entities if isinstance(rag_entities, list) else (list(rag_entities) if isinstance(rag_entities, (set, tuple)) else [])
+        entities_l = (
+            rag_entities if isinstance(rag_entities, list) else (list(rag_entities) if isinstance(rag_entities, (set, tuple)) else [])
+        )
         toks_n = tokens_used if isinstance(tokens_used, int) else 0
 
         record = TurnAuditRecord(

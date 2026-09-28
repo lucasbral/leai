@@ -411,7 +411,9 @@ class AIIntegrationTests(unittest.TestCase):
         from leai.ai.base import iter_sse_lines
 
         # Simulate raw byte chunks split across Portuguese accented characters and emojis
-        full_text = 'data: {"choices":[{"delta":{"content":"🎯 1. Regras de Negócio e PADRÃO para substituição com aspas duplas `<TABLE>`"}}\n\n'
+        full_text = (
+            'data: {"choices":[{"delta":{"content":"🎯 1. Regras de Negócio e PADRÃO para substituição com aspas duplas `<TABLE>`"}}\n\n'
+        )
         raw_bytes = full_text.encode("utf-8")
 
         # Split bytes into tiny 7-byte chunks (which will bisect multi-byte sequences)

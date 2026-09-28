@@ -5,7 +5,7 @@ import time
 from typing import Any, Callable
 
 from leai.ai.base import BaseLLMClient
-from leai.ai.tools import DATABASE_TOOLS_DEFINITIONS, execute_tool_call, summarize_tool_result
+from leai.ai.tools import execute_tool_call, get_active_tools, summarize_tool_result
 from leai.audit import ToolExecutionAudit
 from leai.config import LeaiConfig
 from leai.models import SchemaMetadata
@@ -136,7 +136,7 @@ class AgentExecutionEngine:
                 try:
                     res = self.client.stream_chat_with_tools(
                         working_messages,
-                        tools=DATABASE_TOOLS_DEFINITIONS,
+                        tools=get_active_tools(self.config),
                         system_prompt=sys_prompt,
                         tool_choice_mode=tool_mode,
                         on_token=on_token,
@@ -150,7 +150,7 @@ class AgentExecutionEngine:
             else:
                 content, tool_calls = self.client.generate_chat_with_tools(
                     working_messages,
-                    tools=DATABASE_TOOLS_DEFINITIONS,
+                    tools=get_active_tools(self.config),
                     system_prompt=sys_prompt,
                     tool_choice_mode=tool_mode,
                 )

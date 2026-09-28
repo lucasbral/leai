@@ -145,7 +145,9 @@ def process_inline_directives(
                 if trace_res.dependencies:
                     trace_dossier += "- **Connections Breakdown:**\n"
                     for d in trace_res.dependencies[:20]:
-                        trace_dossier += f"  • `{d.source_name}` ({d.source_type}) ➔ [{d.relation_type}] ➔ `{d.target_name}` ({d.target_type})"
+                        trace_dossier += (
+                            f"  • `{d.source_name}` ({d.source_type}) ➔ [{d.relation_type}] ➔ `{d.target_name}` ({d.target_type})"
+                        )
                         if d.details:
                             trace_dossier += f" ({d.details})"
                         trace_dossier += "\n"
@@ -182,10 +184,7 @@ def process_inline_directives(
             anti_p = tune_res.get("anti_patterns_detected", [])
             fts = tune_res.get("full_table_scan_warnings", [])
 
-            tune_dossier = (
-                f"### [DETERMINISTIC SQL TUNING DIAGNOSTIC]\n"
-                f"- **Anti-patterns Detected:** {len(anti_p)}\n"
-            )
+            tune_dossier = f"### [DETERMINISTIC SQL TUNING DIAGNOSTIC]\n- **Anti-patterns Detected:** {len(anti_p)}\n"
             for a in anti_p:
                 tune_dossier += f"  • [{a.get('type')}] on `{a.get('target')}`: {a.get('impact')} -> Rec: {a.get('recommendation')}\n"
             if fts:

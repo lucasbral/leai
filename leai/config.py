@@ -81,6 +81,13 @@ class StorageConfig(BaseModel):
     seaweedfs: SeaweedFSConfig = Field(default_factory=SeaweedFSConfig)
 
 
+class WikiJsConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    enabled: bool = False
+    url: str = ""
+    token: str = ""
+
+
 class LeaiConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -96,6 +103,7 @@ class LeaiConfig(BaseModel):
     ai: AIConfig = Field(default_factory=AIConfig)
     git: GitConfig = Field(default_factory=GitConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
+    wiki: WikiJsConfig = Field(default_factory=WikiJsConfig)
     update_check: bool = True
     language: str = Field(default="en-US", description="Interface language: 'en-US' or 'pt-BR'")
     updates_log_path: Path = Field(default=Path("./logs/updates"))

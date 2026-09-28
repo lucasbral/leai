@@ -146,7 +146,9 @@ def run_diagnostics(
         client = get_llm_client(cfg)
         out.print(t("doctor.ai_client_success", provider=provider.upper()))
         out.print(f"  [dim]• {t('doctor.ai_active_model')}[/dim] [cyan]{client.model}[/cyan]")
-        out.print(f"  [dim]• {t('doctor.ai_timeout_label')}[/dim] [cyan]{cfg.ai.timeout}s[/cyan] | [dim]{t('doctor.ai_temperature_label')}[/dim] [cyan]{cfg.ai.temperature}[/cyan]")
+        out.print(
+            f"  [dim]• {t('doctor.ai_timeout_label')}[/dim] [cyan]{cfg.ai.timeout}s[/cyan] | [dim]{t('doctor.ai_temperature_label')}[/dim] [cyan]{cfg.ai.temperature}[/cyan]"
+        )
     except Exception as exc:
         has_warnings = True
         err_str = str(exc).strip()
@@ -171,7 +173,9 @@ def run_diagnostics(
                 objs = res.get("objects_found", 0)
                 out.print(t("doctor.seaweed_success"))
                 out.print(f"  [dim]• {t('doctor.seaweed_endpoint')}[/dim] [cyan]{sw_cfg.endpoint_url}[/cyan]")
-                out.print(f"  [dim]• {t('doctor.seaweed_bucket')}[/dim] [cyan]{sw_cfg.bucket}[/cyan] ({t('doctor.seaweed_objects_found')} [cyan]{objs}[/cyan])")
+                out.print(
+                    f"  [dim]• {t('doctor.seaweed_bucket')}[/dim] [cyan]{sw_cfg.bucket}[/cyan] ({t('doctor.seaweed_objects_found')} [cyan]{objs}[/cyan])"
+                )
                 out.print(f"  [dim]• {t('doctor.seaweed_nocache')}[/dim] [cyan]{sw_cfg.no_cache}[/cyan]")
             else:
                 has_errors = True
@@ -205,7 +209,9 @@ def run_diagnostics(
             if git_info.is_repo:
                 plat = git_info.platform_name
                 sync_desc = t("doctor.git_behind_remote", count=git_info.behind) if git_info.behind > 0 else t("doctor.git_synced")
-                mod_desc = t("doctor.git_files_modified", count=len(git_info.modified_files)) if git_info.modified_files else t("doctor.git_clean")
+                mod_desc = (
+                    t("doctor.git_files_modified", count=len(git_info.modified_files)) if git_info.modified_files else t("doctor.git_clean")
+                )
                 out.print(t("doctor.git_active", platform=plat))
                 out.print(
                     f"  [dim]• {t('doctor.git_branch')}[/dim] [cyan]{git_info.branch}[/cyan] • [dim]{t('doctor.git_status')}[/dim] [cyan]{sync_desc}[/cyan] • [dim]{t('doctor.git_modified')}[/dim] [cyan]{mod_desc}[/cyan]"
@@ -234,12 +240,42 @@ def run_diagnostics(
 
     out.print(t("doctor.fs_title"))
     out.print(f"  [dim]• {t('doctor.fs_raw', path=cfg.rawPath)}[/dim] [cyan]{t('doctor.fs_json_files', count=raw_count)}[/cyan]")
-    out.print(f"  [dim]• {t('doctor.fs_annotations', path=cfg.annotationsPath)}[/dim] [cyan]{t('doctor.fs_yaml_files', count=ann_count)}[/cyan]")
+    out.print(
+        f"  [dim]• {t('doctor.fs_annotations', path=cfg.annotationsPath)}[/dim] [cyan]{t('doctor.fs_yaml_files', count=ann_count)}[/cyan]"
+    )
     out.print(f"  [dim]• {t('doctor.fs_docs', path=cfg.docPath)}[/dim] [cyan]{t('doctor.fs_md_files', count=doc_count)}[/cyan]")
     out.print(f"  [dim]• {t('doctor.fs_logs', path=cfg.updates_log_path)}[/dim] [cyan]{t('doctor.fs_records', count=log_count)}[/cyan]")
 
     # -------------------------------------------------------------------------
+    # 7. External Wiki Integration (Wiki.js)
+    # -------------------------------------------------------------------------
+    if getattr(cfg, "wiki", None) and cfg.wiki.enabled:
+        out.print(f"[bold yellow]{t('doctor.wiki_title')}[/bold yellow]")
+        if not cfg.wiki.url or not cfg.wiki.token:
+            out.print(f"  [red]✗ {t('doctor.wiki_missing_credentials')}[/red]")
+            has_warnings = True
+        else:
+            try:
+                import requests
+
+                endpoint = f"{cfg.wiki.url.rstrip('/')}/graphql"
+                headers = {"Authorization": f"Bearer {cfg.wiki.token}"}
+                res = requests.post(endpoint, json={"query": "{ __typename }"}, headers=headers, timeout=5)
+                res.raise_for_status()
+                data = res.json()
+                if "errors" in data:
+                    out.print(f"  [red]✗ {t('doctor.wiki_graphql_error')} {data['errors'][0].get('message', 'Unknown')}[/red]")
+                    has_warnings = True
+                else:
+                    out.print(f"  [green]✓ {t('doctor.wiki_connected')}[/green]")
+            except Exception as e:
+                out.print(f"  [red]✗ {t('doctor.wiki_failed')} {e}[/red]")
+                has_warnings = True
+        out.print()
+
+    # -------------------------------------------------------------------------
     # Summary
+
     # -------------------------------------------------------------------------
     out.print()
     if has_errors:
@@ -272,4 +308,3 @@ def run_diagnostics(
             )
         )
         return True
-

@@ -2149,6 +2149,41 @@ def explain_and_tune_sql(
     }
 
 
+WIKI_TOOLS_DEFINITIONS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_wiki",
+            "description": "Searches the corporate Wiki.js for documentation pages. Returns a list of matching page paths and titles.",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string", "description": "Search keyword or concept."}},
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_wiki_page",
+            "description": "Fetches the full Markdown content of a specific Wiki.js page using its path.",
+            "parameters": {
+                "type": "object",
+                "properties": {"path": {"type": "string", "description": "The exact path of the wiki page."}},
+                "required": ["path"],
+            },
+        },
+    },
+]
+
+
+def get_active_tools(config) -> list[dict]:
+    tools = list(DATABASE_TOOLS_DEFINITIONS)
+    if config and getattr(config, "wiki", None) and config.wiki.enabled:
+        tools.extend(WIKI_TOOLS_DEFINITIONS)
+    return tools
+
+
 def execute_tool_call(
     tool_name: str,
     arguments: dict[str, Any],
@@ -2162,7 +2197,17 @@ def execute_tool_call(
         for k in ("table_name", "object_name", "package_name", "subprogram_name"):
             if k in arguments and isinstance(arguments[k], str):
                 arguments[k] = arguments[k].lstrip("@").strip()
-        if tool_name == "delegate_to_specialist":
+        if tool_name == "search_wiki":
+            from leai.wiki import search_pages
+
+            res = search_pages(config.wiki, arguments.get("query", ""))
+            return json.dumps(res, ensure_ascii=False)
+        elif tool_name == "read_wiki_page":
+            from leai.wiki import get_page_content
+
+            content = get_page_content(config.wiki, arguments.get("path", ""))
+            return content
+        elif tool_name == "delegate_to_specialist":
             from leai.ai.subagents import execute_subagent
 
             role = arguments.get("specialist_role") or arguments.get("role", "")
@@ -2255,7 +2300,12 @@ def summarize_tool_result(tool_name: str, arguments: dict[str, Any], raw_output:
             top_term = results[0].get("term", "")
             return f"{count} term{'s' if count > 1 else ''} found ('{top_term}')"
 
-        if tool_name == "delegate_to_specialist":
+        if tool_name == "search_wiki":
+            results = data if isinstance(data, list) else []
+            return f"{len(results)} wiki pages found"
+        elif tool_name == "read_wiki_page":
+            return f"Read wiki page '{arguments.get('path', '')}'"
+        elif tool_name == "delegate_to_specialist":
             role = arguments.get("specialist_role", "specialist")
             return f"Specialist @{role} completed analysis"
 

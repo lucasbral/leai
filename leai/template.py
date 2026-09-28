@@ -145,8 +145,18 @@ storage:
     annotations_prefix: "annotations"
     auto_create_bucket: true
 
+
 # ------------------------------------------------------------------------------
-# 9. INTERFACE LANGUAGE & LOCALIZATION
+# 9. EXTERNAL WIKI INTEGRATION (Wiki.js)
+# ------------------------------------------------------------------------------
+# Allows the AI to query external documentation via GraphQL.
+wiki:
+  enabled: false
+  url: "https://wiki.example.com"
+  token: ""
+
+# ------------------------------------------------------------------------------
+# 10. INTERFACE LANGUAGE & LOCALIZATION
 # ------------------------------------------------------------------------------
 # Interface language for CLI, TUI, and documentation prompts: "en-US" or "pt-BR"
 language: "en-US"
@@ -295,8 +305,18 @@ storage:
     annotations_prefix: "annotations"
     auto_create_bucket: true
 
+
 # ------------------------------------------------------------------------------
-# 9. IDIOMA DA INTERFACE & LOCALIZAÇÃO
+# 9. INTEGRAÇÃO COM WIKI EXTERNA (Wiki.js)
+# ------------------------------------------------------------------------------
+# Permite à IA consultar documentação externa paralela via GraphQL.
+wiki:
+  enabled: false
+  url: "https://wiki.suaempresa.com"
+  token: ""
+
+# ------------------------------------------------------------------------------
+# 10. IDIOMA DA INTERFACE & LOCALIZAÇÃO
 # ------------------------------------------------------------------------------
 # Idioma da interface para CLI, TUI e prompts: "en-US" ou "pt-BR"
 language: "pt-BR"
@@ -675,14 +695,44 @@ def render_canonical_config(data: dict, lang: str = "pt-BR") -> str:
         ]
     )
 
-    # Section 9: Language
+    wiki_data = data.get("wiki", {})
+    if is_pt:
+        lines.extend(
+            [
+                "",
+                "# ------------------------------------------------------------------------------",
+                "# 9. INTEGRAÇÃO COM WIKI EXTERNA (Wiki.js)",
+                "# ------------------------------------------------------------------------------",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "",
+                "# ------------------------------------------------------------------------------",
+                "# 9. EXTERNAL WIKI INTEGRATION (Wiki.js)",
+                "# ------------------------------------------------------------------------------",
+            ]
+        )
+
+    lines.extend(
+        [
+            "wiki:",
+            f"  enabled: {'true' if wiki_data.get('enabled', False) else 'false'}",
+            f"  url: {_format_yaml_value(wiki_data.get('url', 'https://wiki.example.com'))}",
+            f"  token: {_format_yaml_value(wiki_data.get('token', ''))}",
+        ]
+    )
+
+    # Section 10: Language
+
     lang_val = data.get("language", "pt-BR" if is_pt else "en-US")
     if is_pt:
         lines.extend(
             [
                 "",
                 "# ------------------------------------------------------------------------------",
-                "# 9. IDIOMA DA INTERFACE & LOCALIZAÇÃO",
+                "# 10. IDIOMA DA INTERFACE & LOCALIZAÇÃO",
                 "# ------------------------------------------------------------------------------",
                 f"language: {_format_yaml_value(lang_val)}",
             ]
@@ -692,7 +742,7 @@ def render_canonical_config(data: dict, lang: str = "pt-BR") -> str:
             [
                 "",
                 "# ------------------------------------------------------------------------------",
-                "# 9. INTERFACE LANGUAGE & LOCALIZATION",
+                "# 10. INTERFACE LANGUAGE & LOCALIZATION",
                 "# ------------------------------------------------------------------------------",
                 f"language: {_format_yaml_value(lang_val)}",
             ]

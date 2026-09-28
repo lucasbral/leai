@@ -481,6 +481,25 @@ Collaborative metadata persistence using S3-compatible Object Storage:
 
 ---
 
+
+## 📘 External Wiki Integration (Wiki.js)
+
+LEAI can seamlessly integrate with a corporate **Wiki.js** instance to enrich the AI context during chat sessions. Instead of relying solely on database schemas, the agent can autonomously query your external Wiki using the GraphQL API.
+
+To enable this feature, configure the wiki section in your leai.yml:
+
+`yaml
+wiki:
+  enabled: true
+  url: "https://wiki.example.com"
+  token: ""
+`
+
+When enabled, the AI gains access to the search_wiki and 
+ead_wiki_page tools. When asked a business question, it can proactively search your wiki, read relevant markdown pages, and combine that knowledge with the database structure to provide a comprehensive answer.
+
+---
+
 ## 📁 Directory Structure
 
 ```text

@@ -619,7 +619,9 @@ class DocEditor:
         if hasattr(obj_meta, "primary_keys") and obj_meta.primary_keys:
             table.add_row(t("doc_editor.field_primary_keys"), f"[bold yellow]{', '.join(obj_meta.primary_keys)}[/bold yellow]")
         if hasattr(obj_meta, "foreign_keys") and obj_meta.foreign_keys:
-            table.add_row(t("doc_editor.field_foreign_keys"), f"[cyan]{t('doc_editor.fk_constraints', count=len(obj_meta.foreign_keys))}[/cyan]")
+            table.add_row(
+                t("doc_editor.field_foreign_keys"), f"[cyan]{t('doc_editor.fk_constraints', count=len(obj_meta.foreign_keys))}[/cyan]"
+            )
         if hasattr(obj_meta, "last_ddl_time") and obj_meta.last_ddl_time:
             table.add_row(t("doc_editor.field_last_ddl_time"), f"[dim]{obj_meta.last_ddl_time}[/dim]")
 
@@ -628,7 +630,10 @@ class DocEditor:
         if cols:
             item_label = t("doc_editor.label_subprograms") if category == "packages" else t("doc_editor.label_columns")
             table.add_row(t("doc_editor.field_annotated", label=item_label), f"[bold green]{cols_annotated}[/bold green] / {len(cols)}")
-        table.add_row(t("doc_editor.field_business_rules"), f"[bold green]{rules_count}[/bold green] {t('doc_editor.rules_registered_count', count='').strip()}")
+        table.add_row(
+            t("doc_editor.field_business_rules"),
+            f"[bold green]{rules_count}[/bold green] {t('doc_editor.rules_registered_count', count='').strip()}",
+        )
         table.add_row(t("doc_editor.field_tags_domain"), tags_str)
 
         menu_text = (

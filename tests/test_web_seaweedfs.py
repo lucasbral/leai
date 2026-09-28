@@ -152,4 +152,3 @@ def test_sync_schema_annotations_no_cache(tmp_path: Path):
     # Storage should have been called to save the annotation and index
     assert mock_storage.save_annotation.called
     assert mock_storage.save_annotations_index.called
-
