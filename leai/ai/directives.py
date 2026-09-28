@@ -77,6 +77,312 @@ def parse_prompt_tokens(text: str) -> PromptTokens:
     return PromptTokens(objects=clean_objs, rules=clean_rules, directives=clean_dirs, wiki_mentions=clean_wikis)
 
 
+SQL_RESERVED_KEYWORDS = {
+    "SELECT",
+    "FROM",
+    "WHERE",
+    "INSERT",
+    "INTO",
+    "UPDATE",
+    "DELETE",
+    "SET",
+    "JOIN",
+    "LEFT",
+    "RIGHT",
+    "INNER",
+    "OUTER",
+    "FULL",
+    "ON",
+    "AND",
+    "OR",
+    "NOT",
+    "IN",
+    "IS",
+    "NULL",
+    "EXISTS",
+    "BETWEEN",
+    "LIKE",
+    "GROUP",
+    "BY",
+    "ORDER",
+    "HAVING",
+    "UNION",
+    "ALL",
+    "CASE",
+    "WHEN",
+    "THEN",
+    "ELSE",
+    "END",
+    "AS",
+    "DISTINCT",
+    "DUAL",
+    "VARCHAR2",
+    "VARCHAR",
+    "NUMBER",
+    "DATE",
+    "TIMESTAMP",
+    "CLOB",
+    "BLOB",
+    "CHAR",
+    "BOOLEAN",
+    "RAW",
+    "INTEGER",
+    "ROWID",
+    "CREATE",
+    "ALTER",
+    "DROP",
+    "TRUNCATE",
+    "TABLE",
+    "VIEW",
+    "PROCEDURE",
+    "FUNCTION",
+    "PACKAGE",
+    "BODY",
+    "TRIGGER",
+    "SEQUENCE",
+    "INDEX",
+    "SYNONYM",
+    "BEGIN",
+    "COMMIT",
+    "ROLLBACK",
+    "SAVEPOINT",
+    "EXCEPTION",
+    "OTHERS",
+    "DECLARE",
+    "RETURN",
+    "RETURNING",
+    "BULK",
+    "COLLECT",
+    "FORALL",
+    "LOOP",
+    "WHILE",
+    "IF",
+    "ELSIF",
+    "TRUE",
+    "FALSE",
+    "EXECUTE",
+    "IMMEDIATE",
+    "PRAGMA",
+    "DEFAULT",
+    "COUNT",
+    "SUM",
+    "AVG",
+    "MIN",
+    "MAX",
+    "NVL",
+    "COALESCE",
+    "SUBSTR",
+    "TO_CHAR",
+    "TO_DATE",
+    "TO_NUMBER",
+    "ADD_MONTHS",
+    "MONTHS_BETWEEN",
+    "TRUNC",
+    "ROUND",
+    "SYSDATE",
+    "SYSTIMESTAMP",
+    "ROWNUM",
+    "LEVEL",
+    "CONNECT",
+    "PRIOR",
+    "START",
+    "WITH",
+    "GRANT",
+    "REVOKE",
+    "PRIMARY",
+    "KEY",
+    "FOREIGN",
+    "REFERENCES",
+    "CHECK",
+    "UNIQUE",
+    "CONSTRAINT",
+}
+
+
+def extract_oracle_references_from_text(
+    text: str,
+    schemas: list[SchemaMetadata],
+) -> list[str]:
+    """Scans text/Markdown content and identifies Oracle database objects present in the loaded schemas."""
+    if not text or not schemas:
+        return []
+
+    # Build lookup index of canonical object names: uppercase_name -> canonical_name
+    # and qualified names: "SCHEMA.OBJECT" -> canonical_name
+    catalog_names: dict[str, str] = {}
+    for s in schemas:
+        s_name = (s.schema_name or "").upper()
+        for t in s.tables:
+            catalog_names[t.name.upper()] = t.name
+            if s_name:
+                catalog_names[f"{s_name}.{t.name.upper()}"] = f"{s_name}.{t.name}"
+        for v in s.views:
+            catalog_names[v.name.upper()] = v.name
+            if s_name:
+                catalog_names[f"{s_name}.{v.name.upper()}"] = f"{s_name}.{v.name}"
+        for mv in s.mviews:
+            catalog_names[mv.name.upper()] = mv.name
+            if s_name:
+                catalog_names[f"{s_name}.{mv.name.upper()}"] = f"{s_name}.{mv.name}"
+        for c in s.code_objects:
+            catalog_names[c.name.upper()] = c.name
+            if s_name:
+                catalog_names[f"{s_name}.{c.name.upper()}"] = f"{s_name}.{c.name}"
+            for sub in c.subprograms:
+                full_sub = f"{c.name.upper()}.{sub.name.upper()}"
+                catalog_names[full_sub] = f"{c.name}.{sub.name}"
+                if s_name:
+                    catalog_names[f"{s_name}.{full_sub}"] = f"{s_name}.{c.name}.{sub.name}"
+        for syn in s.synonyms:
+            catalog_names[syn.name.upper()] = syn.name
+            if s_name:
+                catalog_names[f"{s_name}.{syn.name.upper()}"] = f"{s_name}.{syn.name}"
+
+    scores: dict[str, int] = {}
+
+    def add_match(name_key: str, weight: int = 1) -> None:
+        key = name_key.upper()
+        if key in catalog_names:
+            canon = catalog_names[key]
+            scores[canon] = scores.get(canon, 0) + weight
+        elif "." in key:
+            parts = key.split(".", 1)
+            target = parts[1]
+            if target in catalog_names:
+                canon = catalog_names[target]
+                scores[canon] = scores.get(canon, 0) + weight
+
+    # 1. Matches inside code blocks or backticks: `OBJECT_NAME` or `SCHEMA.OBJECT`
+    for m in re.findall(r"`([A-Za-z0-9_$.]+)`", text):
+        add_match(m, weight=3)
+
+    # 2. Matches after SQL keywords: FROM, JOIN, INTO, UPDATE, TABLE, VIEW, etc.
+    for m in re.findall(
+        r"(?i)\b(?:FROM|JOIN|INTO|UPDATE|TABLE|VIEW|PROCEDURE|FUNCTION|PACKAGE|TRIGGER)\s+([A-Za-z0-9_$.]+)\b",
+        text,
+    ):
+        add_match(m, weight=3)
+
+    # 3. Matches qualified names in text: SCHEMA.OBJECT or PACKAGE.SUBPROGRAM
+    for m in re.findall(r"\b([A-Za-z0-9_$]+\.[A-Za-z0-9_$]+)\b", text):
+        add_match(m, weight=2)
+
+    # 4. General identifier scanning across words
+    for word in re.findall(r"\b([A-Za-z0-9_$]{3,})\b", text):
+        w_up = word.upper()
+        if w_up not in SQL_RESERVED_KEYWORDS:
+            add_match(w_up, weight=1)
+
+    # Sort objects by score descending, then alphabetically
+    sorted_objs = sorted(scores.keys(), key=lambda o: (-scores[o], o))
+    return sorted_objs
+
+
+def generate_cross_linked_metadata(
+    object_names: list[str],
+    schemas: list[SchemaMetadata],
+    max_detailed: int = 6,
+) -> str:
+    """Generates concise schema metadata (columns, data types, PKs, FKs, comments) for cross-linked Oracle objects."""
+    if not object_names or not schemas:
+        return ""
+
+    detailed_objs = object_names[:max_detailed]
+    other_objs = object_names[max_detailed:]
+
+    lines: list[str] = []
+    lines.append("#### 🔗 [CROSS-LINKED ORACLE DATABASE METADATA]")
+    lines.append("The following Oracle database objects are referenced in the documentation above. Verified schema structure:")
+
+    for obj_name in detailed_objs:
+        target_schema: str | None = None
+        target_name = obj_name.upper()
+        if "." in target_name:
+            parts = target_name.split(".", 1)
+            target_schema = parts[0]
+            target_name = parts[1]
+
+        found = False
+        # Search in tables
+        for s in schemas:
+            s_name = (s.schema_name or "").upper()
+            if target_schema and s_name != target_schema:
+                continue
+            for t in s.tables:
+                if t.name.upper() == target_name:
+                    found = True
+                    pk_set = set(t.primary_keys or [])
+                    fk_map = {fk.column.upper(): f"{fk.referenced_table}({fk.referenced_column})" for fk in (t.foreign_keys or [])}
+                    lines.append(f"\n- **TABLE `{s_name}.{t.name}`**" + (f" — *{t.comment}*" if t.comment else ""))
+                    if t.primary_keys:
+                        lines.append(f"  - **PK:** `{', '.join(t.primary_keys)}`")
+                    if t.foreign_keys:
+                        fk_descs = [f"`{fk.column}` ➔ `{fk.referenced_table}({fk.referenced_column})`" for fk in t.foreign_keys]
+                        lines.append(f"  - **FKs:** {', '.join(fk_descs)}")
+
+                    # Compact columns
+                    col_items = []
+                    for c in t.columns:
+                        flags = []
+                        if c.name.upper() in pk_set:
+                            flags.append("PK")
+                        if c.name.upper() in fk_map:
+                            flags.append(f"FK➔{fk_map[c.name.upper()]}")
+                        if not c.nullable and "PK" not in flags:
+                            flags.append("NOT NULL")
+                        flag_str = f" [{', '.join(flags)}]" if flags else ""
+                        doc_str = f" — {c.comment}" if c.comment else ""
+                        col_items.append(f"`{c.name}` ({c.data_type}{flag_str}){doc_str}")
+                    if col_items:
+                        lines.append(f"  - **Columns:** {'; '.join(col_items)}")
+                    break
+            if found:
+                break
+
+        if found:
+            continue
+
+        # Search in views
+        for s in schemas:
+            s_name = (s.schema_name or "").upper()
+            if target_schema and s_name != target_schema:
+                continue
+            for v in s.views:
+                if v.name.upper() == target_name:
+                    found = True
+                    lines.append(f"\n- **VIEW `{s_name}.{v.name}`**" + (f" — *{v.comment}*" if v.comment else ""))
+                    if v.columns:
+                        col_items = [f"`{c.name}` ({c.data_type})" for c in v.columns]
+                        lines.append(f"  - **Columns:** {'; '.join(col_items)}")
+                    break
+            if found:
+                break
+
+        if found:
+            continue
+
+        # Search in code objects
+        for s in schemas:
+            s_name = (s.schema_name or "").upper()
+            if target_schema and s_name != target_schema:
+                continue
+            for co in s.code_objects:
+                if co.name.upper() == target_name:
+                    found = True
+                    lines.append(f"\n- **{co.object_type} `{s_name}.{co.name}`**" + (f" — *{co.comment}*" if co.comment else ""))
+                    if co.subprograms:
+                        sub_items = [f"`{sub.name}` ({sub.subprogram_type})" for sub in co.subprograms]
+                        lines.append(f"  - **Subprograms:** {', '.join(sub_items)}")
+                    break
+            if found:
+                break
+
+    if other_objs:
+        lines.append(f"\n- *Outros objetos identificados no documento:* {', '.join([f'`{o}`' for o in other_objs])}")
+
+    return "\n".join(lines)
+
+
 def process_inline_directives(
     prompt: str,
     schemas: list[SchemaMetadata],
@@ -322,10 +628,23 @@ def process_inline_directives(
             try:
                 page_content = get_page_content(config.wiki, w_path)
                 if page_content and page_content.strip() and page_content != "Page not found.":
-                    precomputed_parts.append(
-                        f"### [EXTERNAL WIKI DOCUMENTATION: {w_path}]\n**Source Path:** `{w_path}`\n**Content:**\n{page_content}"
-                    )
-                    badges.append(f"📄 [@wiki:{w_path}] Documentação da Wiki injetada")
+                    wiki_block = f"### [EXTERNAL WIKI DOCUMENTATION: {w_path}]\n**Source Path:** `{w_path}`\n**Content:**\n{page_content}"
+
+                    # Cross-Linking: Extract and enrich with referenced Oracle Database objects
+                    db_refs = extract_oracle_references_from_text(page_content, schemas)
+                    if db_refs:
+                        cross_meta = generate_cross_linked_metadata(db_refs, schemas, max_detailed=6)
+                        if cross_meta:
+                            wiki_block += f"\n\n{cross_meta}"
+                        top_display = ", ".join(db_refs[:4])
+                        suffix = f" (+{len(db_refs) - 4})" if len(db_refs) > 4 else ""
+                        badges.append(
+                            f"🔗 [@wiki:{w_path}] Cross-linking: {len(db_refs)} objetos do banco vinculados ({top_display}{suffix})"
+                        )
+                    else:
+                        badges.append(f"📄 [@wiki:{w_path}] Documentação da Wiki injetada")
+
+                    precomputed_parts.append(wiki_block)
                 else:
                     badges.append(f"⚠️ [@wiki:{w_path}] Página não encontrada na Wiki")
             except Exception as exc:

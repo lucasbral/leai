@@ -700,6 +700,25 @@ Depois de executar essas pesquisas, analisaremos os resultados."""
         self.assertEqual("".join(captured_tokens), "A tabela EVENTO_FUNC possui a coluna NUMFUNC.")
         self.assertEqual(client.call_count, 2)
 
+    def test_execute_tool_call_read_wiki_page_with_cross_linking(self):
+        from unittest.mock import patch
+
+        from leai.config import WikiJsConfig
+
+        self.cfg.wiki = WikiJsConfig(enabled=True, url="https://wiki.pe.gov.br", token="fake_token")
+        wiki_md = "# Processo Folha\nUtiliza a tabela `EVENTO_FUNC` para cálculo."
+
+        with patch("leai.wiki.get_page_content", return_value=wiki_md):
+            res = execute_tool_call(
+                tool_name="read_wiki_page",
+                arguments={"path": "rh/folha"},
+                schemas=self.schemas,
+                config=self.cfg,
+            )
+            self.assertIn("# Processo Folha", res)
+            self.assertIn("CROSS-LINKED ORACLE DATABASE METADATA", res)
+            self.assertIn("TABLE `C_ERGON.EVENTO_FUNC`", res)
+
 
 if __name__ == "__main__":
     unittest.main()

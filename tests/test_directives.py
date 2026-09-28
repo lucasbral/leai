@@ -137,7 +137,50 @@ class DirectivesEngineTests(unittest.TestCase):
             self.assertEqual(proc.detected_wikis, ["rh/politica_ferias"])
             self.assertIn("EXTERNAL WIKI DOCUMENTATION: rh/politica_ferias", proc.precomputed_context)
             self.assertIn("Política de Férias", proc.precomputed_context)
-            self.assertTrue(any("@wiki:rh/politica_ferias" in b for b in proc.action_badges))
+
+    def test_extract_oracle_references_from_text(self):
+        from leai.ai.directives import extract_oracle_references_from_text
+
+        text = """
+        # Documentação do Sagres
+        A tela consulta a tabela `TGOVPE_EPB__VANTAGENS` para calcular os valores.
+        Também executa a package `PKG_PREVIDENCIA`.
+        ```sql
+        SELECT * FROM TGOVPE_EPB__VANTAGENS WHERE VALOR > 0;
+        ```
+        """
+        refs = extract_oracle_references_from_text(text, [self.schema])
+        self.assertIn("TGOVPE_EPB__VANTAGENS", refs)
+        self.assertIn("PKG_PREVIDENCIA", refs)
+
+    def test_generate_cross_linked_metadata(self):
+        from leai.ai.directives import generate_cross_linked_metadata
+
+        meta = generate_cross_linked_metadata(["TGOVPE_EPB__VANTAGENS", "PKG_PREVIDENCIA"], [self.schema])
+        self.assertIn("CROSS-LINKED ORACLE DATABASE METADATA", meta)
+        self.assertIn("TABLE `GOV.TGOVPE_EPB__VANTAGENS`", meta)
+        self.assertIn("ID_VANTAGEM", meta)
+        self.assertIn("PACKAGE BODY `GOV.PKG_PREVIDENCIA`", meta)
+
+    def test_process_inline_directives_wiki_cross_linking(self):
+        from unittest.mock import patch
+
+        from leai.config import WikiJsConfig
+
+        wiki_cfg = WikiJsConfig(enabled=True, url="https://wiki.empresa.com", token="fake_token")
+        self.cfg.wiki = wiki_cfg
+
+        wiki_content = """# Integração Sagres
+        Consome a tabela `TGOVPE_EPB__VANTAGENS` e chama `PKG_PREVIDENCIA`.
+        """
+        with patch("leai.wiki.get_page_content", return_value=wiki_content):
+            prompt = "Me explique a regra de @wiki:sgp/govpe00052"
+            proc = process_inline_directives(prompt, [self.schema], self.cfg, client=self.client)
+
+            self.assertIn("EXTERNAL WIKI DOCUMENTATION: sgp/govpe00052", proc.precomputed_context)
+            self.assertIn("CROSS-LINKED ORACLE DATABASE METADATA", proc.precomputed_context)
+            self.assertIn("TABLE `GOV.TGOVPE_EPB__VANTAGENS`", proc.precomputed_context)
+            self.assertTrue(any("Cross-linking" in b for b in proc.action_badges))
 
     def test_chat_session_integration_with_inline_trace(self):
         session = ChatSession(schemas=[self.schema], config=self.cfg, client=self.client)

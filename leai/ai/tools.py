@@ -2203,9 +2203,16 @@ def execute_tool_call(
             res = search_pages(config.wiki, arguments.get("query", ""))
             return json.dumps(res, ensure_ascii=False)
         elif tool_name == "read_wiki_page":
+            from leai.ai.directives import extract_oracle_references_from_text, generate_cross_linked_metadata
             from leai.wiki import get_page_content
 
             content = get_page_content(config.wiki, arguments.get("path", ""))
+            if content and content != "Page not found." and schemas:
+                db_refs = extract_oracle_references_from_text(content, schemas)
+                if db_refs:
+                    cross_meta = generate_cross_linked_metadata(db_refs, schemas, max_detailed=6)
+                    if cross_meta:
+                        content += f"\n\n{cross_meta}"
             return content
         elif tool_name == "delegate_to_specialist":
             from leai.ai.subagents import execute_subagent
