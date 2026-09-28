@@ -114,6 +114,31 @@ class DirectivesEngineTests(unittest.TestCase):
         self.assertIn("SPECIALIST PERSONA: PL/SQL ANALYST", proc.system_overlay)
         self.assertIn("SPECIALIST PERSONA: DOCUMENTATION ANNOTATOR", proc.system_overlay)
 
+    def test_parse_prompt_tokens_with_wiki_mention(self):
+        prompt = "Como a @TB_CLIENTES se relaciona com @wiki:rh/politica_ferias e @wiki:vendas_manual?"
+        tokens = parse_prompt_tokens(prompt)
+
+        self.assertEqual(tokens.objects, ["TB_CLIENTES"])
+        self.assertEqual(tokens.wiki_mentions, ["rh/politica_ferias", "vendas_manual"])
+        self.assertNotIn("WIKI", tokens.objects)
+
+    def test_process_inline_directives_wiki_injection(self):
+        from unittest.mock import patch
+
+        from leai.config import WikiJsConfig
+
+        wiki_cfg = WikiJsConfig(enabled=True, url="https://wiki.empresa.com", token="fake_token")
+        self.cfg.wiki = wiki_cfg
+
+        with patch("leai.wiki.get_page_content", return_value="# Política de Férias\nRegras de 30 dias."):
+            prompt = "Avalie @TB_FUNCIONARIOS de acordo com @wiki:rh/politica_ferias"
+            proc = process_inline_directives(prompt, [self.schema], self.cfg, client=self.client)
+
+            self.assertEqual(proc.detected_wikis, ["rh/politica_ferias"])
+            self.assertIn("EXTERNAL WIKI DOCUMENTATION: rh/politica_ferias", proc.precomputed_context)
+            self.assertIn("Política de Férias", proc.precomputed_context)
+            self.assertTrue(any("@wiki:rh/politica_ferias" in b for b in proc.action_badges))
+
     def test_chat_session_integration_with_inline_trace(self):
         session = ChatSession(schemas=[self.schema], config=self.cfg, client=self.client)
         reply, detected = session.send("me explique @TGOVPE_EPB__VANTAGENS /trace")

@@ -5,7 +5,7 @@ import urllib.error
 from unittest.mock import MagicMock, patch
 
 from leai.config import WikiJsConfig
-from leai.wiki import execute_graphql, get_page_content, search_pages
+from leai.wiki import execute_graphql, get_page_content, list_pages, search_pages
 
 
 class TestWikiJsIntegration(unittest.TestCase):
@@ -83,6 +83,27 @@ class TestWikiJsIntegration(unittest.TestCase):
         mock_execute.return_value = {"pages": {"search": {"results": []}}}
         results = search_pages(self.config, "Unknown")
         self.assertEqual(len(results), 0)
+
+    @patch("leai.wiki.execute_graphql")
+    def test_list_pages(self, mock_execute):
+        mock_execute.return_value = {
+            "pages": {
+                "list": [
+                    {"id": 1, "path": "rh/ferias", "title": "Política de Férias", "description": "Regras de férias"},
+                    {"id": 2, "path": "vendas/politica", "title": "Política de Vendas", "description": "Comissões"},
+                ]
+            }
+        }
+        pages = list_pages(self.config, refresh=True)
+        self.assertEqual(len(pages), 2)
+        self.assertEqual(pages[0]["path"], "rh/ferias")
+
+    @patch("leai.wiki.execute_graphql")
+    def test_list_pages_cached(self, mock_execute):
+        mock_execute.return_value = {"pages": {"list": [{"id": 1, "path": "rh/ferias", "title": "Política de Férias"}]}}
+        pages1 = list_pages(self.config, refresh=True)
+        self.assertEqual(len(pages1), 1)
+        mock_execute.assert_called_once()
 
     @patch("leai.wiki.execute_graphql")
     def test_get_page_content(self, mock_execute):

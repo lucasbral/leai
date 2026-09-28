@@ -1,12 +1,17 @@
 import json
+import time
 import urllib.error
 import urllib.request
 from typing import Any
 
 from leai.config import WikiJsConfig
 
+# In-memory cache for page listing to ensure fast autocomplete in TUI
+_PAGES_CACHE: dict[str, Any] = {"data": [], "timestamp": 0.0, "url": ""}
+_CACHE_TTL_SECONDS: float = 60.0
 
-def execute_graphql(config: WikiJsConfig, query: str, variables: dict) -> dict[str, Any]:
+
+def execute_graphql(config: WikiJsConfig, query: str, variables: dict | None = None) -> dict[str, Any]:
     if not config.url or not config.token:
         raise ValueError("Wiki.js URL and Token must be configured.")
 
@@ -16,7 +21,7 @@ def execute_graphql(config: WikiJsConfig, query: str, variables: dict) -> dict[s
         "User-Agent": "LEAI-Copilot",
     }
     endpoint = f"{config.url.rstrip('/')}/graphql"
-    payload = json.dumps({"query": query, "variables": variables}).encode("utf-8")
+    payload = json.dumps({"query": query, "variables": variables or {}}).encode("utf-8")
 
     req = urllib.request.Request(endpoint, data=payload, headers=headers, method="POST")
     try:
@@ -31,6 +36,41 @@ def execute_graphql(config: WikiJsConfig, query: str, variables: dict) -> dict[s
     if "errors" in data:
         raise RuntimeError(f"GraphQL Error: {data['errors']}")
     return data.get("data", {})
+
+
+def list_pages(config: WikiJsConfig, refresh: bool = False) -> list[dict[str, Any]]:
+    """Fetches all pages in the Wiki.js instance with in-memory caching."""
+    global _PAGES_CACHE
+    now = time.time()
+    if (
+        not refresh
+        and _PAGES_CACHE["data"]
+        and _PAGES_CACHE.get("url") == config.url
+        and (now - _PAGES_CACHE["timestamp"]) < _CACHE_TTL_SECONDS
+    ):
+        return _PAGES_CACHE["data"]
+
+    gql = """
+    query {
+      pages {
+        list {
+          id
+          path
+          title
+          description
+        }
+      }
+    }
+    """
+    try:
+        data = execute_graphql(config, gql)
+        pages = data.get("pages", {}).get("list", [])
+        if isinstance(pages, list):
+            _PAGES_CACHE = {"data": pages, "timestamp": now, "url": config.url}
+            return pages
+    except Exception:
+        pass
+    return _PAGES_CACHE.get("data", [])
 
 
 def search_pages(config: WikiJsConfig, query: str) -> list[dict[str, Any]]:

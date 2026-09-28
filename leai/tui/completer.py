@@ -576,8 +576,40 @@ class LeaiCompleter(Completer):
 
             return
 
-        # 2. @Mentions within chat prompts (Database objects)
+        # 2a. @wiki: Mentions within chat prompts (Wiki.js pages)
+        if word_before_cursor.lower().startswith("@wiki:"):
+            wiki_query = word_before_cursor[6:].lower()
+            if self.config and getattr(self.config, "wiki", None) and self.config.wiki.enabled:
+                try:
+                    from leai.wiki import list_pages
+
+                    pages = list_pages(self.config.wiki)
+                    for page in pages:
+                        p_path = page.get("path", "")
+                        p_title = page.get("title", p_path)
+                        p_desc = page.get("description", "")
+                        if p_path.lower().startswith(wiki_query) or wiki_query in p_path.lower() or wiki_query in p_title.lower():
+                            meta = f"📄 {p_title} - {p_desc}" if p_desc else f"📄 {p_title}"
+                            yield Completion(
+                                text=f"@wiki:{p_path}",
+                                start_position=-len(word_before_cursor),
+                                display=f"@wiki:{p_path}",
+                                display_meta=meta[:70],
+                            )
+                except Exception:
+                    pass
+            return
+
+        # 2b. @Mentions within chat prompts (Database objects)
         if word_before_cursor.startswith("@"):
+            if self.config and getattr(self.config, "wiki", None) and self.config.wiki.enabled:
+                if "@wiki:".startswith(word_before_cursor.lower()):
+                    yield Completion(
+                        text="@wiki:",
+                        start_position=-len(word_before_cursor),
+                        display="@wiki:<caminho>",
+                        display_meta="📄 Consultar página da Wiki corporativa",
+                    )
             query = word_before_cursor[1:].upper()
             icon_map = {
                 "TABLE": "📋",

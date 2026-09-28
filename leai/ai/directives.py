@@ -15,6 +15,7 @@ class PromptTokens:
     objects: list[str] = field(default_factory=list)
     rules: list[str] = field(default_factory=list)
     directives: list[str] = field(default_factory=list)
+    wiki_mentions: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -26,15 +27,27 @@ class ProcessedDirectives:
     detected_objects: list[str]
     detected_rules: list[str]
     detected_directives: list[str]
+    detected_wikis: list[str] = field(default_factory=list)
     precomputed_context: str = ""
     system_overlay: str = ""
     action_badges: list[str] = field(default_factory=list)
 
 
 def parse_prompt_tokens(text: str) -> PromptTokens:
-    """Parses @objects, #rules, and /directives anywhere within the prompt string."""
+    """Parses @objects, #rules, /directives, and @wiki:pages anywhere within the prompt string."""
+    # Matches @wiki:path or @wiki:path/to/subpage
+    raw_wikis = re.findall(r"@wiki:([A-Za-z0-9_\-./]+)", text)
+    clean_wikis = []
+    for w in raw_wikis:
+        clean = w.rstrip(".,;!?").strip()
+        if clean and clean not in clean_wikis:
+            clean_wikis.append(clean)
+
+    # Strip @wiki:... before searching for general @objects
+    text_without_wikis = re.sub(r"@wiki:[A-Za-z0-9_\-./]+", "", text)
+
     # Matches @OBJECT or @SCHEMA.OBJECT
-    raw_objs = re.findall(r"@([A-Za-z0-9_$.]+)", text)
+    raw_objs = re.findall(r"@([A-Za-z0-9_$.]+)", text_without_wikis)
     # Matches #RULE_NAME
     raw_rules = re.findall(r"#([A-Za-z0-9_$.]+)", text)
     # Matches /directive anywhere preceded by whitespace or beginning of string
@@ -61,7 +74,7 @@ def parse_prompt_tokens(text: str) -> PromptTokens:
         if clean and clean not in clean_dirs:
             clean_dirs.append(clean)
 
-    return PromptTokens(objects=clean_objs, rules=clean_rules, directives=clean_dirs)
+    return PromptTokens(objects=clean_objs, rules=clean_rules, directives=clean_dirs, wiki_mentions=clean_wikis)
 
 
 def process_inline_directives(
@@ -301,12 +314,22 @@ def process_inline_directives(
         overlay_parts.append(f"### [SPECIALIST PERSONA: DOCUMENTATION ANNOTATOR]\n{DOC_ANNOTATOR_PROMPT}")
         badges.append("⚡ [/doc] Especialista em Documentação Semântica ativado")
 
-    # Impact Specialist
-    if any(d in tokens.directives for d in ("impact", "lineage_auditor")):
-        from leai.ai.subagents import LINEAGE_AUDITOR_PROMPT
+    # 6. Handle Explicit Wiki Mentions (@wiki:path/to/page)
+    if tokens.wiki_mentions and getattr(config, "wiki", None) and config.wiki.enabled:
+        from leai.wiki import get_page_content
 
-        overlay_parts.append(f"### [SPECIALIST PERSONA: IMPACT AUDITOR]\n{LINEAGE_AUDITOR_PROMPT}")
-        badges.append("⚡ [/impact] Especialista em Avaliação de Impacto e Risco ativado")
+        for w_path in tokens.wiki_mentions:
+            try:
+                page_content = get_page_content(config.wiki, w_path)
+                if page_content and page_content.strip() and page_content != "Page not found.":
+                    precomputed_parts.append(
+                        f"### [EXTERNAL WIKI DOCUMENTATION: {w_path}]\n**Source Path:** `{w_path}`\n**Content:**\n{page_content}"
+                    )
+                    badges.append(f"📄 [@wiki:{w_path}] Documentação da Wiki injetada")
+                else:
+                    badges.append(f"⚠️ [@wiki:{w_path}] Página não encontrada na Wiki")
+            except Exception as exc:
+                badges.append(f"⚠️ [@wiki:{w_path}] Erro ao buscar página: {exc}")
 
     return ProcessedDirectives(
         clean_prompt=clean_prompt,
@@ -314,6 +337,7 @@ def process_inline_directives(
         detected_objects=tokens.objects,
         detected_rules=tokens.rules,
         detected_directives=tokens.directives,
+        detected_wikis=tokens.wiki_mentions,
         precomputed_context="\n\n".join(precomputed_parts),
         system_overlay="\n\n".join(overlay_parts),
         action_badges=badges,
