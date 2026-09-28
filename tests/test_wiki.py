@@ -117,6 +117,20 @@ class TestWikiJsIntegration(unittest.TestCase):
         content = get_page_content(self.config, "/unknown")
         self.assertEqual(content, "Page not found.")
 
+    @patch("leai.wiki.execute_graphql")
+    def test_get_page_content_permission_denied(self, mock_execute):
+        mock_execute.return_value = {
+            "errors": [
+                {
+                    "message": "PageViewForbidden: You are not authorized to view this page.",
+                    "extensions": {"code": 6013, "exception": {"code": 6013}},
+                }
+            ]
+        }
+        content = get_page_content(self.config, "APLICAÇÕES_/SGP_/DOCUMENTAÇÕES_TELA/GOVPE00052")
+        self.assertIn("[Permissão Negada]", content)
+        self.assertIn("APLICAÇÕES_/SGP_/DOCUMENTAÇÕES_TELA/GOVPE00052", content)
+
 
 if __name__ == "__main__":
     unittest.main()

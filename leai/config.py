@@ -86,7 +86,8 @@ class WikiJsConfig(BaseModel):
     enabled: bool = False
     url: str = ""
     token: str = ""
-    locale: str = "pt"
+    locale: str = "en"
+    ssl_verify: bool = True
 
 
 class LeaiConfig(BaseModel):
@@ -252,6 +253,10 @@ def load_config(config_path: Path | str = Path("leai.yml")) -> LeaiConfig:
             wiki_dict["token"] = os.environ["LEAI_WIKI_TOKEN"]
         elif os.environ.get("WIKI_TOKEN") and not wiki_dict.get("token"):
             wiki_dict["token"] = os.environ["WIKI_TOKEN"]
+        if os.environ.get("LEAI_WIKI_LOCALE"):
+            wiki_dict["locale"] = os.environ["LEAI_WIKI_LOCALE"]
+        if os.environ.get("LEAI_WIKI_SSL_VERIFY"):
+            wiki_dict["ssl_verify"] = os.environ["LEAI_WIKI_SSL_VERIFY"].strip().lower() in ("true", "1", "yes")
 
     if os.environ.get("LEAI_NO_UPDATE_CHECK"):
         raw["update_check"] = os.environ["LEAI_NO_UPDATE_CHECK"].strip().lower() not in ("true", "1", "yes")

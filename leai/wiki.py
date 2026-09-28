@@ -1,5 +1,6 @@
 import json
 import re
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -29,9 +30,13 @@ def execute_graphql(
     endpoint = f"{config.url.rstrip('/')}/graphql"
     payload = json.dumps({"query": query, "variables": variables or {}}).encode("utf-8")
 
+    ssl_context = None
+    if not getattr(config, "ssl_verify", True):
+        ssl_context = ssl._create_unverified_context()
+
     req = urllib.request.Request(endpoint, data=payload, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10, context=ssl_context) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         error_body = exc.read().decode("utf-8", errors="replace")
@@ -41,7 +46,9 @@ def execute_graphql(
 
     if "errors" in data and raise_on_error:
         raise RuntimeError(f"GraphQL Error: {data['errors']}")
-    return data.get("data", {}) if "data" in data else data
+    if raise_on_error:
+        return data.get("data", {})
+    return data
 
 
 def list_pages(config: WikiJsConfig, refresh: bool = False) -> list[dict[str, Any]]:
@@ -71,7 +78,8 @@ def list_pages(config: WikiJsConfig, refresh: bool = False) -> list[dict[str, An
     """
     try:
         data = execute_graphql(config, gql, raise_on_error=False)
-        pages = data.get("pages", {}).get("list", [])
+        data_body = data.get("data", data) if isinstance(data, dict) else {}
+        pages = data_body.get("pages", {}).get("list", [])
         if isinstance(pages, list):
             _PAGES_CACHE = {"data": pages, "timestamp": now, "url": config.url}
             return pages
@@ -93,7 +101,8 @@ def search_pages(config: WikiJsConfig, query: str) -> list[dict[str, Any]]:
     """
     clean_q = query.strip()
     data = execute_graphql(config, gql, {"query": clean_q}, raise_on_error=False)
-    results = data.get("pages", {}).get("search", {}).get("results", []) if isinstance(data, dict) else []
+    data_body = data.get("data", data) if isinstance(data, dict) else {}
+    results = data_body.get("pages", {}).get("search", {}).get("results", []) if isinstance(data_body, dict) else []
 
     if results:
         return results
@@ -104,7 +113,8 @@ def search_pages(config: WikiJsConfig, query: str) -> list[dict[str, Any]]:
         fallback_query = " ".join(words)
         if fallback_query.lower() != clean_q.lower():
             data = execute_graphql(config, gql, {"query": fallback_query}, raise_on_error=False)
-            results = data.get("pages", {}).get("search", {}).get("results", []) if isinstance(data, dict) else []
+            data_body = data.get("data", data) if isinstance(data, dict) else {}
+            results = data_body.get("pages", {}).get("search", {}).get("results", []) if isinstance(data_body, dict) else []
             if results:
                 return results
 
@@ -124,7 +134,7 @@ def search_pages(config: WikiJsConfig, query: str) -> list[dict[str, Any]]:
 def get_page_content(config: WikiJsConfig, path: str, locale: str | None = None) -> str:
     """Fetches Markdown content of a Wiki.js page using singleByPath(path, locale)."""
     raw_path = path.strip().strip("/")
-    target_locale = locale or getattr(config, "locale", "pt") or "pt"
+    target_locale = locale or getattr(config, "locale", "en") or "en"
 
     # Check if path starts with locale prefix (e.g. "pt/aplicacoes/sgp" or "en/...")
     parts = raw_path.split("/", 1)
@@ -147,14 +157,26 @@ def get_page_content(config: WikiJsConfig, path: str, locale: str | None = None)
     """
 
     locales_to_try = [target_locale]
-    for alt_loc in ["pt", "pt-br", "en"]:
+    for alt_loc in ["en", "pt", "pt-br"]:
         if alt_loc not in locales_to_try:
             locales_to_try.append(alt_loc)
 
     for loc in locales_to_try:
         try:
             data = execute_graphql(config, gql, {"path": raw_path, "locale": loc}, raise_on_error=False)
-            page = data.get("pages", {}).get("singleByPath")
+            # Check for permission error
+            errors = data.get("errors", []) if isinstance(data, dict) else []
+            for err in errors:
+                msg = err.get("message", "")
+                code = err.get("extensions", {}).get("exception", {}).get("code")
+                if code == 6013 or "not authorized" in msg.lower() or "forbidden" in msg.lower():
+                    return (
+                        f"[Permissão Negada]: O token de API do Wiki.js não possui permissão de leitura "
+                        f"para o caminho '{raw_path}' (Locale: {loc}). Libere a permissão para esse caminho "
+                        "no painel de Administração > Grupos/Permissões do Wiki.js."
+                    )
+            data_body = data.get("data", data) if isinstance(data, dict) else {}
+            page = data_body.get("pages", {}).get("singleByPath") if isinstance(data_body, dict) else None
             if page and isinstance(page, dict) and page.get("content"):
                 return page["content"]
         except Exception:
@@ -168,7 +190,8 @@ def get_page_content(config: WikiJsConfig, path: str, locale: str | None = None)
             p_loc = p.get("locale") or target_locale
             if p_path.lower() == raw_path.lower() or p_path.lower().endswith(raw_path.lower()):
                 data = execute_graphql(config, gql, {"path": p_path, "locale": p_loc}, raise_on_error=False)
-                page = data.get("pages", {}).get("singleByPath")
+                data_body = data.get("data", data) if isinstance(data, dict) else {}
+                page = data_body.get("pages", {}).get("singleByPath")
                 if page and isinstance(page, dict) and page.get("content"):
                     return page["content"]
     except Exception:
