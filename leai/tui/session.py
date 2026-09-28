@@ -331,8 +331,22 @@ class InteractiveTUISession:
 
         header_left = f"{ascii_logo}\n[dim #6c7086]{t('tui.header_sub')}[/dim #6c7086]"
 
+        # Connectivity / Health Indicators
+        db_dot = "[bold green]●[/bold green] [bold]Oracle[/bold]" if self.schemas else "[bold yellow]●[/bold yellow] [dim]Oracle[/dim]"
+        provider_disp = (self.provider_name or self.config.ai.default_provider or "AI").upper()
+        ai_dot = f"[bold green]●[/bold green] [bold]{provider_disp}[/bold]" if self.client else "[bold yellow]●[/bold yellow] [dim]AI[/dim]"
+        wiki_dot = ""
+        if getattr(self.config, "wiki", None) and self.config.wiki.enabled:
+            wiki_dot = " • [bold green]●[/bold green] [bold]Wiki.js[/bold]"
+        storage_dot = ""
+        if getattr(self.config, "seaweedfs", None) and self.config.seaweedfs.enabled:
+            storage_dot = " • [bold green]●[/bold green] [bold]S3[/bold]"
+
+        health_line = f"{db_dot} • {ai_dot}{wiki_dot}{storage_dot}"
+
         header_right = (
             f"\n[bold #cba6f7]LEAI CLI[/bold #cba6f7] [bold green]v{version}[/bold green]\n"
+            f"{health_line}\n"
             f"[dim #9399b2]{t('tui.header_hint')}[/dim #9399b2]"
         )
         header_grid.add_row(header_left, header_right)
@@ -347,7 +361,7 @@ class InteractiveTUISession:
             )
         )
 
-        # 2. Side-by-Side Status Cards
+        # 2. 3-Column Status Dashboard
         total_tables = sum(len(s.tables) for s in self.schemas)
         total_views = sum(len(s.views) for s in self.schemas)
         total_code = sum(len(s.code_objects) for s in self.schemas)
@@ -369,7 +383,6 @@ class InteractiveTUISession:
         raw_display = _fmt_path(self.config.rawPath)
         ann_display = _fmt_path(self.config.annotationsPath)
 
-        # 2. Unified Status Table (Rounded, perfectly aligned across all terminal sizes)
         status_table = Table(
             expand=True,
             box=box.ROUNDED,
@@ -381,8 +394,9 @@ class InteractiveTUISession:
         )
         status_table.add_column(f"[bold #89b4fa]{t('tui.col_db_catalog')}[/bold #89b4fa]", ratio=1)
         status_table.add_column(f"[bold #a6e3a1]{t('tui.col_ai_engine')}[/bold #a6e3a1]", ratio=1)
+        status_table.add_column(f"[bold #f9e2af]{t('tui.col_ecosystem')}[/bold #f9e2af]", ratio=1)
 
-        # Left Column: Database Status
+        # Column 1: Database Status
         if not self.schemas:
             target_str = ", ".join(self.config.schemas) if (self.config.schemas and not self.config.is_all_schemas) else "ALL"
             db_lines = [
@@ -396,7 +410,7 @@ class InteractiveTUISession:
                 schema_badge = f"[bold #f9e2af]{self.schemas[0].schema_name}[/bold #f9e2af] [dim]{t('tui.active_badge')}[/dim]"
             else:
                 s_names = [s.schema_name for s in self.schemas]
-                preview = ", ".join(s_names[:4]) + (f" (+{schemas_count - 4} more)" if schemas_count > 4 else "")
+                preview = ", ".join(s_names[:3]) + (f" (+{schemas_count - 3})" if schemas_count > 3 else "")
                 schema_badge = f"[bold #f9e2af]{preview}[/bold #f9e2af] [dim]{t('tui.schemas_count_badge', count=schemas_count)}[/dim]"
 
             db_lines = [
@@ -406,7 +420,7 @@ class InteractiveTUISession:
                 f"[bold #cdd6f4]{t('tui.snapshot_label')}[/bold #cdd6f4] [dim]{raw_display}[/dim] [bold green]{t('tui.ready_badge')}[/bold green]",
             ]
 
-        # Right Column: AI Status
+        # Column 2: AI Status
         provider_name = (self.provider_name or self.config.ai.default_provider or "openai").upper()
         model_name = self.model_name or "default"
         is_client_ok = self.client is not None
@@ -427,10 +441,26 @@ class InteractiveTUISession:
             f"[bold #cdd6f4]{t('tui.annotations_label')}[/bold #cdd6f4] [dim]{ann_display}[/dim]",
         ]
 
-        status_table.add_row("\n".join(db_lines), "\n".join(ai_lines))
-        console.print(status_table)
+        # Column 3: Ecosystem, Wiki & Storage Status
+        wiki_cfg = getattr(self.config, "wiki", None)
+        if wiki_cfg and wiki_cfg.enabled and wiki_cfg.url:
+            import urllib.parse
 
-        # Git / GitLab Repository Observability Notice
+            parsed_url = urllib.parse.urlparse(wiki_cfg.url)
+            host_disp = parsed_url.netloc or wiki_cfg.url.replace("https://", "").replace("http://", "")
+            wiki_line = t("tui.wiki_active", host=host_disp)
+        else:
+            wiki_line = t("tui.wiki_disabled")
+
+        s3_cfg = getattr(self.config, "seaweedfs", None)
+        if s3_cfg and s3_cfg.enabled:
+            bucket_disp = s3_cfg.bucket or "default"
+            storage_line = t("tui.storage_seaweed", bucket=bucket_disp)
+        else:
+            storage_line = t("tui.storage_local")
+
+        # Git status line
+        git_line = t("tui.git_disabled")
         if getattr(self.config, "git", None) and self.config.git.enabled:
             try:
                 from leai.git_ops import get_git_status, git_pull
@@ -438,7 +468,6 @@ class InteractiveTUISession:
                 if self.config.git.auto_pull_on_start:
                     pulled_ok, pull_msg = git_pull()
                     if pulled_ok and "Already up to date" not in pull_msg:
-                        console.print(f"[bold green]✓ Sincronizado com GitLab ({pull_msg})[/bold green]")
                         target_schemas_filter = self.config.schemas if not self.config.is_all_schemas else None
                         self.schemas = load_raw_schemas(self.config.rawPath, target_schemas=target_schemas_filter)
                         self.completer.update_schemas(self.schemas)
@@ -446,42 +475,51 @@ class InteractiveTUISession:
 
                 git_info = get_git_status(fetch=False)
                 if git_info.is_repo:
-                    plat = git_info.platform_name
                     branch = git_info.branch or "main"
                     if git_info.behind > 0:
-                        console.print(t("tui.git_behind_warning", behind=git_info.behind, platform=plat))
+                        git_line = t("tui.git_behind_badge", behind=git_info.behind, branch=branch)
                     elif git_info.has_uncommitted:
                         total_mod = len(git_info.modified_files) + len(git_info.untracked_files)
-                        console.print(
-                            t("tui.git_status_branch", platform=plat, branch=branch, count=total_mod)
-                            + " (use [bold cyan]/git sync[/bold cyan])\n"
-                        )
+                        git_line = t("tui.git_dirty_badge", count=total_mod, branch=branch)
                     else:
-                        console.print(t("tui.git_synced", platform=plat, branch=branch))
+                        git_line = t("tui.git_synced_badge", branch=branch)
             except Exception:
                 pass
 
-        # 3. Essential Actions & Shortcuts Cheat-sheet
+        eco_lines = [
+            f"[bold #cdd6f4]{t('tui.wiki_label')}[/bold #cdd6f4] {wiki_line}",
+            f"[bold #cdd6f4]{t('tui.storage_label')}[/bold #cdd6f4] {storage_line}",
+            f"[bold #cdd6f4]{t('tui.git_label')}[/bold #cdd6f4] {git_line}",
+            "[bold #cdd6f4]Web Studio:[/bold #cdd6f4] [dim]http://localhost:8000[/dim]",
+        ]
+
+        status_table.add_row("\n".join(db_lines), "\n".join(ai_lines), "\n".join(eco_lines))
+        console.print(status_table)
+
+        # 3. Categorized Quick Actions & Directives Cheat-sheet
         actions_grid = Table.grid(expand=True, padding=(0, 2))
         actions_grid.add_column(ratio=1)
         actions_grid.add_column(ratio=1)
 
-        actions_grid.add_row(
-            f"  [bold #74c7ec]@OBJECT[/bold #74c7ec]     [dim]{t('tui.action_autocomplete')}[/dim]",
-            f"  [bold #74c7ec]/doc @OBJ[/bold #74c7ec]   [dim]{t('tui.action_edit_annotations')}[/dim]",
-        )
-        actions_grid.add_row(
-            f"  [bold #74c7ec]/extract[/bold #74c7ec]    [dim]{t('tui.action_pull_metadata')}[/dim]",
-            f"  [bold #74c7ec]/rule add[/bold #74c7ec]   [dim]{t('tui.action_add_rule')}[/dim]",
-        )
-        actions_grid.add_row(
-            f"  [bold #74c7ec]/compile[/bold #74c7ec]    [dim]{t('tui.action_generate_docs')}[/dim]",
-            f"  [bold #74c7ec]/git status[/bold #74c7ec] [dim]{t('tui.action_git_sync')}[/dim]",
-        )
-        actions_grid.add_row(
-            f"  [bold #74c7ec]/trace @OBJ[/bold #74c7ec] [dim]{t('tui.action_lineage_graph')}[/dim]",
-            f"  [bold #74c7ec]/help[/bold #74c7ec]       [dim]{t('tui.action_full_guide')}[/dim]",
-        )
+        # Left Sub-column: Directives in Prompt
+        prompt_table = Table(box=box.SIMPLE, show_header=True, header_style="bold #cba6f7", expand=True, padding=(0, 1))
+        prompt_table.add_column(t("tui.col_prompt_directives"), ratio=1)
+        prompt_table.add_row(f"[bold #74c7ec]@OBJECT[/bold #74c7ec]       [dim]{t('tui.action_autocomplete')}[/dim]")
+        prompt_table.add_row(f"[bold #74c7ec]@wiki:path[/bold #74c7ec]    [dim]{t('tui.action_wiki_mention')}[/dim]")
+        prompt_table.add_row(f"[bold #74c7ec]/trace @OBJ[/bold #74c7ec]   [dim]{t('tui.action_lineage_graph')}[/dim]")
+        prompt_table.add_row(f"[bold #74c7ec]/tune SELECT[/bold #74c7ec]  [dim]{t('tui.action_sql_tune')}[/dim]")
+        prompt_table.add_row(f"[bold #74c7ec]#REGRA[/bold #74c7ec]        [dim]{t('tui.action_add_rule')}[/dim]")
+
+        # Right Sub-column: System Commands
+        sys_table = Table(box=box.SIMPLE, show_header=True, header_style="bold #fab387", expand=True, padding=(0, 1))
+        sys_table.add_column(t("tui.col_sys_commands"), ratio=1)
+        sys_table.add_row(f"[bold #74c7ec]/extract[/bold #74c7ec]       [dim]{t('tui.action_pull_metadata')}[/dim]")
+        sys_table.add_row(f"[bold #74c7ec]/compile[/bold #74c7ec]       [dim]{t('tui.action_generate_docs')}[/dim]")
+        sys_table.add_row(f"[bold #74c7ec]/doctor[/bold #74c7ec]        [dim]{t('tui.action_doctor_check')}[/dim]")
+        sys_table.add_row(f"[bold #74c7ec]/serve[/bold #74c7ec]         [dim]{t('tui.action_web_studio')}[/dim]")
+        sys_table.add_row(f"[bold #74c7ec]/help[/bold #74c7ec]          [dim]{t('tui.action_full_guide')}[/dim]")
+
+        actions_grid.add_row(prompt_table, sys_table)
 
         actions_panel = Panel(
             actions_grid,

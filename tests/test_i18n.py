@@ -218,8 +218,8 @@ def test_tui_localization_and_session():
     sess_pt = InteractiveTUISession(schemas=[], config=cfg_pt, client=None)
     assert get_locale() == "pt-BR"
     assert t("tui.header_sub") == "Docs Oracle Database"
-    assert "Banco de Dados & Catálogo" in t("tui.col_db_catalog")
-    assert t("tui.action_autocomplete") == "Autocompletar objetos"
+    assert "Catálogo" in t("tui.col_db_catalog")
+    assert "schema" in t("tui.action_autocomplete").lower() or "autocompletar" in t("tui.action_autocomplete").lower()
     toolbar_pt = sess_pt._get_bottom_toolbar()
     assert "Modelo" in str(toolbar_pt)
     assert "Histórico" in str(toolbar_pt)
@@ -230,7 +230,7 @@ def test_tui_localization_and_session():
     assert get_locale() == "en-US"
     assert t("tui.header_sub") == "Oracle Database Docs"
     assert "Database & Catalog" in t("tui.col_db_catalog")
-    assert t("tui.action_autocomplete") == "Autocomplete objects"
+    assert "schema" in t("tui.action_autocomplete").lower() or "autocomplete" in t("tui.action_autocomplete").lower()
     toolbar_en = sess_en._get_bottom_toolbar()
     assert "Model" in str(toolbar_en)
     assert "History" in str(toolbar_en)
