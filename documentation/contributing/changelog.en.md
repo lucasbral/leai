@@ -42,7 +42,7 @@ All notable changes to the **LEAI** project are documented here.
 ### ⚡ Inline Directives Architecture & In-Chat Lineage/Tuning Analysis
 * **Support for Inline Directives (`/trace`, `/tune`, `/validate`, `/rule`, `/plsql`, `/doc`, etc.) Anywhere in Prompt:**
   * Implemented an inline prompt tokenizer and directive preprocessor inspired by **Antigravity CLI / 2.0**.
-  * Users can freely combine database object mentions (`@TABLE`, `@PACKAGE`), business rules (`#RULE`), and slash directives (`/trace`, `/tune`, etc.) in natural phrasing (e.g. `explain @TGOVPE_EPB__VANTAGENS /trace`).
+  * Users can freely combine database object mentions (`@TABLE`, `@PACKAGE`), business rules (`#RULE`), and slash directives (`/trace`, `/tune`, etc.) in natural phrasing (e.g. `explain @TB_BENEFICIOS /trace`).
 * **Deterministic Lineage Precomputation & Change Risk Level:**
   * Directives `/trace` and `/lineage` pre-calculate dependency graphs and evaluate **Change Risk Levels** (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`).
   * Instead of solely saving external files to disk, the agent delivers the full functional explanation, blast radius, and **Mermaid diagrams (`flowchart TD`)** directly within the conversation response.

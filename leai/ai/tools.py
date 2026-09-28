@@ -68,7 +68,7 @@ DATABASE_TOOLS_DEFINITIONS = [
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "The search term or partial name of the database object (e.g. 'usuario', 'funcionario', 'pack_ergon', 'tgovpe').",
+                        "description": "The search term or partial name of the database object (e.g. 'usuario', 'funcionario', 'pkg_folha', 'financas').",
                     },
                     "object_type": {
                         "type": "string",
@@ -135,11 +135,11 @@ DATABASE_TOOLS_DEFINITIONS = [
                 "properties": {
                     "package_name": {
                         "type": "string",
-                        "description": "Optional name of the PL/SQL package (e.g. 'PACK_ERGON', 'PACK_CERGON'). Leave empty if inspecting a standalone procedure/function or synonym.",
+                        "description": "Optional name of the PL/SQL package (e.g. 'PKG_RH', 'PKG_FINANCEIRO'). Leave empty if inspecting a standalone procedure/function or synonym.",
                     },
                     "subprogram_name": {
                         "type": "string",
-                        "description": "Name of the procedure, function, routine, or synonym (e.g. 'TGOVPE_RMS_ENVIA_ARQ_CREDITO', 'GET_SETOR_FUNC', 'CALCULA_SALARIO').",
+                        "description": "Name of the procedure, function, routine, or synonym (e.g. 'PRC_ENVIA_ARQUIVO_CREDITO', 'GET_SETOR_FUNC', 'CALCULA_SALARIO').",
                     },
                 },
                 "required": ["subprogram_name"],
@@ -156,7 +156,7 @@ DATABASE_TOOLS_DEFINITIONS = [
                 "properties": {
                     "object_name": {
                         "type": "string",
-                        "description": "Name of the table, view, procedure, synonym, or package to analyze (e.g. 'TGOVPE_RMS_ENVIA_ARQ_CREDITO', 'PACK_ERGON.GET_SETOR_FUNC', 'VINCULOS').",
+                        "description": "Name of the table, view, procedure, synonym, or package to analyze (e.g. 'PRC_ENVIA_ARQUIVO_CREDITO', 'PKG_RH.GET_SETOR_FUNC', 'VINCULOS').",
                     },
                     "depth": {
                         "type": "integer",

@@ -123,16 +123,16 @@ END;"""
         )
 
         self.proc_standalone = CodeObjectMeta(
-            name="TGOVPE_RMS_ENVIA_ARQ_CREDITO",
+            name="PRC_ENVIA_ARQUIVO_CREDITO",
             object_type="PROCEDURE",
-            source="PROCEDURE TGOVPE_RMS_ENVIA_ARQ_CREDITO IS BEGIN DBMS_OUTPUT.PUT_LINE('ENVIO'); END;",
+            source="PROCEDURE PRC_ENVIA_ARQUIVO_CREDITO IS BEGIN DBMS_OUTPUT.PUT_LINE('ENVIO'); END;",
         )
 
         self.syn_proc = SynonymMeta(
             name="SYN_ENVIA_CREDITO",
             schema_name="C_ERGON",
-            table_owner="HADES",
-            table_name="TGOVPE_RMS_ENVIA_ARQ_CREDITO",
+            table_owner="FINANCEIRO",
+            table_name="PRC_ENVIA_ARQUIVO_CREDITO",
         )
 
         self.syn_tbl = SynonymMeta(
@@ -156,13 +156,13 @@ END;"""
         res = search_database_objects(self.schemas, query="SYN_ENVIA_CREDITO")
         self.assertEqual(len(res), 1)
         self.assertEqual(res[0]["type"], "SYNONYM")
-        self.assertIn("HADES.TGOVPE_RMS_ENVIA_ARQ_CREDITO (PROCEDURE)", res[0]["points_to"])
+        self.assertIn("FINANCEIRO.PRC_ENVIA_ARQUIVO_CREDITO (PROCEDURE)", res[0]["points_to"])
 
         # 2. Lineage tracing on synonym gives explicit points_to target and guidance
         lineage = trace_object_lineage(self.schemas, object_name="SYN_ENVIA_CREDITO")
         self.assertTrue(lineage.get("is_synonym"))
-        self.assertEqual(lineage["points_to"]["owner"], "HADES")
-        self.assertEqual(lineage["points_to"]["target_object"], "TGOVPE_RMS_ENVIA_ARQ_CREDITO")
+        self.assertEqual(lineage["points_to"]["owner"], "FINANCEIRO")
+        self.assertEqual(lineage["points_to"]["target_object"], "PRC_ENVIA_ARQUIVO_CREDITO")
         self.assertEqual(lineage["points_to"]["target_type"], "PROCEDURE")
 
         # 3. get_subprogram_source transparently dereferences synonym to target procedure
@@ -244,7 +244,7 @@ END;"""
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg = LeaiConfig()
             cfg.annotationsPath = Path(tmpdir) / "annotations"
-            ann_file = cfg.annotationsPath / "tables" / "TGOVPE_FREQ_LIC_AFAST.yml"
+            ann_file = cfg.annotationsPath / "tables" / "TB_FREQ_LIC_AFASTAMENTO.yml"
             ann = ObjectAnnotation(
                 description="Tabela com histórico de licenças, afastamentos e férias de servidores públicos.",
                 columns={"DT_INICIO": "Data de início do gozo de férias"},
@@ -256,18 +256,18 @@ END;"""
             # Test 1: Search unaccented "ferias" should find "férias" in description
             matches = search_business_documentation(self.schemas, cfg, query="ferias")
             self.assertGreaterEqual(len(matches), 1)
-            self.assertEqual(matches[0]["object_name"], "TGOVPE_FREQ_LIC_AFAST")
+            self.assertEqual(matches[0]["object_name"], "TB_FREQ_LIC_AFASTAMENTO")
             self.assertIn("description", matches[0]["matched_fields"])
 
             # Test 2: Search "periodos aquisitivos" in business rules
             matches_rule = search_business_documentation(self.schemas, cfg, query="aquisitivos")
             self.assertGreaterEqual(len(matches_rule), 1)
-            self.assertEqual(matches_rule[0]["object_name"], "TGOVPE_FREQ_LIC_AFAST")
+            self.assertEqual(matches_rule[0]["object_name"], "TB_FREQ_LIC_AFASTAMENTO")
 
             # Test 3: Search column field only
             matches_col = search_business_documentation(self.schemas, cfg, query="gozo", search_fields="columns")
             self.assertGreaterEqual(len(matches_col), 1)
-            self.assertEqual(matches_col[0]["object_name"], "TGOVPE_FREQ_LIC_AFAST")
+            self.assertEqual(matches_col[0]["object_name"], "TB_FREQ_LIC_AFASTAMENTO")
 
             # Test 4: Dispatcher via execute_tool_call
             raw_res = execute_tool_call(
@@ -278,7 +278,7 @@ END;"""
             )
             parsed = json.loads(raw_res)
             self.assertIsInstance(parsed, list)
-            self.assertEqual(parsed[0]["object_name"], "TGOVPE_FREQ_LIC_AFAST")
+            self.assertEqual(parsed[0]["object_name"], "TB_FREQ_LIC_AFASTAMENTO")
 
     def test_agent_execution_engine_multi_turn(self):
         self.assertEqual(MAX_AGENT_ITERATIONS, 10)
@@ -705,7 +705,7 @@ Depois de executar essas pesquisas, analisaremos os resultados."""
 
         from leai.config import WikiJsConfig
 
-        self.cfg.wiki = WikiJsConfig(enabled=True, url="https://wiki.pe.gov.br", token="fake_token")
+        self.cfg.wiki = WikiJsConfig(enabled=True, url="https://wiki.empresa.com.br", token="fake_token")
         wiki_md = "# Processo Folha\nUtiliza a tabela `EVENTO_FUNC` para cálculo."
 
         with patch("leai.wiki.get_page_content", return_value=wiki_md):

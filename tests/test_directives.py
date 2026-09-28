@@ -38,23 +38,23 @@ class DirectivesEngineTests(unittest.TestCase):
         self.ann_path.mkdir(parents=True, exist_ok=True)
 
         t1 = TableMeta(
-            name="TGOVPE_EPB__VANTAGENS",
+            name="TB_HISTORICO_BENEFICIOS",
             columns=[
-                ColumnMeta(name="ID_VANTAGEM", data_type="NUMBER", nullable=False),
+                ColumnMeta(name="ID_BENEFICIO", data_type="NUMBER", nullable=False),
                 ColumnMeta(name="VALOR", data_type="NUMBER", nullable=False),
                 ColumnMeta(name="DTINI", data_type="DATE", nullable=False),
             ],
-            comment="Tabela de vantagens previdenciárias de servidores",
+            comment="Tabela de historico de beneficios dos colaboradores",
         )
         c1 = CodeObjectMeta(
-            name="PKG_PREVIDENCIA",
+            name="PKG_FOLHA_BENEFICIOS",
             object_type="PACKAGE BODY",
-            source="CREATE OR REPLACE PACKAGE BODY PKG_PREVIDENCIA IS PROCEDURE CALCULA IS BEGIN SELECT * FROM TGOVPE_EPB__VANTAGENS; END; END;",
+            source="CREATE OR REPLACE PACKAGE BODY PKG_FOLHA_BENEFICIOS IS PROCEDURE CALCULA IS BEGIN SELECT * FROM TB_HISTORICO_BENEFICIOS; END; END;",
         )
-        self.schema = SchemaMetadata(schema_name="GOV", tables=[t1], code_objects=[c1])
+        self.schema = SchemaMetadata(schema_name="RH", tables=[t1], code_objects=[c1])
         self.cfg = LeaiConfig(
             dsn="",
-            schemas=["GOV"],
+            schemas=["RH"],
             annotationsPath=self.ann_path,
         )
         self.client = MockDirectiveLLMClient()
@@ -63,26 +63,26 @@ class DirectivesEngineTests(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_parse_prompt_tokens_extraction(self):
-        prompt = "me explique @TGOVPE_EPB__VANTAGENS /trace e verifique #REGRA_PREVIDENCIARIA com /plsql"
+        prompt = "me explique @TB_HISTORICO_BENEFICIOS /trace e verifique #REGRA_BENEFICIOS com /plsql"
         tokens = parse_prompt_tokens(prompt)
 
-        self.assertEqual(tokens.objects, ["TGOVPE_EPB__VANTAGENS"])
-        self.assertEqual(tokens.rules, ["REGRA_PREVIDENCIARIA"])
+        self.assertEqual(tokens.objects, ["TB_HISTORICO_BENEFICIOS"])
+        self.assertEqual(tokens.rules, ["REGRA_BENEFICIOS"])
         self.assertEqual(tokens.directives, ["trace", "plsql"])
 
     def test_process_inline_directives_trace(self):
-        prompt = "me explique @TGOVPE_EPB__VANTAGENS /trace"
+        prompt = "me explique @TB_HISTORICO_BENEFICIOS /trace"
         proc = process_inline_directives(prompt, [self.schema], self.cfg, client=self.client)
 
-        self.assertEqual(proc.detected_objects, ["TGOVPE_EPB__VANTAGENS"])
+        self.assertEqual(proc.detected_objects, ["TB_HISTORICO_BENEFICIOS"])
         self.assertIn("trace", proc.detected_directives)
-        self.assertIn("DETERMINISTIC LINEAGE TRACE FOR @TGOVPE_EPB__VANTAGENS", proc.precomputed_context)
+        self.assertIn("DETERMINISTIC LINEAGE TRACE FOR @TB_HISTORICO_BENEFICIOS", proc.precomputed_context)
         self.assertIn("Change Risk Level:", proc.precomputed_context)
         self.assertIn("Mermaid diagram", proc.system_overlay)
         self.assertTrue(any("/trace" in b for b in proc.action_badges))
 
     def test_process_inline_directives_tune_sql(self):
-        prompt = "Como otimizar /tune SELECT * FROM TGOVPE_EPB__VANTAGENS WHERE TRUNC(DTINI) = SYSDATE"
+        prompt = "Como otimizar /tune SELECT * FROM TB_HISTORICO_BENEFICIOS WHERE TRUNC(DTINI) = SYSDATE"
         proc = process_inline_directives(prompt, [self.schema], self.cfg, client=self.client)
 
         self.assertIn("tune", proc.detected_directives)
@@ -93,17 +93,17 @@ class DirectivesEngineTests(unittest.TestCase):
     def test_process_inline_directives_rules_and_glossary(self):
         # Save a glossary term
         term = GlossaryTerm(
-            term="REGRA_VANTAGENS",
-            definition="Regra de concessão e validação de vantagens previdenciárias",
-            primary_table="TGOVPE_EPB__VANTAGENS",
+            term="REGRA_BENEFICIOS",
+            definition="Regra de concessao e validacao de beneficios",
+            primary_table="TB_HISTORICO_BENEFICIOS",
             canonical_filter="VALOR > 0",
         )
         add_or_update_term(self.ann_path, term)
 
-        prompt = "avalie os registros aplicando #REGRA_VANTAGENS /rule"
+        prompt = "avalie os registros aplicando #REGRA_BENEFICIOS /rule"
         proc = process_inline_directives(prompt, [self.schema], self.cfg, client=self.client)
 
-        self.assertIn("REGRA_VANTAGENS", proc.detected_rules)
+        self.assertIn("REGRA_BENEFICIOS", proc.detected_rules)
         self.assertIn("CANONICAL BUSINESS RULES & GLOSSARY", proc.precomputed_context)
         self.assertIn("VALOR > 0", proc.precomputed_context)
 
@@ -142,25 +142,25 @@ class DirectivesEngineTests(unittest.TestCase):
         from leai.ai.directives import extract_oracle_references_from_text
 
         text = """
-        # Documentação do Sagres
-        A tela consulta a tabela `TGOVPE_EPB__VANTAGENS` para calcular os valores.
-        Também executa a package `PKG_PREVIDENCIA`.
+        # Documentação de Benefícios
+        A tela consulta a tabela `TB_HISTORICO_BENEFICIOS` para calcular os valores.
+        Também executa a package `PKG_FOLHA_BENEFICIOS`.
         ```sql
-        SELECT * FROM TGOVPE_EPB__VANTAGENS WHERE VALOR > 0;
+        SELECT * FROM TB_HISTORICO_BENEFICIOS WHERE VALOR > 0;
         ```
         """
         refs = extract_oracle_references_from_text(text, [self.schema])
-        self.assertIn("TGOVPE_EPB__VANTAGENS", refs)
-        self.assertIn("PKG_PREVIDENCIA", refs)
+        self.assertIn("TB_HISTORICO_BENEFICIOS", refs)
+        self.assertIn("PKG_FOLHA_BENEFICIOS", refs)
 
     def test_generate_cross_linked_metadata(self):
         from leai.ai.directives import generate_cross_linked_metadata
 
-        meta = generate_cross_linked_metadata(["TGOVPE_EPB__VANTAGENS", "PKG_PREVIDENCIA"], [self.schema])
+        meta = generate_cross_linked_metadata(["TB_HISTORICO_BENEFICIOS", "PKG_FOLHA_BENEFICIOS"], [self.schema])
         self.assertIn("CROSS-LINKED ORACLE DATABASE METADATA", meta)
-        self.assertIn("TABLE `GOV.TGOVPE_EPB__VANTAGENS`", meta)
-        self.assertIn("ID_VANTAGEM", meta)
-        self.assertIn("PACKAGE BODY `GOV.PKG_PREVIDENCIA`", meta)
+        self.assertIn("TABLE `RH.TB_HISTORICO_BENEFICIOS`", meta)
+        self.assertIn("ID_BENEFICIO", meta)
+        self.assertIn("PACKAGE BODY `RH.PKG_FOLHA_BENEFICIOS`", meta)
 
     def test_process_inline_directives_wiki_cross_linking(self):
         from unittest.mock import patch
@@ -170,25 +170,25 @@ class DirectivesEngineTests(unittest.TestCase):
         wiki_cfg = WikiJsConfig(enabled=True, url="https://wiki.empresa.com", token="fake_token")
         self.cfg.wiki = wiki_cfg
 
-        wiki_content = """# Integração Sagres
-        Consome a tabela `TGOVPE_EPB__VANTAGENS` e chama `PKG_PREVIDENCIA`.
+        wiki_content = """# Integração Benefícios
+        Consome a tabela `TB_HISTORICO_BENEFICIOS` e chama `PKG_FOLHA_BENEFICIOS`.
         """
         with patch("leai.wiki.get_page_content", return_value=wiki_content):
-            prompt = "Me explique a regra de @wiki:sgp/govpe00052"
+            prompt = "Me explique a regra de @wiki:sistemas/integracao_beneficios"
             proc = process_inline_directives(prompt, [self.schema], self.cfg, client=self.client)
 
-            self.assertIn("EXTERNAL WIKI DOCUMENTATION: sgp/govpe00052", proc.precomputed_context)
+            self.assertIn("EXTERNAL WIKI DOCUMENTATION: sistemas/integracao_beneficios", proc.precomputed_context)
             self.assertIn("CROSS-LINKED ORACLE DATABASE METADATA", proc.precomputed_context)
-            self.assertIn("TABLE `GOV.TGOVPE_EPB__VANTAGENS`", proc.precomputed_context)
+            self.assertIn("TABLE `RH.TB_HISTORICO_BENEFICIOS`", proc.precomputed_context)
             self.assertTrue(any("Cross-linking" in b for b in proc.action_badges))
 
     def test_chat_session_integration_with_inline_trace(self):
         session = ChatSession(schemas=[self.schema], config=self.cfg, client=self.client)
-        reply, detected = session.send("me explique @TGOVPE_EPB__VANTAGENS /trace")
+        reply, detected = session.send("me explique @TB_HISTORICO_BENEFICIOS /trace")
 
-        self.assertIn("TGOVPE_EPB__VANTAGENS", detected)
-        self.assertIn("TGOVPE_EPB__VANTAGENS", session.active_entities)
-        self.assertIn("DETERMINISTIC LINEAGE TRACE FOR @TGOVPE_EPB__VANTAGENS", self.client.last_system_prompt)
+        self.assertIn("TB_HISTORICO_BENEFICIOS", detected)
+        self.assertIn("TB_HISTORICO_BENEFICIOS", session.active_entities)
+        self.assertIn("DETERMINISTIC LINEAGE TRACE FOR @TB_HISTORICO_BENEFICIOS", self.client.last_system_prompt)
         self.assertIn("Mermaid diagram", self.client.last_system_prompt)
         self.assertTrue(any("/trace" in b for b in session.last_action_badges))
-        self.assertIn("Resposta para: me explique @TGOVPE_EPB__VANTAGENS /trace", reply)
+        self.assertIn("Resposta para: me explique @TB_HISTORICO_BENEFICIOS /trace", reply)

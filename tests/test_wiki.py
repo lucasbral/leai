@@ -127,9 +127,9 @@ class TestWikiJsIntegration(unittest.TestCase):
                 }
             ]
         }
-        content = get_page_content(self.config, "APLICAÇÕES_/SGP_/DOCUMENTAÇÕES_TELA/GOVPE00052")
+        content = get_page_content(self.config, "SISTEMAS_/RH_/DOCUMENTAÇÕES_TELA/TELA_VENCIMENTOS")
         self.assertIn("[Permissão Negada]", content)
-        self.assertIn("APLICAÇÕES_/SGP_/DOCUMENTAÇÕES_TELA/GOVPE00052", content)
+        self.assertIn("SISTEMAS_/RH_/DOCUMENTAÇÕES_TELA/TELA_VENCIMENTOS", content)
 
 
 if __name__ == "__main__":

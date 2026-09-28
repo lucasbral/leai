@@ -56,7 +56,9 @@ class SeaweedFSStorage:
 
             endpoint = self.config.endpoint_url.strip() if self.config.endpoint_url else None
             if not endpoint:
-                raise StorageError("SeaweedFS endpoint_url must be provided in configuration (e.g. https://s3-sad.pe.gov.br).")
+                raise StorageError(
+                    "SeaweedFS endpoint_url must be provided in configuration (e.g. https://s3.empresa.com.br or http://localhost:8333)."
+                )
 
             if not endpoint.startswith(("http://", "https://")):
                 endpoint = f"https://{endpoint}"
