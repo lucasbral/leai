@@ -112,10 +112,16 @@ storage:
     no_cache: false                                # Local disk cache or pure remote
     incremental: true                              # SHA-256 hash deduplication
 
-# 9. Interface Language & Localization
+# 9. External Wiki Integration (Wiki.js)
+wiki:
+  enabled: false                                 # If true, enables GraphQL Wiki search and document retrieval
+  url: "https://wiki.example.com"                # Base URL of your Wiki.js instance
+  token: "${WIKI_TOKEN}"                         # API Authentication Bearer Token
+
+# 10. Interface Language & Localization
 language: "en-US"                                  # "en-US" (canonical default) or "pt-BR"
 
-# 10. Automatic PyPI Update Check
+# 11. Automatic PyPI Update Check
 update_check: true                                 # true (default) or false
 ```
 
@@ -220,3 +226,27 @@ generate_update_log: true         # Generates JSON and Markdown audit logs (Defa
 - **`update_YYYYMMDD_HHMMSS.json` & `latest.json`:** Structured manifest with UTC timestamp, search window, modifier (`last_modified_by`), Oracle timestamp (`last_ddl_time`), and sync counts.
 - **`update_YYYYMMDD_HHMMSS.md` & `latest.md`:** Readable report with formatted tables for VS Code or GitHub.
 - **SeaweedFS / S3 Synchronization:** If `--seaweed` or S3 storage is enabled, files are automatically synced to the bucket under `logs/updates/`.
+
+---
+
+## 📘 External Wiki Integration (`wiki`)
+
+LEAI can seamlessly connect to a corporate **[Wiki.js](https://wiki.js.org)** instance via its native GraphQL API. This enables AI reasoning agents to proactively search and retrieve unstructured business domain documentation and architectural guides in raw Markdown to enrich database copilot answers.
+
+```yaml
+wiki:
+  enabled: true                                 # Enables Wiki query tools in the AI Agent loop
+  url: "https://wiki.example.com"               # Base Wiki.js URL (uses /graphql internally)
+  token: "${WIKI_TOKEN}"                       # API Bearer Authentication Token
+```
+
+### Supported Parameters:
+| Parameter | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `enabled` | `bool` | `false` | If `true`, registers `search_wiki` and `read_wiki_page` tools in the autonomous AI Agent reasoning engine. |
+| `url` | `string` | `""` | Root endpoint of the Wiki.js server (e.g. `https://wiki.example.com`). |
+| `token` | `string` | `""` | Bearer API token generated in Wiki.js Administration. Supports environment variable expansion (e.g. `${WIKI_TOKEN}`). |
+
+> [!TIP]
+> Run `leai doctor` to test the GraphQL endpoint connectivity and verify authentication credentials.
+

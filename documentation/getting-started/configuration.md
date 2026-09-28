@@ -112,10 +112,16 @@ storage:
     no_cache: false                                # Se true, opera em modo 100% remoto
     incremental: true                              # Deduplicação SHA-256
 
-# 9. Idioma da Interface & Localização
+# 9. Integração com Wiki Externa (Wiki.js)
+wiki:
+  enabled: false                                 # Se true, habilita busca e leitura na Wiki via GraphQL
+  url: "https://wiki.suaempresa.com"              # URL base da instância Wiki.js
+  token: "${WIKI_TOKEN}"                         # Token de autenticação da API (Bearer)
+
+# 10. Idioma da Interface & Localização
 language: "pt-BR"                                  # "en-US" (padrão canônico) ou "pt-BR"
 
-# 10. Checagem Automática de Atualizações
+# 11. Checagem Automática de Atualizações
 update_check: true                                 # true (padrão) ou false
 ```
 
@@ -220,3 +226,27 @@ generate_update_log: true         # Gera arquivos JSON e Markdown de auditoria (
 - **`update_YYYYMMDD_HHMMSS.json` & `latest.json`:** Manifesto estruturado com timestamp UTC, janela de busca, autor da alteração (`last_modified_by`), timestamp no Oracle (`last_ddl_time`) e métricas de sincronização.
 - **`update_YYYYMMDD_HHMMSS.md` & `latest.md`:** Relatório com tabelas legíveis no VS Code ou GitHub.
 - **Sincronização com SeaweedFS / S3:** Se `--seaweed` ou o storage S3 estiver ativo, os arquivos são replicados automaticamente no bucket sob `logs/updates/`.
+
+---
+
+## 📘 Integração com Wiki Externa (`wiki`)
+
+O LEAI permite conectar-se diretamente a uma instância corporativa do **[Wiki.js](https://wiki.js.org)** via API GraphQL. Isso permite que os agentes de IA busquem e leiam proativamente páginas de documentação de negócio e arquitetura em formato Markdown bruto para enriquecer o contexto de chat e auditorias.
+
+```yaml
+wiki:
+  enabled: true                                 # Ativa as ferramentas de consulta à Wiki no Agent
+  url: "https://wiki.suaempresa.com"            # Endpoint base do Wiki.js (usa /graphql internamente)
+  token: "${WIKI_TOKEN}"                       # Token de API (Bearer)
+```
+
+### Parâmetros Suportados:
+| Parâmetro | Tipo | Padrão | Descrição |
+| :--- | :--- | :--- | :--- |
+| `enabled` | `bool` | `false` | Se `true`, registra as ferramentas `search_wiki` e `read_wiki_page` no motor de raciocínio do Agente de IA. |
+| `url` | `string` | `""` | URL raiz do servidor Wiki.js (ex: `https://wiki.empresa.com`). |
+| `token` | `string` | `""` | Token de autenticação Bearer gerado na administração do Wiki.js. Suporta variáveis de ambiente (ex: `${WIKI_TOKEN}`). |
+
+> [!TIP]
+> Execute `leai doctor` para validar se a conexão com o endpoint GraphQL do Wiki.js e o token configurado estão operacionais.
+

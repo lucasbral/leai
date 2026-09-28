@@ -53,6 +53,8 @@ LEAI supports **synchronous and asynchronous streaming with Tool Calling** (`str
 | **`explain_and_tune_sql`** | `sql_query`, `detailed` | Evaluates sargability (`TRUNC`, `NVL`, `UPPER`), Full Table Scan (FTS) risks, `NOT IN (SELECT ...)` NULL pitfalls, compound index ordering, and AI query rewrites. |
 | **`validate_oracle_sql`** | `sql_query`, `target_schema` | Validates Oracle dialect compliance, blocks non-Oracle constructs (`LIMIT`, `BOOLEAN`, `ILIKE`, `IFNULL`, `+` concat), and checks against schema catalog. |
 | **`lookup_business_term`** | `query`, `tag` | Searches domain glossary for canonical business definitions, calculation rules, and canonical SQL predicates. |
+| **`search_wiki`** | `query` | Searches corporate Wiki.js instances for matching documentation pages via GraphQL. |
+| **`read_wiki_page`** | `path` | Fetches the raw Markdown content of a specific Wiki page to enrich the LLM context. |
 | **`estimate_query_cost`** | `sql_query` | Estimates query complexity and relative execution cost. |
 | **`query_schema_metadata`** | `schema_name` | Retrieves aggregated object counts and schema summaries. |
 

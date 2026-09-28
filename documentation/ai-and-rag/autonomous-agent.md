@@ -53,6 +53,8 @@ O LEAI suporta **streaming síncrono e assíncrono com Tool Calling** (`stream_c
 | **`explain_and_tune_sql`** | `sql_query`, `detailed` | Avaliação de sargabilidade (`TRUNC`, `NVL`, `UPPER`), risco de Full Table Scan (FTS), armadilhas de `NOT IN (SELECT ...)` com NULL, ordenação de índices compostos e propostas de reescrita otimizada. |
 | **`validate_oracle_sql`** | `sql_query`, `target_schema` | Validador estrito de sintaxe Oracle: bloqueia padrões de MySQL/PostgreSQL (`LIMIT`, `BOOLEAN`, `ILIKE`, `IFNULL`, `+` concat) e valida colunas/tabelas contra os metadados. |
 | **`lookup_business_term`** | `query`, `tag` | Consulta o glossário canônico de regras de negócio, filtros SQL canônicos e status organizacionais. |
+| **`search_wiki`** | `query` | Busca páginas de documentação corporativa em instâncias do Wiki.js via API GraphQL. |
+| **`read_wiki_page`** | `path` | Recupera o conteúdo Markdown bruto de uma página específica da Wiki para o contexto do LLM. |
 | **`estimate_query_cost`** | `sql_query` | Estima a complexidade e custo relativo de execução de uma consulta SQL. |
 | **`query_schema_metadata`** | `schema_name` | Recupera totais agregados e visão panorâmica de objetos de um schema. |
 
