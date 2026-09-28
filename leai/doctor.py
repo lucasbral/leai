@@ -256,13 +256,19 @@ def run_diagnostics(
             has_warnings = True
         else:
             try:
-                import requests
+                import json
+                import urllib.request
 
                 endpoint = f"{cfg.wiki.url.rstrip('/')}/graphql"
-                headers = {"Authorization": f"Bearer {cfg.wiki.token}"}
-                res = requests.post(endpoint, json={"query": "{ __typename }"}, headers=headers, timeout=5)
-                res.raise_for_status()
-                data = res.json()
+                headers = {
+                    "Authorization": f"Bearer {cfg.wiki.token}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "LEAI-Doctor",
+                }
+                payload = json.dumps({"query": "{ __typename }"}).encode("utf-8")
+                req = urllib.request.Request(endpoint, data=payload, headers=headers, method="POST")
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
                 if "errors" in data:
                     out.print(f"  [red]✗ {t('doctor.wiki_graphql_error')} {data['errors'][0].get('message', 'Unknown')}[/red]")
                     has_warnings = True

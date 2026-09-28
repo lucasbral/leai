@@ -1,6 +1,7 @@
+import json
+import urllib.error
+import urllib.request
 from typing import Any
-
-import requests
 
 from leai.config import WikiJsConfig
 
@@ -9,12 +10,24 @@ def execute_graphql(config: WikiJsConfig, query: str, variables: dict) -> dict[s
     if not config.url or not config.token:
         raise ValueError("Wiki.js URL and Token must be configured.")
 
-    headers = {"Authorization": f"Bearer {config.token}"}
+    headers = {
+        "Authorization": f"Bearer {config.token}",
+        "Content-Type": "application/json",
+        "User-Agent": "LEAI-Copilot",
+    }
     endpoint = f"{config.url.rstrip('/')}/graphql"
+    payload = json.dumps({"query": query, "variables": variables}).encode("utf-8")
 
-    res = requests.post(endpoint, json={"query": query, "variables": variables}, headers=headers, timeout=10)
-    res.raise_for_status()
-    data = res.json()
+    req = urllib.request.Request(endpoint, data=payload, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP Error {exc.code}: {error_body}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Network Error: {exc.reason}") from exc
+
     if "errors" in data:
         raise RuntimeError(f"GraphQL Error: {data['errors']}")
     return data.get("data", {})
