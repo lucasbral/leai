@@ -162,6 +162,15 @@ class ChatSession:
             combined_sys += f"\n\n{proc_directives.precomputed_context}"
         if proc_directives.system_overlay:
             combined_sys += f"\n\n{proc_directives.system_overlay}"
+        if self.config and getattr(self.config, "wiki", None) and self.config.wiki.enabled:
+            wiki_url = self.config.wiki.url or "corporate Wiki.js"
+            combined_sys += (
+                f"\n\n### [EXTERNAL CORPORATE WIKI (Wiki.js)]\n"
+                f"Wiki.js integration is ENABLED (URL: {wiki_url}). "
+                "You have access to `search_wiki(query=...)` and `read_wiki_page(path=...)`. "
+                "Whenever the user asks about business rules, enterprise policies, manuals, architectures, or non-database documentation, "
+                "use `search_wiki` to find relevant pages and `read_wiki_page` to retrieve their Markdown content."
+            )
         combined_sys += f"\n\n{lang_directive}"
 
         # 3. Add user message

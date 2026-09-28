@@ -240,6 +240,18 @@ def load_config(config_path: Path | str = Path("leai.yml")) -> LeaiConfig:
             if os.environ.get("LEAI_SEAWEED_INCREMENTAL"):
                 sw_dict["incremental"] = os.environ["LEAI_SEAWEED_INCREMENTAL"].strip().lower() in ("true", "1", "yes")
 
+    # Environment variables overrides for Wiki
+    wiki_dict = raw.setdefault("wiki", {})
+    if isinstance(wiki_dict, dict):
+        if os.environ.get("LEAI_WIKI_ENABLED"):
+            wiki_dict["enabled"] = os.environ["LEAI_WIKI_ENABLED"].strip().lower() in ("true", "1", "yes")
+        if os.environ.get("LEAI_WIKI_URL"):
+            wiki_dict["url"] = os.environ["LEAI_WIKI_URL"]
+        if os.environ.get("LEAI_WIKI_TOKEN"):
+            wiki_dict["token"] = os.environ["LEAI_WIKI_TOKEN"]
+        elif os.environ.get("WIKI_TOKEN") and not wiki_dict.get("token"):
+            wiki_dict["token"] = os.environ["WIKI_TOKEN"]
+
     if os.environ.get("LEAI_NO_UPDATE_CHECK"):
         raw["update_check"] = os.environ["LEAI_NO_UPDATE_CHECK"].strip().lower() not in ("true", "1", "yes")
 

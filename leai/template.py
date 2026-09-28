@@ -149,11 +149,11 @@ storage:
 # ------------------------------------------------------------------------------
 # 9. EXTERNAL WIKI INTEGRATION (Wiki.js)
 # ------------------------------------------------------------------------------
-# Allows the AI to query external documentation via GraphQL.
+# Allows the AI Copilot to query corporate documentation via GraphQL API.
 wiki:
-  enabled: false
-  url: "https://wiki.example.com"
-  token: ""
+  enabled: false                                 # If true, enables GraphQL Wiki search and document retrieval
+  url: "https://wiki.example.com"                # Base URL of your Wiki.js instance
+  token: "${WIKI_TOKEN}"                         # API Authentication Bearer Token
 
 # ------------------------------------------------------------------------------
 # 10. INTERFACE LANGUAGE & LOCALIZATION
@@ -311,9 +311,9 @@ storage:
 # ------------------------------------------------------------------------------
 # Permite à IA consultar documentação externa paralela via GraphQL.
 wiki:
-  enabled: false
-  url: "https://wiki.suaempresa.com"
-  token: ""
+  enabled: false                                 # Se true, ativa a busca e leitura de documentações na Wiki
+  url: "https://wiki.suaempresa.com"              # URL raiz do Wiki.js (ex: https://wiki.empresa.com)
+  token: "${WIKI_TOKEN}"                         # Token de autenticação Bearer da API do Wiki.js
 
 # ------------------------------------------------------------------------------
 # 10. IDIOMA DA INTERFACE & LOCALIZAÇÃO
@@ -715,12 +715,13 @@ def render_canonical_config(data: dict, lang: str = "pt-BR") -> str:
             ]
         )
 
+    default_wiki_url = "https://wiki.suaempresa.com" if is_pt else "https://wiki.example.com"
     lines.extend(
         [
             "wiki:",
             f"  enabled: {'true' if wiki_data.get('enabled', False) else 'false'}",
-            f"  url: {_format_yaml_value(wiki_data.get('url', 'https://wiki.example.com'))}",
-            f"  token: {_format_yaml_value(wiki_data.get('token', ''))}",
+            f"  url: {_format_yaml_value(wiki_data.get('url', default_wiki_url))}",
+            f"  token: {_format_yaml_value(wiki_data.get('token', '${WIKI_TOKEN}'))}",
         ]
     )
 
@@ -764,6 +765,7 @@ def render_canonical_config(data: dict, lang: str = "pt-BR") -> str:
         "ai",
         "git",
         "storage",
+        "wiki",
         "language",
         "update_check",
     }
