@@ -277,7 +277,10 @@ def run_diagnostics(
             except Exception as e:
                 out.print(f"  [red]✗ {t('doctor.wiki_failed')} {e}[/red]")
                 has_warnings = True
-        out.print()
+    else:
+        out.print(t("doctor.wiki_disabled"))
+
+    out.print()
 
     # -------------------------------------------------------------------------
     # Summary

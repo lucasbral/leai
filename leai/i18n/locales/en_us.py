@@ -569,4 +569,5 @@ MESSAGES: dict[str, str] = {
     "doctor.wiki_graphql_error": "GraphQL Error:",
     "doctor.wiki_connected": "Connected successfully to Wiki.js API",
     "doctor.wiki_failed": "Failed to connect to Wiki.js:",
+    "doctor.wiki_disabled": "[dim]• Wiki.js Integration: Disabled in leai.yml[/dim]",
 }
