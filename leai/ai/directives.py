@@ -35,8 +35,8 @@ class ProcessedDirectives:
 
 def parse_prompt_tokens(text: str) -> PromptTokens:
     """Parses @objects, #rules, /directives, and @wiki:pages anywhere within the prompt string."""
-    # Matches @wiki:path or @wiki:path/to/subpage
-    raw_wikis = re.findall(r"@wiki:([A-Za-z0-9_\-./]+)", text)
+    # Matches @wiki:path or @wiki:path/to/subpage (with Unicode support for accents like Ç, Õ, etc.)
+    raw_wikis = re.findall(r"@wiki:([\w\-./]+)", text, flags=re.UNICODE)
     clean_wikis = []
     for w in raw_wikis:
         clean = w.rstrip(".,;!?").strip()
@@ -44,7 +44,7 @@ def parse_prompt_tokens(text: str) -> PromptTokens:
             clean_wikis.append(clean)
 
     # Strip @wiki:... before searching for general @objects
-    text_without_wikis = re.sub(r"@wiki:[A-Za-z0-9_\-./]+", "", text)
+    text_without_wikis = re.sub(r"@wiki:[\w\-./]+", "", text, flags=re.UNICODE)
 
     # Matches @OBJECT or @SCHEMA.OBJECT
     raw_objs = re.findall(r"@([A-Za-z0-9_$.]+)", text_without_wikis)

@@ -1,4 +1,5 @@
 import json
+import re
 import time
 import urllib.error
 import urllib.request
@@ -11,7 +12,12 @@ _PAGES_CACHE: dict[str, Any] = {"data": [], "timestamp": 0.0, "url": ""}
 _CACHE_TTL_SECONDS: float = 60.0
 
 
-def execute_graphql(config: WikiJsConfig, query: str, variables: dict | None = None) -> dict[str, Any]:
+def execute_graphql(
+    config: WikiJsConfig,
+    query: str,
+    variables: dict | None = None,
+    raise_on_error: bool = True,
+) -> dict[str, Any]:
     if not config.url or not config.token:
         raise ValueError("Wiki.js URL and Token must be configured.")
 
@@ -33,9 +39,9 @@ def execute_graphql(config: WikiJsConfig, query: str, variables: dict | None = N
     except urllib.error.URLError as exc:
         raise RuntimeError(f"Network Error: {exc.reason}") from exc
 
-    if "errors" in data:
+    if "errors" in data and raise_on_error:
         raise RuntimeError(f"GraphQL Error: {data['errors']}")
-    return data.get("data", {})
+    return data.get("data", {}) if "data" in data else data
 
 
 def list_pages(config: WikiJsConfig, refresh: bool = False) -> list[dict[str, Any]]:
@@ -58,12 +64,13 @@ def list_pages(config: WikiJsConfig, refresh: bool = False) -> list[dict[str, An
           path
           title
           description
+          locale
         }
       }
     }
     """
     try:
-        data = execute_graphql(config, gql)
+        data = execute_graphql(config, gql, raise_on_error=False)
         pages = data.get("pages", {}).get("list", [])
         if isinstance(pages, list):
             _PAGES_CACHE = {"data": pages, "timestamp": now, "url": config.url}
@@ -74,36 +81,97 @@ def list_pages(config: WikiJsConfig, refresh: bool = False) -> list[dict[str, An
 
 
 def search_pages(config: WikiJsConfig, query: str) -> list[dict[str, Any]]:
+    """Searches pages in Wiki.js using full-text search with automatic fallback strategies."""
     gql = """
     query ($query: String!) {
       pages {
         search(query: $query) {
-          results { id title description path }
+          results { id title description path locale }
         }
       }
     }
     """
-    data = execute_graphql(config, gql, {"query": query})
+    clean_q = query.strip()
+    data = execute_graphql(config, gql, {"query": clean_q}, raise_on_error=False)
+    results = data.get("pages", {}).get("search", {}).get("results", []) if isinstance(data, dict) else []
 
-    try:
-        results = data.get("pages", {}).get("search", {}).get("results", [])
-        return results if results else []
-    except AttributeError:
-        return []
+    if results:
+        return results
+
+    # Fallback 1: If query has slashes/underscores (e.g. APLICAÇÕES_/SGP_/conceitos), search individual words
+    words = [w for w in re.split(r"[\W_]+", clean_q) if len(w) > 2]
+    if words:
+        fallback_query = " ".join(words)
+        if fallback_query.lower() != clean_q.lower():
+            data = execute_graphql(config, gql, {"query": fallback_query}, raise_on_error=False)
+            results = data.get("pages", {}).get("search", {}).get("results", []) if isinstance(data, dict) else []
+            if results:
+                return results
+
+    # Fallback 2: Search in-memory page list
+    all_pages = list_pages(config)
+    matching = []
+    q_lower = clean_q.lower()
+    for p in all_pages:
+        p_path = (p.get("path") or "").lower()
+        p_title = (p.get("title") or "").lower()
+        if q_lower in p_path or q_lower in p_title or any(w.lower() in p_path or w.lower() in p_title for w in words):
+            matching.append(p)
+
+    return matching[:10]
 
 
-def get_page_content(config: WikiJsConfig, path: str) -> str:
+def get_page_content(config: WikiJsConfig, path: str, locale: str | None = None) -> str:
+    """Fetches Markdown content of a Wiki.js page using singleByPath(path, locale)."""
+    raw_path = path.strip().strip("/")
+    target_locale = locale or getattr(config, "locale", "pt") or "pt"
+
+    # Check if path starts with locale prefix (e.g. "pt/aplicacoes/sgp" or "en/...")
+    parts = raw_path.split("/", 1)
+    if len(parts) == 2 and len(parts[0]) in (2, 5) and parts[0].isalpha():
+        target_locale = parts[0]
+        raw_path = parts[1]
+
     gql = """
-    query ($path: String!) {
+    query ($path: String!, $locale: String!) {
       pages {
-        singleByPath(path: $path) { content }
+        singleByPath(path: $path, locale: $locale) {
+          id
+          path
+          title
+          locale
+          content
+        }
       }
     }
     """
-    data = execute_graphql(config, gql, {"path": path})
 
+    locales_to_try = [target_locale]
+    for alt_loc in ["pt", "pt-br", "en"]:
+        if alt_loc not in locales_to_try:
+            locales_to_try.append(alt_loc)
+
+    for loc in locales_to_try:
+        try:
+            data = execute_graphql(config, gql, {"path": raw_path, "locale": loc}, raise_on_error=False)
+            page = data.get("pages", {}).get("singleByPath")
+            if page and isinstance(page, dict) and page.get("content"):
+                return page["content"]
+        except Exception:
+            continue
+
+    # Fallback: check list_pages to find matching path case-insensitively
     try:
-        page = data.get("pages", {}).get("singleByPath")
-        return page.get("content", "") if page else "Page not found."
-    except AttributeError:
-        return "Page not found."
+        all_pages = list_pages(config)
+        for p in all_pages:
+            p_path = p.get("path", "")
+            p_loc = p.get("locale") or target_locale
+            if p_path.lower() == raw_path.lower() or p_path.lower().endswith(raw_path.lower()):
+                data = execute_graphql(config, gql, {"path": p_path, "locale": p_loc}, raise_on_error=False)
+                page = data.get("pages", {}).get("singleByPath")
+                if page and isinstance(page, dict) and page.get("content"):
+                    return page["content"]
+    except Exception:
+        pass
+
+    return "Page not found."

@@ -86,6 +86,7 @@ class WikiJsConfig(BaseModel):
     enabled: bool = False
     url: str = ""
     token: str = ""
+    locale: str = "pt"
 
 
 class LeaiConfig(BaseModel):
